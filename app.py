@@ -7,12 +7,14 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from screen_monthly import (
     DEFAULT_TICKERS,
     build_ticker_list,
+    build_config,
     compute_features,
+    default_config_dict,
     fetch_monthly_history,
     run_screen,
 )
@@ -27,6 +29,7 @@ class ScreenRequest(BaseModel):
     tickers: list[str] = []
     universe: Literal["sp500"] | None = None
     limit: int | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 def clean_value(value: Any) -> Any:
@@ -58,6 +61,11 @@ def health() -> dict[str, str]:
 @app.get("/api/default-tickers")
 def default_tickers() -> dict[str, list[str]]:
     return {"tickers": DEFAULT_TICKERS}
+
+
+@app.get("/api/default-config")
+def default_config() -> dict[str, Any]:
+    return {"config": default_config_dict()}
 
 
 @app.get("/api/saved-runs")
@@ -93,15 +101,17 @@ def saved_run(filename: str) -> dict[str, Any]:
 
 @app.post("/api/screen")
 def screen(request: ScreenRequest) -> dict[str, Any]:
+    config = build_config(request.config)
     tickers = build_ticker_list(
         explicit_tickers=request.tickers,
         universe=request.universe,
         limit=request.limit,
     )
-    df = run_screen(tickers)
+    df = run_screen(tickers, config=config)
     return {
         "count": len(df),
         "tickers": tickers,
+        "config": default_config_dict() | config.__dict__,
         "results": serialize_frame(df),
     }
 

@@ -17,10 +17,12 @@ const chartOverlay = document.getElementById("chartOverlay");
 const overlayTitle = document.getElementById("overlayTitle");
 const overlayChartMount = document.getElementById("overlayChartMount");
 const closeOverlayButton = document.getElementById("closeOverlayButton");
+const configInputs = Array.from(document.querySelectorAll("[data-config-key]"));
 
 let currentResults = [];
 let activeTicker = null;
 let activeBars = [];
+let defaultConfig = {};
 
 const amrutTickers = new Set([
   "AER",
@@ -47,10 +49,16 @@ const featureLabels = {
   dist_to_10y_high_pct: "Distance To 10Y High",
   range_ratio_24_120: "24M / 120M Range",
   range_ratio_24_60: "24M / 60M Range",
+  range_ratio_recent_long: "Recent / Long Range",
+  range_ratio_recent_mid: "Recent / Mid Range",
   low_36m_above_10y_low_pct: "36M Low Above 10Y Low",
+  support_low_above_long_low_pct: "Support Low Above Long Low",
   slope_high_60m: "60M High Slope",
   slope_low_60m: "60M Low Slope",
   trend_r2_60m: "60M Trend R²",
+  slope_high_mid: "Mid High Slope",
+  slope_low_mid: "Mid Low Slope",
+  trend_r2_mid: "Mid Trend R²",
   peak_age_months: "Peak Age Months",
   old_peak_similarity: "Old Peak Similarity"
 };
@@ -71,6 +79,31 @@ function splitTickers(value) {
     .split(/[\s,]+/)
     .map((item) => item.trim().toUpperCase())
     .filter(Boolean);
+}
+
+function setConfigControls(config) {
+  defaultConfig = config || {};
+  configInputs.forEach((input) => {
+    const key = input.dataset.configKey;
+    if (Object.prototype.hasOwnProperty.call(defaultConfig, key)) {
+      input.value = defaultConfig[key];
+    }
+  });
+}
+
+function collectConfig() {
+  const config = {};
+  configInputs.forEach((input) => {
+    const key = input.dataset.configKey;
+    if (!key || input.value === "") {
+      return;
+    }
+    const value = Number(input.value);
+    if (!Number.isNaN(value)) {
+      config[key] = value;
+    }
+  });
+  return config;
 }
 
 async function fetchJson(url, options) {
@@ -322,6 +355,11 @@ async function loadDefaultTickers() {
   tickersInput.value = payload.tickers.join("\n");
 }
 
+async function loadDefaultConfig() {
+  const payload = await fetchJson("/api/default-config");
+  setConfigControls(payload.config || {});
+}
+
 async function runScreen() {
   setStatus("Running live screen...");
   runButton.disabled = true;
@@ -331,7 +369,8 @@ async function runScreen() {
     const body = {
       tickers,
       universe: universeSelect.value || null,
-      limit: limitInput.value ? Number(limitInput.value) : null
+      limit: limitInput.value ? Number(limitInput.value) : null,
+      config: collectConfig()
     };
 
     const payload = await fetchJson("/api/screen", {
@@ -341,7 +380,7 @@ async function runScreen() {
     });
 
     renderResults(payload.results, "Live Screen Results");
-    setStatus(`Live screen finished with ${payload.count} ranked rows.`);
+    setStatus(`Live screen finished with ${payload.count} ranked rows using visible scoring controls.`);
   } catch (error) {
     console.error(error);
     setStatus("Live screen failed.");
@@ -367,7 +406,7 @@ document.addEventListener("keydown", (event) => {
 
 async function boot() {
   try {
-    await Promise.all([loadDefaultTickers(), loadSavedRuns()]);
+    await Promise.all([loadDefaultTickers(), loadDefaultConfig(), loadSavedRuns()]);
 
     const benchmarkName = Array.from(savedRunsSelect.options).find((option) =>
       option.value === "sp50_plus_amrut_results.csv"

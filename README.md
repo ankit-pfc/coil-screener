@@ -62,6 +62,28 @@ We are intentionally starting with a lightweight setup so we can get the monthly
 - `app.py`: FastAPI backend for the screener and chart endpoints
 - `static/`: plain HTML/CSS/JS review UI
 
+## Configurable Screening
+
+The scoring criteria now flow through `ScreenConfig` in `screen_monthly.py`.
+
+The default config preserves the original first-pass behavior, while the API and UI can override key controls such as:
+
+- score weights
+- anti-trend penalty strength
+- recent / mid / long range windows
+- compression targets
+- near-high distance
+- old-peak similarity
+- minimum history length
+
+API endpoint:
+
+`GET /api/default-config`
+
+CLI override example:
+
+`python screen_monthly.py AER AVT CAT --config-json '{"weight_long_coil": 0.7, "anti_trend_penalty_weight": 0.5}'`
+
 ## Environment
 
 Create a local virtual environment:

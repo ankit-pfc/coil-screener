@@ -150,6 +150,37 @@ textarea {
   line-height: 1.5;
 }
 
+.config-drawer {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.config-drawer summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+
+.field-grid .field span {
+  min-height: 30px;
+  line-height: 1.25;
+}
+
+.field-grid input {
+  padding: 10px 11px;
+  border-radius: 10px;
+}
+
 button {
   width: 100%;
   margin-top: 14px;

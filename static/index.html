@@ -41,6 +41,72 @@
             <textarea id="tickersInput" rows="10" spellcheck="false"></textarea>
           </label>
 
+          <details class="config-drawer" open>
+            <summary>Scoring Controls</summary>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Long Coil Weight</span>
+                <input data-config-key="weight_long_coil" type="number" min="0" max="1" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Tight Weight</span>
+                <input data-config-key="weight_tight_resistance" type="number" min="0" max="1" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Ascending Weight</span>
+                <input data-config-key="weight_ascending_compression" type="number" min="0" max="1" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Trend Penalty</span>
+                <input data-config-key="anti_trend_penalty_weight" type="number" min="0" max="1" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Min History Months</span>
+                <input data-config-key="min_history_months" type="number" min="24" step="12">
+              </label>
+
+              <label class="field">
+                <span>Recent Window</span>
+                <input data-config-key="recent_range_months" type="number" min="6" step="1">
+              </label>
+
+              <label class="field">
+                <span>Mid Window</span>
+                <input data-config-key="mid_range_months" type="number" min="12" step="1">
+              </label>
+
+              <label class="field">
+                <span>Long Window</span>
+                <input data-config-key="long_range_months" type="number" min="36" step="12">
+              </label>
+
+              <label class="field">
+                <span>Recent / Long Target</span>
+                <input data-config-key="compression_recent_long_target" type="number" min="0.05" max="1.5" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Recent / Mid Target</span>
+                <input data-config-key="compression_recent_mid_target" type="number" min="0.05" max="1.5" step="0.05">
+              </label>
+
+              <label class="field">
+                <span>Near High Distance</span>
+                <input data-config-key="tight_resistance_distance_pct" type="number" min="0.01" max="1" step="0.01">
+              </label>
+
+              <label class="field">
+                <span>Old Peak Similarity</span>
+                <input data-config-key="old_peak_min_similarity" type="number" min="0.1" max="1" step="0.05">
+              </label>
+            </div>
+          </details>
+
           <button id="runButton" class="primary-button" type="button">Run Screen</button>
         </section>
 

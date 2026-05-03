@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass, fields
 from io import StringIO
 from typing import Iterable, List, Optional
 
@@ -31,6 +32,52 @@ DEFAULT_TICKERS = [
 
 
 @dataclass
+class ScreenConfig:
+    min_history_months: int = 120
+    long_range_months: int = 120
+    mid_range_months: int = 60
+    recent_range_months: int = 24
+    support_low_months: int = 36
+    rolling_window_months: int = 12
+
+    weight_long_coil: float = 0.40
+    weight_tight_resistance: float = 0.35
+    weight_ascending_compression: float = 0.25
+    anti_trend_penalty_weight: float = 0.35
+
+    compression_recent_long_target: float = 0.60
+    compression_recent_mid_target: float = 0.70
+    compression_tolerance: float = 0.35
+    tight_resistance_distance_pct: float = 0.15
+    old_peak_min_similarity: float = 0.80
+    old_peak_exclusion_months: int = 24
+    old_peak_min_age_months: float = 60.0
+    old_peak_full_age_span_months: float = 120.0
+    low_support_scale_pct: float = 1.50
+
+    long_age_min_years: float = 10.0
+    long_age_full_span_years: float = 15.0
+    long_position_start: float = 0.70
+    long_position_span: float = 0.25
+    tight_position_start: float = 0.75
+    tight_position_span: float = 0.20
+    tight_range_long_target: float = 0.50
+    tight_range_long_tolerance: float = 0.30
+    ascending_position_start: float = 0.65
+    ascending_position_span: float = 0.25
+
+    ascending_low_slope_start: float = 0.005
+    ascending_low_slope_span: float = 0.05
+    ascending_high_slope_abs_max: float = 0.03
+    trend_r2_penalty_start: float = 0.65
+    trend_r2_penalty_span: float = 0.25
+    high_slope_penalty_start: float = 0.04
+    high_slope_penalty_span: float = 0.05
+    wide_range_penalty_start: float = 0.65
+    wide_range_penalty_span: float = 0.25
+
+
+@dataclass
 class ScreenResult:
     ticker: str
     age_years: float
@@ -49,6 +96,58 @@ class ScreenResult:
     trend_r2_60m: float
     peak_age_months: float
     old_peak_similarity: float
+    range_ratio_recent_long: float
+    range_ratio_recent_mid: float
+    support_low_above_long_low_pct: float
+    slope_high_mid: float
+    slope_low_mid: float
+    trend_r2_mid: float
+
+
+def default_config_dict() -> dict[str, float | int]:
+    return asdict(ScreenConfig())
+
+
+def build_config(overrides: Optional[dict[str, float | int]] = None) -> ScreenConfig:
+    config_values = default_config_dict()
+    if overrides:
+        allowed = {field.name for field in fields(ScreenConfig)}
+        for key, value in overrides.items():
+            if key not in allowed or value is None:
+                continue
+            if isinstance(config_values[key], int):
+                config_values[key] = max(1, int(value))
+            else:
+                config_values[key] = float(value)
+
+    positive_keys = [
+        "compression_tolerance",
+        "tight_resistance_distance_pct",
+        "old_peak_full_age_span_months",
+        "low_support_scale_pct",
+        "long_age_full_span_years",
+        "long_position_span",
+        "tight_position_span",
+        "tight_range_long_tolerance",
+        "ascending_position_span",
+        "ascending_low_slope_span",
+        "ascending_high_slope_abs_max",
+        "trend_r2_penalty_span",
+        "high_slope_penalty_span",
+        "wide_range_penalty_span",
+    ]
+    for key in positive_keys:
+        config_values[key] = max(0.001, float(config_values[key]))
+
+    for key in [
+        "weight_long_coil",
+        "weight_tight_resistance",
+        "weight_ascending_compression",
+        "anti_trend_penalty_weight",
+    ]:
+        config_values[key] = max(0.0, float(config_values[key]))
+
+    return ScreenConfig(**config_values)
 
 
 def clamp01(value: float) -> float:
@@ -152,11 +251,33 @@ def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[st
     return histories
 
 
-def compute_features(ticker: str, monthly: pd.DataFrame) -> Optional[ScreenResult]:
+def weighted_mean(parts: list[tuple[float, float]]) -> float:
+    total_weight = sum(max(0.0, float(weight)) for _, weight in parts)
+    if total_weight == 0:
+        return 0.0
+    return float(
+        sum(float(value) * max(0.0, float(weight)) for value, weight in parts)
+        / total_weight
+    )
+
+
+def compute_features(
+    ticker: str,
+    monthly: pd.DataFrame,
+    config: Optional[ScreenConfig] = None,
+) -> Optional[ScreenResult]:
+    config = config or ScreenConfig()
     monthly = monthly.copy()
     monthly = monthly.sort_index()
 
-    if len(monthly) < 120:
+    required_months = max(
+        config.min_history_months,
+        config.long_range_months,
+        config.mid_range_months,
+        config.recent_range_months,
+        config.support_low_months,
+    )
+    if len(monthly) < required_months:
         return None
 
     close = monthly["Close"].astype(float)
@@ -166,37 +287,41 @@ def compute_features(ticker: str, monthly: pd.DataFrame) -> Optional[ScreenResul
     last_close = float(close.iloc[-1])
     age_years = len(monthly) / 12.0
 
-    high_120 = float(high.iloc[-120:].max())
-    low_120 = float(low.iloc[-120:].min())
-    high_60 = float(high.iloc[-60:].max())
-    low_60 = float(low.iloc[-60:].min())
-    high_24 = float(high.iloc[-24:].max())
-    low_24 = float(low.iloc[-24:].min())
-    low_36 = float(low.iloc[-36:].min())
+    high_long = float(high.iloc[-config.long_range_months:].max())
+    low_long = float(low.iloc[-config.long_range_months:].min())
+    high_mid = float(high.iloc[-config.mid_range_months:].max())
+    low_mid = float(low.iloc[-config.mid_range_months:].min())
+    high_recent = float(high.iloc[-config.recent_range_months:].max())
+    low_recent = float(low.iloc[-config.recent_range_months:].min())
+    low_support = float(low.iloc[-config.support_low_months:].min())
 
-    range_120 = high_120 - low_120
-    range_60 = high_60 - low_60
-    range_24 = high_24 - low_24
+    range_long = high_long - low_long
+    range_mid = high_mid - low_mid
+    range_recent = high_recent - low_recent
 
-    if range_120 <= 0 or range_60 <= 0:
+    if range_long <= 0 or range_mid <= 0:
         return None
 
-    pos_in_10y_range = (last_close - low_120) / range_120
-    dist_to_10y_high_pct = (high_120 - last_close) / high_120 if high_120 > 0 else np.nan
-    range_ratio_24_120 = range_24 / range_120
-    range_ratio_24_60 = range_24 / range_60
-    low_36m_above_10y_low_pct = (low_36 - low_120) / low_120 if low_120 > 0 else np.nan
+    pos_in_long_range = (last_close - low_long) / range_long
+    dist_to_long_high_pct = (high_long - last_close) / high_long if high_long > 0 else np.nan
+    range_ratio_recent_long = range_recent / range_long
+    range_ratio_recent_mid = range_recent / range_mid
+    support_low_above_long_low_pct = (low_support - low_long) / low_long if low_long > 0 else np.nan
 
-    rolling_high_12 = high.rolling(12).max().iloc[-60:]
-    rolling_low_12 = low.rolling(12).min().iloc[-60:]
-    slope_high_60m = fit_slope(normalize_series(rolling_high_12))
-    slope_low_60m = fit_slope(normalize_series(rolling_low_12))
-    trend_r2_60m = fit_trend_r2(normalize_series(close.iloc[-60:]))
+    rolling_high = high.rolling(config.rolling_window_months).max().iloc[-config.mid_range_months:]
+    rolling_low = low.rolling(config.rolling_window_months).min().iloc[-config.mid_range_months:]
+    slope_high_mid = fit_slope(normalize_series(rolling_high))
+    slope_low_mid = fit_slope(normalize_series(rolling_low))
+    trend_r2_mid = fit_trend_r2(normalize_series(close.iloc[-config.mid_range_months:]))
 
-    older_high_window = high.iloc[:-24]
-    older_high = float(older_high_window.max()) if not older_high_window.empty else high_120
-    old_peak_similarity = older_high / high_120 if high_120 > 0 else np.nan
-    had_old_peak = old_peak_similarity >= 0.80 if not np.isnan(old_peak_similarity) else False
+    older_high_window = high.iloc[:-config.old_peak_exclusion_months]
+    older_high = float(older_high_window.max()) if not older_high_window.empty else high_long
+    old_peak_similarity = older_high / high_long if high_long > 0 else np.nan
+    had_old_peak = (
+        old_peak_similarity >= config.old_peak_min_similarity
+        if not np.isnan(old_peak_similarity)
+        else False
+    )
     if had_old_peak:
         prior_peak_idx = older_high_window.idxmax()
         peak_age_months = float((monthly.index[-1].to_period("M") - prior_peak_idx.to_period("M")).n)
@@ -205,59 +330,90 @@ def compute_features(ticker: str, monthly: pd.DataFrame) -> Optional[ScreenResul
 
     compression_quality = np.mean(
         [
-            clamp01((0.60 - range_ratio_24_120) / 0.35),
-            clamp01((0.70 - range_ratio_24_60) / 0.35),
+            clamp01(
+                (config.compression_recent_long_target - range_ratio_recent_long)
+                / config.compression_tolerance
+            ),
+            clamp01(
+                (config.compression_recent_mid_target - range_ratio_recent_mid)
+                / config.compression_tolerance
+            ),
         ]
     )
     old_peak_score = np.mean(
         [
             1.0 if had_old_peak else 0.0,
-            clamp01((peak_age_months - 60.0) / 120.0),
-            clamp01((old_peak_similarity - 0.80) / 0.20) if not np.isnan(old_peak_similarity) else 0.0,
+            clamp01(
+                (peak_age_months - config.old_peak_min_age_months)
+                / config.old_peak_full_age_span_months
+            ),
+            clamp01(
+                (old_peak_similarity - config.old_peak_min_similarity)
+                / max(0.001, 1.0 - config.old_peak_min_similarity)
+            )
+            if not np.isnan(old_peak_similarity)
+            else 0.0,
         ]
     )
     anti_trend_penalty = np.mean(
         [
-            clamp01((trend_r2_60m - 0.65) / 0.25) if not np.isnan(trend_r2_60m) else 0.0,
-            clamp01((slope_high_60m - 0.04) / 0.05) if not np.isnan(slope_high_60m) else 0.0,
-            clamp01((range_ratio_24_120 - 0.65) / 0.25),
+            clamp01((trend_r2_mid - config.trend_r2_penalty_start) / config.trend_r2_penalty_span)
+            if not np.isnan(trend_r2_mid)
+            else 0.0,
+            clamp01((slope_high_mid - config.high_slope_penalty_start) / config.high_slope_penalty_span)
+            if not np.isnan(slope_high_mid)
+            else 0.0,
+            clamp01((range_ratio_recent_long - config.wide_range_penalty_start) / config.wide_range_penalty_span),
         ]
     )
 
     score_long_coil = np.mean(
         [
-            clamp01((age_years - 10.0) / 15.0),
-            clamp01((pos_in_10y_range - 0.70) / 0.25),
+            clamp01((age_years - config.long_age_min_years) / config.long_age_full_span_years),
+            clamp01((pos_in_long_range - config.long_position_start) / config.long_position_span),
             compression_quality,
-            clamp01(low_36m_above_10y_low_pct / 1.50) if not np.isnan(low_36m_above_10y_low_pct) else 0.0,
+            clamp01(support_low_above_long_low_pct / config.low_support_scale_pct)
+            if not np.isnan(support_low_above_long_low_pct)
+            else 0.0,
             old_peak_score,
         ]
     )
 
     score_tight_resistance = np.mean(
         [
-            clamp01((0.15 - dist_to_10y_high_pct) / 0.15) if not np.isnan(dist_to_10y_high_pct) else 0.0,
-            clamp01((pos_in_10y_range - 0.75) / 0.20),
-            clamp01((0.50 - range_ratio_24_120) / 0.30),
-            clamp01((0.70 - range_ratio_24_60) / 0.35),
+            clamp01((config.tight_resistance_distance_pct - dist_to_long_high_pct) / config.tight_resistance_distance_pct)
+            if not np.isnan(dist_to_long_high_pct)
+            else 0.0,
+            clamp01((pos_in_long_range - config.tight_position_start) / config.tight_position_span),
+            clamp01((config.tight_range_long_target - range_ratio_recent_long) / config.tight_range_long_tolerance),
+            clamp01(
+                (config.compression_recent_mid_target - range_ratio_recent_mid)
+                / config.compression_tolerance
+            ),
         ]
     )
 
     score_ascending_compression = np.mean(
         [
-            clamp01((slope_low_60m - 0.005) / 0.05) if not np.isnan(slope_low_60m) else 0.0,
-            clamp01((0.03 - abs(slope_high_60m)) / 0.03) if not np.isnan(slope_high_60m) else 0.0,
-            clamp01((pos_in_10y_range - 0.65) / 0.25),
+            clamp01((slope_low_mid - config.ascending_low_slope_start) / config.ascending_low_slope_span)
+            if not np.isnan(slope_low_mid)
+            else 0.0,
+            clamp01((config.ascending_high_slope_abs_max - abs(slope_high_mid)) / config.ascending_high_slope_abs_max)
+            if not np.isnan(slope_high_mid)
+            else 0.0,
+            clamp01((pos_in_long_range - config.ascending_position_start) / config.ascending_position_span),
             compression_quality,
         ]
     )
 
-    raw_score_total = float(
-        0.40 * score_long_coil
-        + 0.35 * score_tight_resistance
-        + 0.25 * score_ascending_compression
+    raw_score_total = weighted_mean(
+        [
+            (score_long_coil, config.weight_long_coil),
+            (score_tight_resistance, config.weight_tight_resistance),
+            (score_ascending_compression, config.weight_ascending_compression),
+        ]
     )
-    score_total = clamp01(raw_score_total - 0.35 * anti_trend_penalty)
+    score_total = clamp01(raw_score_total - config.anti_trend_penalty_weight * anti_trend_penalty)
 
     return ScreenResult(
         ticker=ticker,
@@ -267,20 +423,27 @@ def compute_features(ticker: str, monthly: pd.DataFrame) -> Optional[ScreenResul
         score_long_coil=float(score_long_coil),
         score_tight_resistance=float(score_tight_resistance),
         score_ascending_compression=float(score_ascending_compression),
-        pos_in_10y_range=float(pos_in_10y_range),
-        dist_to_10y_high_pct=float(dist_to_10y_high_pct),
-        range_ratio_24_120=float(range_ratio_24_120),
-        range_ratio_24_60=float(range_ratio_24_60),
-        low_36m_above_10y_low_pct=float(low_36m_above_10y_low_pct),
-        slope_high_60m=float(slope_high_60m),
-        slope_low_60m=float(slope_low_60m),
-        trend_r2_60m=float(trend_r2_60m),
+        pos_in_10y_range=float(pos_in_long_range),
+        dist_to_10y_high_pct=float(dist_to_long_high_pct),
+        range_ratio_24_120=float(range_ratio_recent_long),
+        range_ratio_24_60=float(range_ratio_recent_mid),
+        low_36m_above_10y_low_pct=float(support_low_above_long_low_pct),
+        slope_high_60m=float(slope_high_mid),
+        slope_low_60m=float(slope_low_mid),
+        trend_r2_60m=float(trend_r2_mid),
         peak_age_months=float(peak_age_months),
         old_peak_similarity=float(old_peak_similarity),
+        range_ratio_recent_long=float(range_ratio_recent_long),
+        range_ratio_recent_mid=float(range_ratio_recent_mid),
+        support_low_above_long_low_pct=float(support_low_above_long_low_pct),
+        slope_high_mid=float(slope_high_mid),
+        slope_low_mid=float(slope_low_mid),
+        trend_r2_mid=float(trend_r2_mid),
     )
 
 
-def run_screen(tickers: Iterable[str]) -> pd.DataFrame:
+def run_screen(tickers: Iterable[str], config: Optional[ScreenConfig] = None) -> pd.DataFrame:
+    config = config or ScreenConfig()
     results: List[ScreenResult] = []
     ticker_list = list(tickers)
     histories = fetch_monthly_histories(ticker_list)
@@ -289,7 +452,7 @@ def run_screen(tickers: Iterable[str]) -> pd.DataFrame:
         monthly = histories.get(ticker)
         if monthly is None:
             continue
-        result = compute_features(ticker, monthly)
+        result = compute_features(ticker, monthly, config=config)
         if result is not None:
             results.append(result)
 
@@ -352,6 +515,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Optional cap on the number of universe tickers loaded before adding explicit ticker arguments.",
     )
+    parser.add_argument(
+        "--config-json",
+        help="Optional JSON object of ScreenConfig overrides.",
+    )
     return parser
 
 
@@ -365,7 +532,8 @@ def main() -> None:
         limit=args.limit,
     )
 
-    df = run_screen(tickers)
+    config = build_config(json.loads(args.config_json) if args.config_json else None)
+    df = run_screen(tickers, config=config)
     if df.empty:
         print("No results.")
         return
