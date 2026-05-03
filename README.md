@@ -115,6 +115,32 @@ Use:
 - `GET /api/runs/{run_id}` to load metadata and results
 - `GET /api/storage` to inspect active storage paths
 
+## Market Data Cache
+
+Monthly OHLCV data is cached on disk under `storage/market_cache/monthly/` by default.
+
+The cache is intentionally file-based and platform-neutral:
+
+- local dev: `./storage/market_cache/monthly/AAPL.csv`
+- Railway: mount persistent storage and set `COIL_STORAGE_DIR=/app/storage`
+- Docker/VPS: mount any persistent directory and set `COIL_STORAGE_DIR`
+
+Default behavior:
+
+- use cached monthly data when it is fresh
+- refresh cached data older than 24 hours
+- write successful refreshes back to cache
+- use stale cache as a fallback if refresh fails
+- record cache stats in each run's `metadata.json`
+
+CLI controls:
+
+```bash
+python screen_monthly.py AAPL MSFT --cache-max-age-hours 24
+python screen_monthly.py AAPL MSFT --force-refresh
+python screen_monthly.py AAPL MSFT --no-cache
+```
+
 ## Environment
 
 Create a local virtual environment:

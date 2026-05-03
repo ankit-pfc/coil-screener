@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass, fields
+import os
+from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timezone
 from io import StringIO
+from pathlib import Path
 from typing import Iterable, List, Optional
 
 import numpy as np
@@ -11,6 +14,9 @@ import pandas as pd
 import requests
 import yfinance as yf
 
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_CACHE_MAX_AGE_HOURS = 24.0
 
 DEFAULT_TICKERS = [
     "AER",
@@ -111,9 +117,86 @@ class ScreenFailure:
 
 
 @dataclass
+class MarketCacheStats:
+    enabled: bool = True
+    max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS
+    hits: int = 0
+    misses: int = 0
+    stale: int = 0
+    refreshed: int = 0
+    stale_used: int = 0
+    failed: int = 0
+    writes: int = 0
+
+
+@dataclass
 class ScreenReport:
     results: pd.DataFrame
     failures: list[ScreenFailure]
+    cache_stats: MarketCacheStats = field(default_factory=MarketCacheStats)
+
+
+def storage_dir() -> Path:
+    return Path(os.getenv("COIL_STORAGE_DIR", PROJECT_ROOT / "storage"))
+
+
+def cache_dir() -> Path:
+    return Path(os.getenv("COIL_CACHE_DIR", storage_dir() / "market_cache"))
+
+
+def monthly_cache_dir() -> Path:
+    return cache_dir() / "monthly"
+
+
+def cache_filename(ticker: str) -> str:
+    safe = ticker.upper().replace("/", "_").replace("\\", "_").replace(":", "_")
+    return f"{safe}.csv"
+
+
+def monthly_cache_path(ticker: str) -> Path:
+    return monthly_cache_dir() / cache_filename(ticker)
+
+
+def cache_age_hours(path: Path) -> float:
+    modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    return (datetime.now(timezone.utc) - modified).total_seconds() / 3600
+
+
+def normalize_monthly_frame(data: pd.DataFrame | None) -> Optional[pd.DataFrame]:
+    if data is None or data.empty:
+        return None
+    cleaned = data.copy()
+    if isinstance(cleaned.columns, pd.MultiIndex):
+        return None
+    required = ["Open", "High", "Low", "Close"]
+    if not all(column in cleaned.columns for column in required):
+        return None
+    cleaned = cleaned.dropna(subset=required)
+    if cleaned.empty:
+        return None
+    cleaned = cleaned.sort_index()
+    return cleaned
+
+
+def read_monthly_cache(ticker: str) -> Optional[pd.DataFrame]:
+    path = monthly_cache_path(ticker)
+    if not path.exists():
+        return None
+    try:
+        data = pd.read_csv(path, index_col=0, parse_dates=True)
+    except (OSError, ValueError, pd.errors.ParserError):
+        return None
+    return normalize_monthly_frame(data)
+
+
+def write_monthly_cache(ticker: str, monthly: pd.DataFrame) -> bool:
+    path = monthly_cache_path(ticker)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        monthly.to_csv(path)
+    except OSError:
+        return False
+    return True
 
 
 def default_config_dict() -> dict[str, float | int]:
@@ -210,7 +293,7 @@ def fit_trend_r2(values: pd.Series) -> float:
     return float(1 - ss_res / ss_tot)
 
 
-def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
+def fetch_monthly_history_raw(ticker: str) -> Optional[pd.DataFrame]:
     data = yf.download(
         ticker,
         period="max",
@@ -219,12 +302,22 @@ def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
         progress=False,
         multi_level_index=False,
     )
-    if data is None or data.empty:
-        return None
-    data = data.dropna(subset=["Open", "High", "Low", "Close"])
-    if data.empty:
-        return None
-    return data
+    return normalize_monthly_frame(data)
+
+
+def fetch_monthly_history(
+    ticker: str,
+    use_cache: bool = True,
+    cache_max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS,
+    force_refresh: bool = False,
+) -> Optional[pd.DataFrame]:
+    histories = fetch_monthly_histories(
+        [ticker],
+        use_cache=use_cache,
+        cache_max_age_hours=cache_max_age_hours,
+        force_refresh=force_refresh,
+    )
+    return histories.get(ticker)
 
 
 def normalize_tickers(tickers: Iterable[str]) -> List[str]:
@@ -242,7 +335,7 @@ def chunked(items: List[str], size: int) -> Iterable[List[str]]:
         yield items[i : i + size]
 
 
-def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[str, pd.DataFrame]:
+def fetch_monthly_histories_raw(tickers: List[str], batch_size: int = 10) -> dict[str, pd.DataFrame]:
     histories: dict[str, pd.DataFrame] = {}
 
     for batch in chunked(tickers, batch_size):
@@ -262,13 +355,70 @@ def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[st
             for ticker in batch:
                 if ticker not in data.columns.get_level_values(0):
                     continue
-                ticker_df = data[ticker].dropna(subset=["Open", "High", "Low", "Close"])
-                if not ticker_df.empty:
+                ticker_df = normalize_monthly_frame(data[ticker])
+                if ticker_df is not None:
                     histories[ticker] = ticker_df
         else:
-            ticker_df = data.dropna(subset=["Open", "High", "Low", "Close"])
-            if not ticker_df.empty and len(batch) == 1:
+            ticker_df = normalize_monthly_frame(data)
+            if ticker_df is not None and len(batch) == 1:
                 histories[batch[0]] = ticker_df
+
+    return histories
+
+
+def fetch_monthly_histories(
+    tickers: List[str],
+    batch_size: int = 10,
+    use_cache: bool = True,
+    cache_max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS,
+    force_refresh: bool = False,
+    cache_stats: Optional[MarketCacheStats] = None,
+) -> dict[str, pd.DataFrame]:
+    stats = cache_stats or MarketCacheStats(enabled=use_cache, max_age_hours=cache_max_age_hours)
+    stats.enabled = use_cache
+    stats.max_age_hours = cache_max_age_hours
+
+    ticker_list = normalize_tickers(tickers)
+    if not use_cache:
+        return fetch_monthly_histories_raw(ticker_list, batch_size=batch_size)
+
+    histories: dict[str, pd.DataFrame] = {}
+    stale_histories: dict[str, pd.DataFrame] = {}
+    fetch_tickers: list[str] = []
+
+    for ticker in ticker_list:
+        cached = read_monthly_cache(ticker)
+        path = monthly_cache_path(ticker)
+        if cached is None:
+            stats.misses += 1
+            fetch_tickers.append(ticker)
+            continue
+
+        if not force_refresh and cache_age_hours(path) <= cache_max_age_hours:
+            stats.hits += 1
+            histories[ticker] = cached
+            continue
+
+        stats.stale += 1
+        stale_histories[ticker] = cached
+        fetch_tickers.append(ticker)
+
+    fetched = fetch_monthly_histories_raw(fetch_tickers, batch_size=batch_size) if fetch_tickers else {}
+    for ticker in fetch_tickers:
+        monthly = fetched.get(ticker)
+        if monthly is not None:
+            histories[ticker] = monthly
+            stats.refreshed += 1
+            if write_monthly_cache(ticker, monthly):
+                stats.writes += 1
+            continue
+
+        stale = stale_histories.get(ticker)
+        if stale is not None:
+            histories[ticker] = stale
+            stats.stale_used += 1
+        else:
+            stats.failed += 1
 
     return histories
 
@@ -461,12 +611,22 @@ def compute_features(
 def run_screen_report(
     tickers: Iterable[str],
     config: Optional[ScreenConfig] = None,
+    use_cache: bool = True,
+    cache_max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS,
+    force_refresh: bool = False,
 ) -> ScreenReport:
     config = config or ScreenConfig()
     results: List[ScreenResult] = []
     failures: list[ScreenFailure] = []
     ticker_list = list(tickers)
-    histories = fetch_monthly_histories(ticker_list)
+    cache_stats = MarketCacheStats(enabled=use_cache, max_age_hours=cache_max_age_hours)
+    histories = fetch_monthly_histories(
+        ticker_list,
+        use_cache=use_cache,
+        cache_max_age_hours=cache_max_age_hours,
+        force_refresh=force_refresh,
+        cache_stats=cache_stats,
+    )
     required_months = required_history_months(config)
 
     for ticker in ticker_list:
@@ -489,11 +649,11 @@ def run_screen_report(
             failures.append(ScreenFailure(ticker=ticker, reason="feature_computation_filtered"))
 
     if not results:
-        return ScreenReport(results=pd.DataFrame(), failures=failures)
+        return ScreenReport(results=pd.DataFrame(), failures=failures, cache_stats=cache_stats)
 
     df = pd.DataFrame([r.__dict__ for r in results])
     df = df.sort_values(["score_total", "score_long_coil"], ascending=False).reset_index(drop=True)
-    return ScreenReport(results=df, failures=failures)
+    return ScreenReport(results=df, failures=failures, cache_stats=cache_stats)
 
 
 def run_screen(tickers: Iterable[str], config: Optional[ScreenConfig] = None) -> pd.DataFrame:
@@ -556,6 +716,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-json",
         help="Optional JSON object of ScreenConfig overrides.",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Bypass the monthly market-data cache.",
+    )
+    parser.add_argument(
+        "--cache-max-age-hours",
+        type=float,
+        default=DEFAULT_CACHE_MAX_AGE_HOURS,
+        help="Refresh cached monthly data older than this many hours.",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="Refresh all requested tickers even when cached data is fresh.",
+    )
     return parser
 
 
@@ -570,7 +746,14 @@ def main() -> None:
     )
 
     config = build_config(json.loads(args.config_json) if args.config_json else None)
-    df = run_screen(tickers, config=config)
+    report = run_screen_report(
+        tickers,
+        config=config,
+        use_cache=not args.no_cache,
+        cache_max_age_hours=args.cache_max_age_hours,
+        force_refresh=args.force_refresh,
+    )
+    df = report.results
     if df.empty:
         print("No results.")
         return
@@ -593,6 +776,7 @@ def main() -> None:
     pd.set_option("display.width", 160)
     pd.set_option("display.max_columns", None)
     print(printable.to_string(index=False, float_format=lambda x: f"{x:0.3f}"))
+    print(f"\nCache stats: {asdict(report.cache_stats)}")
 
     if args.csv:
         df.to_csv(args.csv, index=False)

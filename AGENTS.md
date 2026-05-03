@@ -18,6 +18,7 @@ The current implementation has two layers:
 - Live API/UI screens persist local run artifacts under ignored `storage/runs/<run_id>/` folders by default.
 - Each persisted run stores `metadata.json` and `results.csv`.
 - Runtime storage is platform-neutral and configured with `COIL_STORAGE_DIR`, `COIL_RUNS_DIR`, and `COIL_CACHE_DIR`.
+- Monthly OHLCV data uses a disk-backed CSV cache under `COIL_CACHE_DIR/monthly`.
 
 ## Product Direction
 
@@ -40,9 +41,9 @@ Build toward a reliable app where a pro user can:
 
 ## Near-Term Backlog
 
-1. Add a cached market-data layer under `COIL_CACHE_DIR` so repeated runs are less dependent on live downloads.
+1. Add a UI cache control row: cache on/off, force refresh, max age.
 2. Add stronger per-ticker error details from the market-data fetch layer.
-3. Add smoke tests for CLI, feature computation, API serialization, and run persistence.
+3. Add smoke tests for CLI, feature computation, API serialization, run persistence, and cache behavior.
 4. Add saved config presets and compare-runs behavior.
 5. Add deployment docs for Railway/Docker/VPS using only env-configured storage paths.
 6. Decide whether benchmark CSVs should remain committed or move to ignored/generated data.

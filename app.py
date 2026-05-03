@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from screen_monthly import (
     DEFAULT_TICKERS,
+    DEFAULT_CACHE_MAX_AGE_HOURS,
     build_ticker_list,
     build_config,
     compute_features,
@@ -39,6 +41,9 @@ class ScreenRequest(BaseModel):
     universe: Literal["sp500"] | None = None
     limit: int | None = None
     config: dict[str, Any] = Field(default_factory=dict)
+    use_cache: bool = True
+    cache_max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS
+    force_refresh: bool = False
 
 
 def clean_value(value: Any) -> Any:
@@ -195,6 +200,7 @@ def storage() -> dict[str, str]:
         "storage_dir": str(STORAGE_DIR),
         "runs_dir": str(RUNS_DIR),
         "cache_dir": str(CACHE_DIR),
+        "cache_max_age_hours_default": str(DEFAULT_CACHE_MAX_AGE_HOURS),
     }
 
 
@@ -260,7 +266,13 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
         universe=request.universe,
         limit=request.limit,
     )
-    report = run_screen_report(tickers, config=config)
+    report = run_screen_report(
+        tickers,
+        config=config,
+        use_cache=request.use_cache,
+        cache_max_age_hours=request.cache_max_age_hours,
+        force_refresh=request.force_refresh,
+    )
     df = report.results
     failures = [failure.__dict__ for failure in report.failures]
     completed_at = utc_now()
@@ -275,12 +287,16 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
             "universe": request.universe,
             "limit": request.limit,
             "config": request.config,
+            "use_cache": request.use_cache,
+            "cache_max_age_hours": request.cache_max_age_hours,
+            "force_refresh": request.force_refresh,
         },
         "resolved_tickers": tickers,
         "config": config_dict,
         "result_count": len(df),
         "failure_count": len(failures),
         "failures": failures,
+        "cache": asdict(report.cache_stats),
         "storage_dir": str(STORAGE_DIR),
         "results_file": str(results_path(run_id)),
     }
@@ -290,6 +306,7 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
         "count": len(df),
         "tickers": tickers,
         "failures": failures,
+        "cache": asdict(report.cache_stats),
         "config": config_dict,
         "results": serialize_frame(df),
     }

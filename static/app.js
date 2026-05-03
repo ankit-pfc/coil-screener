@@ -409,7 +409,8 @@ async function runScreen() {
     renderResults(payload.results, "Live Screen Results");
     const runId = payload.run?.run_id || "unsaved";
     const failureCount = payload.run?.failure_count || 0;
-    setStatus(`Run ${runId} saved with ${payload.count} ranked rows and ${failureCount} failures.`);
+    const cache = payload.cache || {};
+    setStatus(`Run ${runId} saved: ${payload.count} rows, ${failureCount} failures, cache ${cache.hits || 0} hits / ${cache.refreshed || 0} refreshed.`);
     await loadSavedRuns();
     savedRunsSelect.value = runId;
   } catch (error) {
