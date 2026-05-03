@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,10 @@ from screen_monthly import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_ROOT / "static"
-RUNS_DIR = PROJECT_ROOT / "runs"
+STORAGE_DIR = Path(os.getenv("COIL_STORAGE_DIR", PROJECT_ROOT / "storage"))
+RUNS_DIR = Path(os.getenv("COIL_RUNS_DIR", STORAGE_DIR / "runs"))
+CACHE_DIR = Path(os.getenv("COIL_CACHE_DIR", STORAGE_DIR / "market_cache"))
+LEGACY_RUNS_DIR = PROJECT_ROOT / "runs"
 
 app = FastAPI(title="Coil Screening")
 
@@ -81,16 +85,16 @@ def create_run_id() -> str:
     return f"{stamp}-{uuid4().hex[:8]}"
 
 
-def run_dir(run_id: str) -> Path:
-    return RUNS_DIR / run_id
+def run_dir(run_id: str, base_dir: Path = RUNS_DIR) -> Path:
+    return base_dir / run_id
 
 
-def metadata_path(run_id: str) -> Path:
-    return run_dir(run_id) / "metadata.json"
+def metadata_path(run_id: str, base_dir: Path = RUNS_DIR) -> Path:
+    return run_dir(run_id, base_dir=base_dir) / "metadata.json"
 
 
-def results_path(run_id: str) -> Path:
-    return run_dir(run_id) / "results.csv"
+def results_path(run_id: str, base_dir: Path = RUNS_DIR) -> Path:
+    return run_dir(run_id, base_dir=base_dir) / "results.csv"
 
 
 def validate_run_id(run_id: str) -> str:
@@ -108,21 +112,50 @@ def write_run_artifacts(run_id: str, metadata: dict[str, Any], df: pd.DataFrame)
 
 def read_run_metadata(run_id: str) -> dict[str, Any]:
     validate_run_id(run_id)
-    path = metadata_path(run_id)
+    path = find_metadata_path(run_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Run not found.")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def list_persisted_runs() -> list[dict[str, Any]]:
-    if not RUNS_DIR.exists():
-        return []
+def run_lookup_dirs() -> list[Path]:
+    dirs = [RUNS_DIR]
+    if LEGACY_RUNS_DIR != RUNS_DIR:
+        dirs.append(LEGACY_RUNS_DIR)
+    return dirs
 
+
+def find_metadata_path(run_id: str) -> Path:
+    for base_dir in run_lookup_dirs():
+        path = metadata_path(run_id, base_dir=base_dir)
+        if path.exists():
+            return path
+    return metadata_path(run_id)
+
+
+def find_results_path(run_id: str) -> Path:
+    for base_dir in run_lookup_dirs():
+        path = results_path(run_id, base_dir=base_dir)
+        if path.exists():
+            return path
+    return results_path(run_id)
+
+
+def list_persisted_runs() -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
-    for path in sorted(RUNS_DIR.iterdir(), key=lambda item: item.name, reverse=True):
-        meta = path / "metadata.json"
-        if not path.is_dir() or not meta.exists():
+    seen: set[str] = set()
+    run_dirs: list[Path] = []
+    for base_dir in run_lookup_dirs():
+        if base_dir.exists():
+            run_dirs.extend(path for path in base_dir.iterdir() if path.is_dir())
+
+    for path in sorted(run_dirs, key=lambda item: item.name, reverse=True):
+        if path.name in seen:
             continue
+        meta = path / "metadata.json"
+        if not meta.exists():
+            continue
+        seen.add(path.name)
         try:
             data = json.loads(meta.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
@@ -156,6 +189,15 @@ def default_config() -> dict[str, Any]:
     return {"config": default_config_dict()}
 
 
+@app.get("/api/storage")
+def storage() -> dict[str, str]:
+    return {
+        "storage_dir": str(STORAGE_DIR),
+        "runs_dir": str(RUNS_DIR),
+        "cache_dir": str(CACHE_DIR),
+    }
+
+
 @app.get("/api/saved-runs")
 def saved_runs() -> dict[str, list[dict[str, Any]]]:
     files = sorted(PROJECT_ROOT.glob("*.csv"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -178,7 +220,7 @@ def runs() -> dict[str, list[dict[str, Any]]]:
 @app.get("/api/runs/{run_id}")
 def run_detail(run_id: str) -> dict[str, Any]:
     metadata = read_run_metadata(run_id)
-    result_file = results_path(run_id)
+    result_file = find_results_path(run_id)
     try:
         results = serialize_frame(pd.read_csv(result_file)) if result_file.exists() else []
     except pd.errors.EmptyDataError:
@@ -239,7 +281,8 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
         "result_count": len(df),
         "failure_count": len(failures),
         "failures": failures,
-        "results_file": str(results_path(run_id).relative_to(PROJECT_ROOT)),
+        "storage_dir": str(STORAGE_DIR),
+        "results_file": str(results_path(run_id)),
     }
     write_run_artifacts(run_id, metadata, df)
     return {

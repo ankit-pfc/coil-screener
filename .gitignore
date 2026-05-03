@@ -10,4 +10,5 @@ __pycache__/
 .ruff_cache/
 
 *.log
+storage/
 runs/

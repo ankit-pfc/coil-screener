@@ -86,17 +86,34 @@ CLI override example:
 
 ## Persisted Runs
 
-Live API/UI screens are saved under `runs/<run_id>/`.
+Live API/UI screens are saved under `storage/runs/<run_id>/` by default.
 
 Each run writes:
 
 - `metadata.json`: timestamp, request, resolved tickers, config, git commit, counts, failures
 - `results.csv`: ranked result rows for that exact run
 
-The `runs/` directory is ignored by Git because it is runtime output. Use:
+Runtime storage is ignored by Git. Configure it with environment variables:
+
+- `COIL_STORAGE_DIR`: root for runtime storage; defaults to `./storage`
+- `COIL_RUNS_DIR`: optional override for run artifacts
+- `COIL_CACHE_DIR`: optional override for market-data cache artifacts
+
+Examples:
+
+```bash
+COIL_STORAGE_DIR=/app/storage python -m uvicorn app:app --host 0.0.0.0 --port 8010
+```
+
+```bash
+COIL_STORAGE_DIR=/var/lib/coil-screener python -m uvicorn app:app
+```
+
+Use:
 
 - `GET /api/runs` to list persisted live runs
 - `GET /api/runs/{run_id}` to load metadata and results
+- `GET /api/storage` to inspect active storage paths
 
 ## Environment
 
