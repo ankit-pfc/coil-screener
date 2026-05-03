@@ -141,6 +141,26 @@ python screen_monthly.py AAPL MSFT --force-refresh
 python screen_monthly.py AAPL MSFT --no-cache
 ```
 
+## Deployment
+
+The app is deployable as a standard ASGI service. It must listen on the port provided by the host.
+
+Railway uses `railway.json`:
+
+```json
+{
+  "deploy": {
+    "startCommand": "python -m uvicorn app:app --host 0.0.0.0 --port ${PORT}"
+  }
+}
+```
+
+For persistent runs/cache on any host, mount a persistent directory and set:
+
+```bash
+COIL_STORAGE_DIR=/path/to/persistent/storage
+```
+
 ## Environment
 
 Create a local virtual environment:

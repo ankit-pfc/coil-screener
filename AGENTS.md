@@ -19,6 +19,7 @@ The current implementation has two layers:
 - Each persisted run stores `metadata.json` and `results.csv`.
 - Runtime storage is platform-neutral and configured with `COIL_STORAGE_DIR`, `COIL_RUNS_DIR`, and `COIL_CACHE_DIR`.
 - Monthly OHLCV data uses a disk-backed CSV cache under `COIL_CACHE_DIR/monthly`.
+- Railway deployment uses `railway.json` only for the process start command; keep app storage/provider logic platform-neutral.
 
 ## Product Direction
 
