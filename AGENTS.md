@@ -15,7 +15,8 @@ The current implementation has two layers:
 - Market data currently comes from `yfinance`.
 - Scoring criteria now flow through `ScreenConfig` in `screen_monthly.py`.
 - The UI exposes ticker/universe inputs, saved CSV runs, ranked results, chart inspection, feature readout, and a first set of scoring controls.
-- The app still needs persisted run metadata so each output can be tied to its exact config.
+- Live API/UI screens persist local run artifacts under ignored `runs/<run_id>/` folders.
+- Each persisted run stores `metadata.json` and `results.csv`.
 
 ## Product Direction
 
@@ -39,11 +40,10 @@ Build toward a reliable app where a pro user can:
 ## Near-Term Backlog
 
 1. Add a cached market-data layer so repeated runs are less dependent on live downloads.
-2. Persist run metadata: timestamp, universe, tickers, config, failures, and code version.
-3. Add per-ticker error reporting.
-4. Add smoke tests for CLI, feature computation, and API serialization.
-5. Add saved config presets and compare-runs behavior.
-6. Decide whether benchmark CSVs should remain committed or move to ignored/generated data.
+2. Add stronger per-ticker error details from the market-data fetch layer.
+3. Add smoke tests for CLI, feature computation, API serialization, and run persistence.
+4. Add saved config presets and compare-runs behavior.
+5. Decide whether benchmark CSVs should remain committed or move to ignored/generated data.
 
 ## Run Commands
 

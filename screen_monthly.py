@@ -104,6 +104,18 @@ class ScreenResult:
     trend_r2_mid: float
 
 
+@dataclass
+class ScreenFailure:
+    ticker: str
+    reason: str
+
+
+@dataclass
+class ScreenReport:
+    results: pd.DataFrame
+    failures: list[ScreenFailure]
+
+
 def default_config_dict() -> dict[str, float | int]:
     return asdict(ScreenConfig())
 
@@ -148,6 +160,16 @@ def build_config(overrides: Optional[dict[str, float | int]] = None) -> ScreenCo
         config_values[key] = max(0.0, float(config_values[key]))
 
     return ScreenConfig(**config_values)
+
+
+def required_history_months(config: ScreenConfig) -> int:
+    return max(
+        config.min_history_months,
+        config.long_range_months,
+        config.mid_range_months,
+        config.recent_range_months,
+        config.support_low_months,
+    )
 
 
 def clamp01(value: float) -> float:
@@ -270,13 +292,7 @@ def compute_features(
     monthly = monthly.copy()
     monthly = monthly.sort_index()
 
-    required_months = max(
-        config.min_history_months,
-        config.long_range_months,
-        config.mid_range_months,
-        config.recent_range_months,
-        config.support_low_months,
-    )
+    required_months = required_history_months(config)
     if len(monthly) < required_months:
         return None
 
@@ -442,25 +458,46 @@ def compute_features(
     )
 
 
-def run_screen(tickers: Iterable[str], config: Optional[ScreenConfig] = None) -> pd.DataFrame:
+def run_screen_report(
+    tickers: Iterable[str],
+    config: Optional[ScreenConfig] = None,
+) -> ScreenReport:
     config = config or ScreenConfig()
     results: List[ScreenResult] = []
+    failures: list[ScreenFailure] = []
     ticker_list = list(tickers)
     histories = fetch_monthly_histories(ticker_list)
+    required_months = required_history_months(config)
 
     for ticker in ticker_list:
         monthly = histories.get(ticker)
         if monthly is None:
+            failures.append(ScreenFailure(ticker=ticker, reason="no_monthly_history"))
+            continue
+        if len(monthly) < required_months:
+            failures.append(
+                ScreenFailure(
+                    ticker=ticker,
+                    reason=f"insufficient_history:{len(monthly)}/{required_months}_months",
+                )
+            )
             continue
         result = compute_features(ticker, monthly, config=config)
         if result is not None:
             results.append(result)
+        else:
+            failures.append(ScreenFailure(ticker=ticker, reason="feature_computation_filtered"))
 
     if not results:
-        return pd.DataFrame()
+        return ScreenReport(results=pd.DataFrame(), failures=failures)
 
     df = pd.DataFrame([r.__dict__ for r in results])
-    return df.sort_values(["score_total", "score_long_coil"], ascending=False).reset_index(drop=True)
+    df = df.sort_values(["score_total", "score_long_coil"], ascending=False).reset_index(drop=True)
+    return ScreenReport(results=df, failures=failures)
+
+
+def run_screen(tickers: Iterable[str], config: Optional[ScreenConfig] = None) -> pd.DataFrame:
+    return run_screen_report(tickers, config=config).results
 
 
 def load_sp500_tickers() -> List[str]:

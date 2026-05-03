@@ -84,6 +84,20 @@ CLI override example:
 
 `python screen_monthly.py AER AVT CAT --config-json '{"weight_long_coil": 0.7, "anti_trend_penalty_weight": 0.5}'`
 
+## Persisted Runs
+
+Live API/UI screens are saved under `runs/<run_id>/`.
+
+Each run writes:
+
+- `metadata.json`: timestamp, request, resolved tickers, config, git commit, counts, failures
+- `results.csv`: ranked result rows for that exact run
+
+The `runs/` directory is ignored by Git because it is runtime output. Use:
+
+- `GET /api/runs` to list persisted live runs
+- `GET /api/runs/{run_id}` to load metadata and results
+
 ## Environment
 
 Create a local virtual environment:

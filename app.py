@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -16,11 +20,12 @@ from screen_monthly import (
     compute_features,
     default_config_dict,
     fetch_monthly_history,
-    run_screen,
+    run_screen_report,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_ROOT / "static"
+RUNS_DIR = PROJECT_ROOT / "runs"
 
 app = FastAPI(title="Coil Screening")
 
@@ -53,6 +58,89 @@ def serialize_frame(df: pd.DataFrame) -> list[dict[str, Any]]:
     return records
 
 
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def current_git_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def create_run_id() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{stamp}-{uuid4().hex[:8]}"
+
+
+def run_dir(run_id: str) -> Path:
+    return RUNS_DIR / run_id
+
+
+def metadata_path(run_id: str) -> Path:
+    return run_dir(run_id) / "metadata.json"
+
+
+def results_path(run_id: str) -> Path:
+    return run_dir(run_id) / "results.csv"
+
+
+def validate_run_id(run_id: str) -> str:
+    if "/" in run_id or "\\" in run_id or run_id.startswith("."):
+        raise HTTPException(status_code=400, detail="Invalid run id.")
+    return run_id
+
+
+def write_run_artifacts(run_id: str, metadata: dict[str, Any], df: pd.DataFrame) -> None:
+    path = run_dir(run_id)
+    path.mkdir(parents=True, exist_ok=True)
+    df.to_csv(results_path(run_id), index=False)
+    metadata_path(run_id).write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+
+def read_run_metadata(run_id: str) -> dict[str, Any]:
+    validate_run_id(run_id)
+    path = metadata_path(run_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def list_persisted_runs() -> list[dict[str, Any]]:
+    if not RUNS_DIR.exists():
+        return []
+
+    runs: list[dict[str, Any]] = []
+    for path in sorted(RUNS_DIR.iterdir(), key=lambda item: item.name, reverse=True):
+        meta = path / "metadata.json"
+        if not path.is_dir() or not meta.exists():
+            continue
+        try:
+            data = json.loads(meta.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        runs.append(
+            {
+                "id": data.get("run_id", path.name),
+                "created_at": data.get("created_at"),
+                "result_count": data.get("result_count", 0),
+                "failure_count": data.get("failure_count", 0),
+                "status": data.get("status", "unknown"),
+                "source": "persisted_run",
+                "name": f"{data.get('created_at', path.name)} · {data.get('result_count', 0)} rows",
+            }
+        )
+    return runs
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -82,6 +170,26 @@ def saved_runs() -> dict[str, list[dict[str, Any]]]:
     }
 
 
+@app.get("/api/runs")
+def runs() -> dict[str, list[dict[str, Any]]]:
+    return {"runs": list_persisted_runs()}
+
+
+@app.get("/api/runs/{run_id}")
+def run_detail(run_id: str) -> dict[str, Any]:
+    metadata = read_run_metadata(run_id)
+    result_file = results_path(run_id)
+    try:
+        results = serialize_frame(pd.read_csv(result_file)) if result_file.exists() else []
+    except pd.errors.EmptyDataError:
+        results = []
+    return {
+        "metadata": metadata,
+        "count": len(results),
+        "results": results,
+    }
+
+
 @app.get("/api/saved-runs/{filename}")
 def saved_run(filename: str) -> dict[str, Any]:
     if "/" in filename or "\\" in filename:
@@ -101,17 +209,45 @@ def saved_run(filename: str) -> dict[str, Any]:
 
 @app.post("/api/screen")
 def screen(request: ScreenRequest) -> dict[str, Any]:
+    run_id = create_run_id()
+    created_at = utc_now()
     config = build_config(request.config)
+    config_dict = default_config_dict() | config.__dict__
     tickers = build_ticker_list(
         explicit_tickers=request.tickers,
         universe=request.universe,
         limit=request.limit,
     )
-    df = run_screen(tickers, config=config)
+    report = run_screen_report(tickers, config=config)
+    df = report.results
+    failures = [failure.__dict__ for failure in report.failures]
+    completed_at = utc_now()
+    metadata = {
+        "run_id": run_id,
+        "created_at": created_at,
+        "completed_at": completed_at,
+        "status": "completed",
+        "git_commit": current_git_commit(),
+        "request": {
+            "explicit_tickers": request.tickers,
+            "universe": request.universe,
+            "limit": request.limit,
+            "config": request.config,
+        },
+        "resolved_tickers": tickers,
+        "config": config_dict,
+        "result_count": len(df),
+        "failure_count": len(failures),
+        "failures": failures,
+        "results_file": str(results_path(run_id).relative_to(PROJECT_ROOT)),
+    }
+    write_run_artifacts(run_id, metadata, df)
     return {
+        "run": metadata,
         "count": len(df),
         "tickers": tickers,
-        "config": default_config_dict() | config.__dict__,
+        "failures": failures,
+        "config": config_dict,
         "results": serialize_frame(df),
     }
 

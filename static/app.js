@@ -329,12 +329,25 @@ function closeChartOverlay() {
 }
 
 async function loadSavedRuns() {
-  const payload = await fetchJson("/api/saved-runs");
+  const [savedPayload, persistedPayload] = await Promise.all([
+    fetchJson("/api/saved-runs"),
+    fetchJson("/api/runs")
+  ]);
   savedRunsSelect.innerHTML = "";
-  payload.runs.forEach((run) => {
+
+  (persistedPayload.runs || []).forEach((run) => {
+    const option = document.createElement("option");
+    option.value = run.id;
+    option.dataset.source = "persisted_run";
+    option.textContent = `Run ${run.id} · ${run.result_count} rows · ${run.failure_count} failed`;
+    savedRunsSelect.appendChild(option);
+  });
+
+  (savedPayload.runs || []).forEach((run) => {
     const option = document.createElement("option");
     option.value = run.name;
-    option.textContent = run.name;
+    option.dataset.source = "csv";
+    option.textContent = `CSV · ${run.name}`;
     savedRunsSelect.appendChild(option);
   });
 }
@@ -345,8 +358,22 @@ async function loadSavedRun(name) {
   }
 
   setStatus(`Loading ${name}...`);
+  const selectedOption = savedRunsSelect.selectedOptions[0];
+  const source = selectedOption?.dataset.source || "csv";
+
+  if (source === "persisted_run") {
+    const payload = await fetchJson(`/api/runs/${encodeURIComponent(name)}`);
+    const metadata = payload.metadata || {};
+    if (metadata.config) {
+      setConfigControls(metadata.config);
+    }
+    renderResults(payload.results, `Saved Run · ${name}`);
+    setStatus(`Loaded run ${name}: ${payload.count} rows, ${metadata.failure_count || 0} failures.`);
+    return;
+  }
+
   const payload = await fetchJson(`/api/saved-runs/${encodeURIComponent(name)}`);
-  renderResults(payload.results, `Saved Run · ${name}`);
+  renderResults(payload.results, `Saved CSV · ${name}`);
   setStatus(`Loaded ${payload.count} saved rows from ${name}.`);
 }
 
@@ -380,7 +407,11 @@ async function runScreen() {
     });
 
     renderResults(payload.results, "Live Screen Results");
-    setStatus(`Live screen finished with ${payload.count} ranked rows using visible scoring controls.`);
+    const runId = payload.run?.run_id || "unsaved";
+    const failureCount = payload.run?.failure_count || 0;
+    setStatus(`Run ${runId} saved with ${payload.count} ranked rows and ${failureCount} failures.`);
+    await loadSavedRuns();
+    savedRunsSelect.value = runId;
   } catch (error) {
     console.error(error);
     setStatus("Live screen failed.");
