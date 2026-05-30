@@ -10,3 +10,11 @@ __pycache__/
 .ruff_cache/
 
 *.log
+
+# web/ (Bun + Vite frontend)
+web/node_modules/
+web/dist/
+web/dist-ssr/
+web/.env
+web/.env.*.local
+web/src/routeTree.gen.ts
