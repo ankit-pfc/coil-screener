@@ -21,6 +21,13 @@ from screen_monthly import (
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_ROOT / "static"
 
+# The frontend auto-loads runs[0] from /api/saved-runs as the default view. On a
+# fresh deploy (e.g. Railway) every file gets the same checkout mtime, so an
+# mtime sort is non-deterministic and may surface a large non-curated run whose
+# tickers aren't in seed_cache. Pin the curated demo run first so the demo always
+# boots into the seeded coil universe; everything else stays mtime-sorted below.
+DEMO_DEFAULT_RUN = "demo_curated_coils_results.csv"
+
 app = FastAPI(title="Coil Screening")
 
 
@@ -63,7 +70,12 @@ def default_tickers() -> dict[str, list[str]]:
 
 @app.get("/api/saved-runs")
 def saved_runs() -> dict[str, list[dict[str, Any]]]:
-    files = sorted(PROJECT_ROOT.glob("*.csv"), key=lambda path: path.stat().st_mtime, reverse=True)
+    # Curated demo run first (deterministic default), then the rest newest-first.
+    files = sorted(
+        PROJECT_ROOT.glob("*.csv"),
+        key=lambda path: (path.name == DEMO_DEFAULT_RUN, path.stat().st_mtime),
+        reverse=True,
+    )
     return {
         "runs": [
             {

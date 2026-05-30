@@ -66,7 +66,7 @@ def test_default_tickers(client):
     assert all(isinstance(t, str) for t in body["tickers"])
 
 
-def test_saved_runs_lists_csvs_newest_first(client):
+def test_saved_runs_lists_csvs_demo_first(client):
     resp = client.get("/api/saved-runs")
     assert resp.status_code == 200
     runs = resp.json()["runs"]
@@ -77,8 +77,31 @@ def test_saved_runs_lists_csvs_newest_first(client):
     assert all(n.endswith(".csv") for n in names)
     assert all(isinstance(r["size_bytes"], int) for r in runs)
     assert "demo_curated_coils_results.csv" in names
-    # newest-first: the curated demo CSV (most recently written) is first
+    # the curated demo run is the deterministic default (frontend loads runs[0])
     assert names[0] == "demo_curated_coils_results.csv"
+
+
+def test_saved_runs_demo_pinned_above_newer_csv(monkeypatch, tmp_path):
+    """The curated run stays first even when another CSV has a newer mtime —
+    guards the Railway cold-start case where checkout flattens all mtimes."""
+    import os
+    import time
+
+    root = tmp_path / "runs"
+    root.mkdir()
+    demo = root / "demo_curated_coils_results.csv"
+    other = root / "sp500_plus_amrut_results.csv"
+    demo.write_text("ticker\nMSCI\n", encoding="utf-8")
+    other.write_text("ticker\nAAPL\n", encoding="utf-8")
+    # Make the non-demo CSV strictly newer than the demo run.
+    now = time.time()
+    os.utime(demo, (now - 100, now - 100))
+    os.utime(other, (now, now))
+    monkeypatch.setattr(app_module, "PROJECT_ROOT", root)
+
+    runs = app_module.saved_runs()["runs"]
+    assert runs[0]["name"] == "demo_curated_coils_results.csv"
+    assert runs[1]["name"] == "sp500_plus_amrut_results.csv"
 
 
 # --------------------------------------------------------------------------- #
