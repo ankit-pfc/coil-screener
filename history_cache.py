@@ -5,6 +5,13 @@ rate-limit flaky. This module caches the *full* set of monthly bars plus the
 computed features as JSON under ``cache/<TICKER>.json`` so requests are served
 cache-first and only hit yfinance on a cache miss.
 
+Reads fall back to a tracked ``seed_cache/<TICKER>.json`` when the writable
+``cache/`` has no entry. ``cache/`` is gitignored and ephemeral on hosts like
+Railway, so without the seed every cold start would re-hit live yfinance; the
+seed makes the curated demo universe instant and offline-safe. Writes still go
+to ``cache/`` (the seed is read-only), so live tickers outside the demo set are
+fetched and cached normally.
+
 The cache stores the complete bar history; per-request ``max_bars`` trimming
 happens at response-build time, so the API response shape stays byte-identical
 to the uncached path regardless of how many bars are requested.
@@ -19,6 +26,8 @@ import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CACHE_DIR = PROJECT_ROOT / "cache"
+# Tracked, read-only fallback shipped in the repo (see module docstring).
+SEED_DIR = PROJECT_ROOT / "seed_cache"
 
 
 def _clean(value: Any) -> Any:
@@ -53,9 +62,7 @@ def _bars_from_frame(monthly: pd.DataFrame) -> list[dict[str, Any]]:
     return bars
 
 
-def read_cache(symbol: str) -> Optional[dict[str, Any]]:
-    """Return the cached payload for ``symbol`` or ``None`` on miss/corruption."""
-    path = cache_path(symbol)
+def _read_payload(path: Path) -> Optional[dict[str, Any]]:
     if not path.exists():
         return None
     try:
@@ -66,6 +73,14 @@ def read_cache(symbol: str) -> Optional[dict[str, Any]]:
     if not isinstance(payload, dict) or "bars" not in payload:
         return None
     return payload
+
+
+def read_cache(symbol: str) -> Optional[dict[str, Any]]:
+    """Cached payload for ``symbol``: writable ``cache/`` first, then the tracked
+    ``seed_cache/`` fallback. ``None`` on miss/corruption in both."""
+    return _read_payload(cache_path(symbol)) or _read_payload(
+        SEED_DIR / f"{symbol}.json"
+    )
 
 
 def write_cache(symbol: str, bars: list[dict[str, Any]], features: Optional[dict[str, Any]]) -> dict[str, Any]:

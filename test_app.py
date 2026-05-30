@@ -192,6 +192,42 @@ def test_history_404_when_no_data(client, monkeypatch):
     assert resp.status_code == 404
 
 
+def test_seed_cache_served_when_writable_cache_empty(monkeypatch, tmp_path):
+    """With an empty writable cache, read_cache falls back to the tracked seed."""
+    seed_dir = tmp_path / "seed_cache"
+    seed_dir.mkdir()
+    payload = {"ticker": "SEEDED", "bars": [{"date": "2024-01-01", "close": 1.5}], "features": None}
+    (seed_dir / "SEEDED.json").write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(history_cache, "SEED_DIR", seed_dir)
+    # tmp_cache autouse points CACHE_DIR at an empty (nonexistent) tmp dir.
+    assert history_cache.read_cache("SEEDED") == payload
+
+
+def test_writable_cache_takes_precedence_over_seed(monkeypatch, tmp_path, tmp_cache):
+    """A fresh write in cache/ shadows a stale seed of the same ticker."""
+    tmp_cache.mkdir(parents=True, exist_ok=True)
+    seed_dir = tmp_path / "seed_cache"
+    seed_dir.mkdir()
+    (seed_dir / "DUP.json").write_text(
+        json.dumps({"ticker": "DUP", "bars": [{"date": "2000-01-01", "close": 1.0}], "features": None}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(history_cache, "SEED_DIR", seed_dir)
+    fresh = history_cache.write_cache("DUP", [{"date": "2024-06-01", "close": 99.0}], None)
+    assert history_cache.read_cache("DUP") == fresh
+    assert history_cache.read_cache("DUP")["bars"][0]["close"] == 99.0
+
+
+def test_bundled_seed_covers_demo_universe():
+    """The 11 curated demo names ship a valid, non-empty seed payload."""
+    demo = ["MSCI", "UNP", "SPG", "VTR", "NSC", "REG", "NUE", "CSX", "BG", "FCX", "LH"]
+    for sym in demo:
+        payload = history_cache._read_payload(history_cache.SEED_DIR / f"{sym}.json")
+        assert payload is not None, f"missing seed for {sym}"
+        assert payload["ticker"] == sym
+        assert len(payload["bars"]) > 0
+
+
 # --------------------------------------------------------------------------- #
 # /api/screen contract (run_screen monkeypatched -> no network)
 # --------------------------------------------------------------------------- #
