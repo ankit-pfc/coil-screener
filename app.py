@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from history_cache import get_history_payload
 from screen_monthly import (
     DEFAULT_TICKERS,
     build_ticker_list,
@@ -109,30 +110,17 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
 @app.get("/api/history/{ticker}")
 def history(ticker: str, max_bars: int = 180) -> dict[str, Any]:
     symbol = ticker.strip().upper()
-    monthly = fetch_monthly_history(symbol)
-    if monthly is None or monthly.empty:
+    payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
+    if payload is None:
         raise HTTPException(status_code=404, detail="No monthly history found.")
 
-    features = compute_features(symbol, monthly)
-    trimmed = monthly.tail(max_bars).copy()
-
-    bars = []
-    for idx, row in trimmed.iterrows():
-        bars.append(
-            {
-                "date": idx.strftime("%Y-%m-%d"),
-                "open": clean_value(row["Open"]),
-                "high": clean_value(row["High"]),
-                "low": clean_value(row["Low"]),
-                "close": clean_value(row["Close"]),
-                "volume": clean_value(row["Volume"]) if "Volume" in row else None,
-            }
-        )
+    bars = payload["bars"]
+    trimmed = bars[-max_bars:] if max_bars and max_bars < len(bars) else bars
 
     return {
         "ticker": symbol,
-        "bars": bars,
-        "features": features.__dict__ if features else None,
+        "bars": trimmed,
+        "features": payload["features"],
     }
 
 

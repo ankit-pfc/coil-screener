@@ -9,6 +9,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# History disk cache (regenerated on demand from yfinance)
+cache/
+
 *.log
 
 # web/ (Bun + Vite frontend)
