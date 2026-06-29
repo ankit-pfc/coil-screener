@@ -5,6 +5,7 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -22,7 +23,9 @@ def _model_parts(model_id: str) -> tuple[str, str]:
         raise VisionInferenceError(
             "ROBOFLOW_MODEL_ID must look like 'project-slug/version' for REST inference."
         )
-    return "/".join(parts[:-1]), parts[-1]
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return parts[0], "/".join(parts[1:])
 
 
 class RoboflowHostedClient:
@@ -63,14 +66,13 @@ class RoboflowHostedClient:
         with image_path.open("rb") as handle:
             encoded = base64.b64encode(handle.read()).decode("ascii")
         response = requests.post(
-            f"{self.api_url}/{dataset_id}/{version_id}",
+            f"{self.api_url}/{quote(dataset_id, safe='')}/{quote(version_id, safe='')}",
             params={
                 "api_key": self.api_key,
                 "confidence": self.confidence,
-                "image_type": "base64",
                 "format": "json",
             },
-            json={"image": encoded},
+            data=encoded,
             timeout=120,
         )
         if not response.ok:

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 from vision.capture import CaptureConfig, ChartCapture
+from vision.inference import _model_parts
 from vision.mapping import build_trendline, map_detections_to_chart_points, map_detections_to_highs
 from vision.run import VisionRunConfig, run_vision_pipeline
 from vision.storage import VisionRunStore
@@ -15,6 +16,14 @@ from vision.trendlines import suggest_resistance_trendlines
 
 def client() -> TestClient:
     return TestClient(app_module.app)
+
+
+def test_model_parts_supports_workspace_qualified_model_ids():
+    assert _model_parts("coiling-view/1") == ("coiling-view", "1")
+    assert _model_parts("ankits-workspace-kyy0z/coiling-view/1") == (
+        "ankits-workspace-kyy0z",
+        "coiling-view/1",
+    )
 
 
 def test_map_detections_to_highs_snaps_x_and_interpolates_price():
