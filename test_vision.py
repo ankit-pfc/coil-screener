@@ -10,6 +10,12 @@ from vision.capture import CaptureConfig, ChartCapture
 from vision.inference import _model_parts
 from vision.mapping import build_trendline, map_detections_to_chart_points, map_detections_to_highs
 from vision.run import VisionRunConfig, run_vision_pipeline
+from vision.seed_dataset import (
+    DatasetSeedConfig,
+    RoboflowUploadConfig,
+    dataset_slug,
+    run_dataset_seed,
+)
 from vision.storage import VisionRunStore
 from vision.trendlines import suggest_resistance_trendlines
 
@@ -24,6 +30,11 @@ def test_model_parts_supports_workspace_qualified_model_ids():
         "ankits-workspace-kyy0z",
         "coiling-view/1",
     )
+
+
+def test_dataset_slug_accepts_workspace_qualified_project_ids():
+    assert dataset_slug("coiling-view") == "coiling-view"
+    assert dataset_slug("ankits-workspace-kyy0z/coiling-view") == "coiling-view"
 
 
 def test_map_detections_to_highs_snaps_x_and_interpolates_price():
@@ -230,6 +241,54 @@ def test_run_vision_pipeline_writes_mapped_artifacts(tmp_path):
     assert prediction["suggestions"]["resistance_trendlines"]
     assert (store.run_dir("vision_test") / prediction["mapped_path"]).exists()
     assert store.manifest_path("vision_test").exists()
+
+
+def test_run_dataset_seed_captures_and_uploads_chart_images(tmp_path):
+    (tmp_path / "screened.csv").write_text("ticker\nmsci\n", encoding="utf-8")
+    capture_state = {
+        "chart_meta": {
+            "ready": True,
+            "ticker": "MSCI",
+            "plot_area": {"left": 0, "top": 0, "width": 100, "height": 100},
+        }
+    }
+    uploads: list[tuple[Path, str, RoboflowUploadConfig]] = []
+
+    def fake_capture(config: CaptureConfig, image_path: Path) -> ChartCapture:
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"fake png")
+        return ChartCapture(config.ticker, "http://capture", image_path, capture_state)
+
+    def fake_upload(
+        image_path: Path,
+        filename: str,
+        upload_config: RoboflowUploadConfig,
+    ) -> dict[str, Any]:
+        assert image_path.exists()
+        assert filename == "MSCI_3M_10Y_candles_dataset_test.png"
+        assert upload_config.project_id == "coiling-view"
+        uploads.append((image_path, filename, upload_config))
+        return {"id": "uploaded-image-id", "success": True}
+
+    manifest = run_dataset_seed(
+        DatasetSeedConfig(
+            project_root=tmp_path,
+            saved_run="screened.csv",
+            run_id="dataset_test",
+            upload=True,
+            roboflow=RoboflowUploadConfig(project_id="coiling-view", batch="seed-test"),
+        ),
+        capture_fn=fake_capture,
+        upload_fn=fake_upload,
+    )
+
+    assert manifest["status"] == "completed"
+    assert manifest["summary"] == {"requested": 1, "captured": 1, "uploaded": 1, "failed": 0}
+    assert uploads
+    assert manifest["captures"][0]["status"] == "uploaded"
+    assert manifest["captures"][0]["roboflow"]["id"] == "uploaded-image-id"
+    assert (tmp_path / "vision_dataset_uploads" / "dataset_test" / "manifest.json").exists()
+    assert "api_key" not in str(manifest).lower()
 
 
 def _write_prediction(

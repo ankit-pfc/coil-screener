@@ -14,6 +14,7 @@ cache/
 
 # Vision pipeline outputs (captured charts, raw detections, predictions)
 vision_runs/
+vision_dataset_uploads/
 
 *.log
 

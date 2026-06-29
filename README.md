@@ -170,6 +170,10 @@ Run a single ticker while the frontend dev server is available:
 
 `python -m vision.run --base-url http://127.0.0.1:5173 --ticker AAPL`
 
+Seed Roboflow with chart captures from an existing screened stock list:
+
+`python -m vision.seed_dataset --base-url http://127.0.0.1:5173 --saved-run demo_curated_coils_results.csv --project-id coiling-view --upload`
+
 Artifacts are written under `vision_runs/<run_id>/`:
 
 - `images/` chart captures
@@ -178,3 +182,8 @@ Artifacts are written under `vision_runs/<run_id>/`:
 - `debug/` annotated captures
 - `predictions/` API-facing prediction JSON
 - `manifest.json` run-level artifact index
+
+Dataset seed artifacts are written under `vision_dataset_uploads/<run_id>/`.
+Those captures are the source images for Roboflow annotation/training; after a
+Roboflow version is trained, set `ROBOFLOW_MODEL_ID` to that version and run the
+vision pipeline again.
