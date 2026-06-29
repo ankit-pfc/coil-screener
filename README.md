@@ -148,3 +148,33 @@ Run the review UI:
 `source .venv/bin/activate`
 
 `python -m uvicorn app:app --host 127.0.0.1 --port 8010`
+
+## Vision Tagging
+
+The vision pipeline captures the React chart in frontend capture mode, sends the
+image to Roboflow hosted inference, maps detections back to chart `{idx, date,
+price}` anchors, and writes reviewable suggestion artifacts to disk. Human
+review remains the source of truth.
+
+Required environment variables:
+
+`ROBOFLOW_API_KEY`
+
+`ROBOFLOW_MODEL_ID` such as `your-project/1`
+
+Install the browser once:
+
+`python -m playwright install chromium`
+
+Run a single ticker while the frontend dev server is available:
+
+`python -m vision.run --base-url http://127.0.0.1:5173 --ticker AAPL`
+
+Artifacts are written under `vision_runs/<run_id>/`:
+
+- `images/` chart captures
+- `raw/` Roboflow responses
+- `mapped/` AI point and trendline suggestions
+- `debug/` annotated captures
+- `predictions/` API-facing prediction JSON
+- `manifest.json` run-level artifact index

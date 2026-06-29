@@ -12,6 +12,9 @@ __pycache__/
 # History disk cache (regenerated on demand from yfinance)
 cache/
 
+# Vision pipeline outputs (captured charts, raw detections, predictions)
+vision_runs/
+
 *.log
 
 # web/ (Bun + Vite frontend)

@@ -17,9 +17,12 @@ from screen_monthly import (
     fetch_monthly_history,
     run_screen,
 )
+from vision.run import VisionRunConfig, run_vision_pipeline
+from vision.storage import VisionRunStore
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_ROOT / "static"
+VISION_RUNS_DIR = PROJECT_ROOT / "vision_runs"
 
 # The frontend auto-loads runs[0] from /api/saved-runs as the default view. On a
 # fresh deploy (e.g. Railway) every file gets the same checkout mtime, so an
@@ -35,6 +38,31 @@ class ScreenRequest(BaseModel):
     tickers: list[str] = []
     universe: Literal["sp500"] | None = None
     limit: int | None = None
+
+
+class VisionRunRequest(BaseModel):
+    tickers: list[str] = []
+    saved_run: str | None = None
+    interval: Literal["1M", "3M", "6M", "1Y"] = "3M"
+    timeframe: Literal["1Y", "2Y", "5Y", "10Y", "All"] = "10Y"
+    chart_type: Literal["candles", "bars", "line", "area"] = "candles"
+    base_url: str = "http://127.0.0.1:5173"
+    limit: int | None = None
+    run_id: str | None = None
+    headless: bool = True
+    max_highs: int = 3
+    confidence: float = 0.35
+    max_trendlines: int = 5
+    touch_tolerance_pct: float = 1.5
+
+
+class VisionReviewRequest(BaseModel):
+    run_id: str
+    ticker: str
+    interval: Literal["1M", "3M", "6M", "1Y"] = "3M"
+    decision: Literal["accepted", "rejected", "edited"]
+    accepted_highs: list[dict[str, Any]] = []
+    notes: str | None = None
 
 
 def clean_value(value: Any) -> Any:
@@ -134,6 +162,77 @@ def history(ticker: str, max_bars: int = 180) -> dict[str, Any]:
         "bars": trimmed,
         "features": payload["features"],
     }
+
+
+def vision_store() -> VisionRunStore:
+    return VisionRunStore(VISION_RUNS_DIR)
+
+
+@app.post("/api/vision/run")
+def vision_run(request: VisionRunRequest | None = None) -> dict[str, Any]:
+    req = request or VisionRunRequest()
+    try:
+        return run_vision_pipeline(
+            VisionRunConfig(
+                project_root=PROJECT_ROOT,
+                tickers=req.tickers,
+                saved_run=req.saved_run,
+                interval=req.interval,
+                timeframe=req.timeframe,
+                chart_type=req.chart_type,
+                base_url=req.base_url,
+                limit=req.limit,
+                run_id=req.run_id,
+                headless=req.headless,
+                max_highs=req.max_highs,
+                confidence=req.confidence,
+                max_trendlines=req.max_trendlines,
+                touch_tolerance_pct=req.touch_tolerance_pct,
+            ),
+            store=vision_store(),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/vision/runs")
+def vision_runs() -> dict[str, Any]:
+    return {"runs": vision_store().list_runs()}
+
+
+@app.get("/api/vision/runs/{run_id}")
+def vision_run_detail(run_id: str) -> dict[str, Any]:
+    try:
+        return vision_store().read_run(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Vision run not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/vision/predictions/{ticker}")
+def vision_prediction(
+    ticker: str,
+    interval: Literal["1M", "3M", "6M", "1Y"] = "3M",
+    run_id: str = "latest",
+) -> dict[str, Any]:
+    try:
+        return vision_store().read_prediction(ticker, interval, run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Vision prediction not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/vision/reviews")
+def vision_review(request: VisionReviewRequest) -> dict[str, Any]:
+    try:
+        review = vision_store().append_review(request.model_dump())
+        return {"review": review}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
