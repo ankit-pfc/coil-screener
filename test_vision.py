@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 from vision.capture import CaptureConfig, ChartCapture
-from vision.inference import _model_parts
+from vision.inference import RoboflowHostedClient, _model_parts
 from vision.mapping import build_trendline, map_detections_to_chart_points, map_detections_to_highs
 from vision.run import VisionRunConfig, run_vision_pipeline
 from vision.seed_dataset import (
@@ -35,6 +35,35 @@ def test_model_parts_supports_workspace_qualified_model_ids():
 def test_dataset_slug_accepts_workspace_qualified_project_ids():
     assert dataset_slug("coiling-view") == "coiling-view"
     assert dataset_slug("ankits-workspace-kyy0z/coiling-view") == "coiling-view"
+
+
+def test_roboflow_rest_inference_sends_base64_content_type(monkeypatch, tmp_path):
+    image_path = tmp_path / "chart.png"
+    image_path.write_bytes(b"fake image")
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        ok = True
+        status_code = 200
+        text = "{}"
+
+        def json(self) -> dict[str, Any]:
+            return {"predictions": []}
+
+    def fake_post(*args: Any, **kwargs: Any) -> FakeResponse:
+        calls.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("vision.inference.requests.post", fake_post)
+
+    client = RoboflowHostedClient(api_key="test-key", model_id="coiling-view/1")
+    assert client._infer_rest(image_path) == {"predictions": []}
+
+    assert calls
+    assert calls[0]["kwargs"]["headers"] == {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    assert calls[0]["kwargs"]["data"]
 
 
 def test_map_detections_to_highs_snaps_x_and_interpolates_price():

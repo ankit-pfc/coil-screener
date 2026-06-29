@@ -72,6 +72,7 @@ class RoboflowHostedClient:
                 "confidence": self.confidence,
                 "format": "json",
             },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=encoded,
             timeout=120,
         )
