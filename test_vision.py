@@ -9,12 +9,14 @@ import app as app_module
 from vision.capture import CaptureConfig, ChartCapture
 from vision.inference import RoboflowHostedClient, _model_parts
 from vision.mapping import build_trendline, map_detections_to_chart_points, map_detections_to_highs
+from vision.roboflow_status import build_status_report
 from vision.run import VisionRunConfig, run_vision_pipeline
 from vision.seed_dataset import (
     DatasetSeedConfig,
     RoboflowUploadConfig,
     dataset_slug,
     run_dataset_seed,
+    upload_image_to_roboflow,
 )
 from vision.storage import VisionRunStore
 from vision.trendlines import suggest_resistance_trendlines
@@ -64,6 +66,116 @@ def test_roboflow_rest_inference_sends_base64_content_type(monkeypatch, tmp_path
         "Content-Type": "application/x-www-form-urlencoded"
     }
     assert calls[0]["kwargs"]["data"]
+
+
+def test_roboflow_upload_sends_batch_and_tags_as_query_params(monkeypatch, tmp_path):
+    image_path = tmp_path / "chart.png"
+    image_path.write_bytes(b"fake image")
+    calls: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        status_code = 200
+        text = "{}"
+
+        def json(self) -> dict[str, Any]:
+            return {"success": True, "id": "image-id"}
+
+    def fake_post(*args: Any, **kwargs: Any) -> FakeResponse:
+        calls.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("vision.seed_dataset.requests.post", fake_post)
+
+    response = upload_image_to_roboflow(
+        image_path,
+        "chart.png",
+        RoboflowUploadConfig(
+            project_id="coiling-view",
+            api_key="test-key",
+            batch="coilingview-batch",
+            tags=("coilingview", "chart-capture"),
+        ),
+    )
+
+    assert response == {"success": True, "id": "image-id"}
+    assert calls[0]["kwargs"]["params"] == [
+        ("api_key", "test-key"),
+        ("batch", "coilingview-batch"),
+        ("tag", "coilingview"),
+        ("tag", "chart-capture"),
+    ]
+    assert calls[0]["kwargs"]["data"] == [("name", "chart.png"), ("split", "train")]
+
+
+def test_roboflow_status_report_flags_untrained_unannotated_project(monkeypatch):
+    def fake_get(api_key: str, path: str, endpoint: str) -> dict[str, Any]:
+        assert api_key == "test-key"
+        if path == "workspace/coiling-view":
+            return {
+                "status": 200,
+                "ok": True,
+                "data": {
+                    "project": {
+                        "id": "workspace/coiling-view",
+                        "name": "Coiling View",
+                        "type": "keypoint-detection",
+                        "images": 0,
+                        "unannotated": 11,
+                        "splits": {"train": 0, "valid": 0, "test": 0},
+                        "classes": {},
+                        "versions": 0,
+                    }
+                },
+            }
+        if path == "workspace/coiling-view/1":
+            return {"status": 404, "ok": False, "data": {"message": "not found"}}
+        if path == "workspace/coiling-view/batches":
+            return {
+                "status": 200,
+                "ok": True,
+                "data": {"batches": [{"id": "batch-id", "name": "Uploaded via API", "images": 11}]},
+            }
+        raise AssertionError(path)
+
+    def fake_post(
+        api_key: str,
+        path: str,
+        endpoint: str,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        assert body["query"] == "project:coiling-view"
+        return {
+            "status": 200,
+            "ok": True,
+            "data": {
+                "total": 11,
+                "results": [
+                    {
+                        "id": "image-id",
+                        "filename": "MSCI.png",
+                        "tags": ["chart-capture"],
+                        "projectData": {"coiling-view": {"split": "train", "inDatset": False}},
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr("vision.roboflow_status._get", fake_get)
+    monkeypatch.setattr("vision.roboflow_status._post", fake_post)
+
+    report = build_status_report(
+        api_key="test-key",
+        workspace="workspace",
+        project="coiling-view",
+        version="1",
+    )
+
+    assert report["project"]["unannotated"] == 11
+    assert report["project"]["versions"] == 0
+    assert report["version_status"] == 404
+    assert report["search_total"] == 11
+    assert "No trained Roboflow versions exist for this project." in report["blockers"]
+    assert "Uploaded images are still unannotated." in report["blockers"]
 
 
 def test_map_detections_to_highs_snaps_x_and_interpolates_price():

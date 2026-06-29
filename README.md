@@ -174,6 +174,10 @@ Seed Roboflow with chart captures from an existing screened stock list:
 
 `python -m vision.seed_dataset --base-url http://127.0.0.1:5173 --saved-run demo_curated_coils_results.csv --project-id coiling-view --upload`
 
+Check whether Roboflow has uploaded images, annotations, and a trained version:
+
+`ROBOFLOW_WORKSPACE=your-workspace python -m vision.roboflow_status --model-id coiling-view/1`
+
 Artifacts are written under `vision_runs/<run_id>/`:
 
 - `images/` chart captures

@@ -89,20 +89,22 @@ def upload_image_to_roboflow(
         f"{config.endpoint.rstrip('/')}/dataset/"
         f"{quote(dataset_slug(config.project_id), safe='')}/upload"
     )
+    query_params: list[tuple[str, str]] = [("api_key", api_key)]
+    if config.batch:
+        query_params.append(("batch", config.batch))
+    for tag in config.tags:
+        if tag.strip():
+            query_params.append(("tag", tag.strip()))
+
     form_fields: list[tuple[str, str]] = [
         ("name", filename),
         ("split", config.split),
     ]
-    if config.batch:
-        form_fields.append(("batch", config.batch))
-    for tag in config.tags:
-        if tag.strip():
-            form_fields.append(("tag", tag.strip()))
 
     with image_path.open("rb") as handle:
         response = requests.post(
             upload_url,
-            params={"api_key": api_key},
+            params=query_params,
             data=form_fields,
             files={"file": (filename, handle, "image/png")},
             timeout=config.timeout_s,
