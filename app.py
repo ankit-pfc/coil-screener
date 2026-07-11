@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from coil_analysis import analyze_coil
 from history_cache import get_history_payload
 from screen_monthly import (
     DEFAULT_TICKERS,
@@ -162,6 +163,24 @@ def history(ticker: str, max_bars: int = 180) -> dict[str, Any]:
         "bars": trimmed,
         "features": payload["features"],
     }
+
+
+@app.get("/api/coil/{ticker}")
+def coil(ticker: str, as_of: str | None = None) -> dict[str, Any]:
+    """Deterministic major-top / resistance-slope / coiling analysis.
+
+    ``as_of`` truncates the history first (YYYY-MM-DD, inclusive), which lets
+    the UI and validation scripts replay the pre-breakout state of a chart.
+    """
+    if as_of is not None and (len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-"):
+        raise HTTPException(status_code=400, detail="as_of must be YYYY-MM-DD.")
+
+    symbol = ticker.strip().upper()
+    payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="No monthly history found.")
+
+    return {"ticker": symbol, **analyze_coil(payload["bars"], as_of=as_of)}
 
 
 def vision_store() -> VisionRunStore:

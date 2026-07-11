@@ -58,6 +58,7 @@ We are intentionally starting with a lightweight setup so we can get the monthly
 ## Current Project Files
 
 - `screen_monthly.py`: first-pass monthly screener
+- `coil_analysis.py`: deterministic major-top / resistance-slope / coil grading
 - `first_pass_results.csv`: initial live output from the starter ticker list
 - `app.py`: FastAPI backend for the screener and chart endpoints
 - `static/`: plain HTML/CSS/JS review UI
@@ -148,6 +149,60 @@ Run the review UI:
 `source .venv/bin/activate`
 
 `python -m uvicorn app:app --host 127.0.0.1 --port 8010`
+
+## Deterministic Structure Analysis
+
+`coil_analysis.py` is the precision layer between the numeric screen and human
+review: it detects major tops on the monthly series, fits the resistance line
+through them, measures its slope, and grades the coil. It addresses the
+calibration gaps above (explicit shrinking-amplitude measure, explicit
+"compressing under a boundary" vs "near highs" distinction).
+
+What qualifies as a coil (the working definition):
+
+1. Structure: >= 2 major tops (high-prominence swing highs) on one straight
+   resistance line within tolerance.
+2. Lid slope: flat-to-gently-rising, normalized to %/yr of the line value at
+   the last bar. Bands: A < 2, B < 6, C < 12 (and gently falling to -3).
+3. Sealed: no monthly close escaped above the line before the recent bars.
+4. Wound: pullbacks below the lid shrink, or price is pressed at the lid
+   (>= 90% of the line).
+5. Loaded: last close >= 70% of the line, and the base is not a smooth
+   exponential trend (log-close R^2 gate rejects mega-cap uptrend envelopes).
+
+Output per ticker: `status` (`no_structure` / `basing` / `coiling` /
+`breaking_out` / `broken_out`), `grade` (A/B/C once every gate passes),
+`resistance.lid_grade` (slope band alone — how a chart gets hand-graded even
+mid-base), the anchor/touch points as `{idx, date, price}`, the support line,
+pullback depths, and human-readable notes. Anchors use the same shape as the
+vision pipeline's mapped highs, so the frontend trendline primitive can render
+either source.
+
+Run from the CLI (cache-first, like the API):
+
+`python coil_analysis.py KN UEC COF`
+
+`python coil_analysis.py --saved-run demo_curated_coils_results.csv`
+
+Replay a chart as it looked before its breakout (backtest/tuning mode):
+
+`python coil_analysis.py KN --as-of 2025-09-30`
+
+Or over HTTP: `GET /api/coil/{ticker}?as_of=YYYY-MM-DD`.
+
+Validation against Amrut's graded reference charts (replayed pre-breakout):
+
+| ticker | hand grade | as_of      | result                            |
+|--------|-----------|------------|-----------------------------------|
+| KN     | A         | 2025-09-30 | coiling A, lid +0.5%/yr, 3 touches |
+| UEC    | A         | 2024-06-30 | coiling A, lid +0.8%/yr           |
+| COF    | B         | 2024-06-30 | coiling B, lid +2.6%/yr           |
+| EAT    | B         | 2024-09-30 | coiling B, lid +2.5%/yr, 3 touches |
+| CF     | B         | 2026-02-28 | basing, lid_grade B (+4.3%/yr) — never pressed the lid, gapped out from depth |
+
+Controls: MSFT/AAPL (secular uptrends) never receive a grade. Thresholds live
+in `CoilConfig` (`coil_analysis.py`); tune only against flat, not-yet-broken
+coiling charts — breakouts are filtered upstream by the screener.
 
 ## Vision Tagging
 

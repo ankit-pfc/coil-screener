@@ -252,6 +252,69 @@ def test_bundled_seed_covers_demo_universe():
 
 
 # --------------------------------------------------------------------------- #
+# /api/coil/{ticker}: deterministic structure analysis over cached bars
+# --------------------------------------------------------------------------- #
+def _seed_coil_cache(tmp_cache, ticker: str, bars: list[dict]) -> None:
+    tmp_cache.mkdir(parents=True, exist_ok=True)
+    payload = {"ticker": ticker, "bars": bars, "features": None}
+    (tmp_cache / f"{ticker}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_coil_endpoint_analyzes_cached_bars(client, monkeypatch, tmp_cache):
+    from test_coil_analysis import make_coil_bars
+
+    _seed_coil_cache(tmp_cache, "COIL", make_coil_bars())
+
+    def boom(symbol: str):
+        raise AssertionError("live fetch must not be called on a cache hit")
+
+    monkeypatch.setattr(app_module, "fetch_monthly_history", boom)
+
+    resp = client.get("/api/coil/coil")  # lowercase input normalizes
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ticker"] == "COIL"
+    assert body["status"] == "coiling"
+    assert body["grade"] == "A"
+    assert body["resistance"]["touch_count"] == 3
+    assert body["resistance"]["from"].keys() == {"idx", "date", "price"}
+    assert len(body["major_highs"]) >= 2
+
+
+def test_coil_endpoint_as_of_replays_pre_breakout(client, tmp_cache):
+    from test_coil_analysis import make_coil_bars, month_dates
+
+    bars = make_coil_bars()
+    dates = month_dates(126)
+    for k in range(6):
+        bars.append(
+            {"date": dates[120 + k], "open": 110.0, "high": 110.5, "low": 108.0, "close": 110.0, "volume": 1e6}
+        )
+    _seed_coil_cache(tmp_cache, "REPLAY", bars)
+
+    full = client.get("/api/coil/REPLAY").json()
+    truncated = client.get("/api/coil/REPLAY", params={"as_of": dates[119]}).json()
+
+    assert full["status"] == "broken_out"
+    assert truncated["status"] == "coiling"
+    assert truncated["grade"] == "A"
+
+
+def test_coil_endpoint_rejects_bad_as_of(client, tmp_cache):
+    from test_coil_analysis import make_coil_bars
+
+    _seed_coil_cache(tmp_cache, "BADQ", make_coil_bars())
+    resp = client.get("/api/coil/BADQ", params={"as_of": "20250101"})
+    assert resp.status_code == 400
+
+
+def test_coil_endpoint_404_when_no_data(client, monkeypatch):
+    monkeypatch.setattr(app_module, "fetch_monthly_history", lambda s: None)
+    resp = client.get("/api/coil/NODATA")
+    assert resp.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
 # /api/screen contract (run_screen monkeypatched -> no network)
 # --------------------------------------------------------------------------- #
 def test_screen_contract(client, monkeypatch):
