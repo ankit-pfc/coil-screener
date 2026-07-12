@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from io import StringIO
-from typing import Iterable, List, Optional
+from typing import Any, Callable, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -280,7 +281,8 @@ def compute_features(ticker: str, monthly: pd.DataFrame) -> Optional[ScreenResul
     )
 
 
-def run_screen(tickers: Iterable[str]) -> pd.DataFrame:
+def run_legacy_numeric_screen(tickers: Iterable[str]) -> pd.DataFrame:
+    """Original numeric-only first pass, retained as a diagnostic utility."""
     results: List[ScreenResult] = []
     ticker_list = list(tickers)
     histories = fetch_monthly_histories(ticker_list)
@@ -298,6 +300,172 @@ def run_screen(tickers: Iterable[str]) -> pd.DataFrame:
 
     df = pd.DataFrame([r.__dict__ for r in results])
     return df.sort_values(["score_total", "score_long_coil"], ascending=False).reset_index(drop=True)
+
+
+LIFECYCLE_ORDER = {
+    "pre_breakout": 0,
+    "forming": 1,
+    "breaking_out": 2,
+    "post_breakout": 3,
+    "no_structure": 4,
+}
+GRADE_ORDER = {"A": 0, "B": 1, "C": 2}
+
+
+def _screen_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    lifecycle = str(row.get("lifecycle") or "no_structure")
+    grade_rank = GRADE_ORDER.get(row.get("grade"), 3)
+    score = float(row.get("coil_score") or 0.0)
+    # Only the actionable pre-breakout bucket is grade-first. Other lifecycle
+    # groups remain contiguous and are ordered by structural score.
+    if lifecycle == "pre_breakout":
+        return (LIFECYCLE_ORDER[lifecycle], grade_rank, -score, row["ticker"])
+    return (LIFECYCLE_ORDER.get(lifecycle, 99), -score, row["ticker"])
+
+
+def _lifecycle_row(
+    ticker: str, payload: dict[str, Any], analysis: dict[str, Any]
+) -> dict[str, Any]:
+    legacy = dict(payload.get("features") or {})
+    bars = payload.get("bars") or []
+    # Structural eligibility is intentionally broader than the old 120-month
+    # numeric feature gate. Keep the basic quote usable when diagnostics are
+    # absent so lifecycle-only rows still render correctly in API consumers.
+    if "last_close" not in legacy:
+        legacy["last_close"] = bars[-1].get("close") if bars else None
+    if "age_years" not in legacy:
+        legacy["age_years"] = round(len(bars) / 12.0, 4) if bars else None
+    # Keep a stable legacy-compatible JSON shape even when the numeric model
+    # cannot run. Those fields are diagnostics, so null is preferable to
+    # dropping an otherwise valid structural result.
+    for field_name in ScreenResult.__dataclass_fields__:
+        legacy.setdefault(field_name, None)
+    active_lid = analysis.get("active_lid") or {}
+    resistance = analysis.get("resistance") or {}
+    metrics = analysis.get("metrics") or {}
+    review = analysis.get("review") or {}
+    freshness = payload.get("freshness") or {}
+    row = {
+        **legacy,
+        "ticker": ticker,
+        "lifecycle": analysis.get("lifecycle", "no_structure"),
+        "status": analysis.get("status", "no_structure"),
+        "grade": analysis.get("grade"),
+        "lid_grade": active_lid.get("grade") or resistance.get("lid_grade"),
+        "coil_score": analysis.get("coil_score", 0.0),
+        "lid_slope_pct_per_year": active_lid.get("slope_pct_per_year"),
+        "proximity_pct": metrics.get("proximity_pct"),
+        "span_years": active_lid.get("span_years"),
+        "touches": active_lid.get("touch_count"),
+        # Alias retained for consumers that used the analysis object naming.
+        "touch_count": active_lid.get("touch_count"),
+        "reviewed": bool(review.get("reviewed")),
+        "review_status": review.get("decision"),
+        "review_id": review.get("review_id"),
+        "review_as_of": review.get("review_as_of"),
+        "review_algorithm_version": review.get("review_algorithm_version"),
+        "review_stale": bool(review.get("stale")),
+        "review_effective": review.get("effective", "algorithm"),
+        "data_date": freshness.get("last_bar_date") or analysis.get("as_of"),
+        "freshness": freshness.get("status", "unknown"),
+        "fetched_at": freshness.get("fetched_at"),
+        "data_source": freshness.get("source"),
+    }
+    return row
+
+
+def run_lifecycle_screen(
+    tickers: Iterable[str],
+    *,
+    fetch_monthly: Callable[[str], Optional[pd.DataFrame]] = fetch_monthly_history,
+    review_override_for: Optional[Callable[[str], Optional[dict[str, Any]]]] = None,
+    review_state_for: Optional[Callable[[str], Optional[dict[str, Any]]]] = None,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    """Structurally screen every ticker without a legacy-score gate.
+
+    Numeric first-pass features remain in each row for diagnostics and legacy
+    CSV consumers. Classification and ranking use the schema-v2 coil analysis.
+    ``review_state_for`` supplies the latest human decision so rows can carry
+    review status and staleness alongside the effective analysis.
+    """
+    from coil_analysis import ALGORITHM_VERSION, DEFAULT_CONFIG, analyze_coil
+    from history_cache import get_history_payload
+    from reviews import annotate_review
+
+    symbols = normalize_tickers(tickers)
+    results: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    for ticker in symbols:
+        try:
+            payload = get_history_payload(
+                ticker,
+                fetch_monthly,
+                compute_features,
+                force_refresh=force_refresh,
+            )
+            if payload is None:
+                failures.append(
+                    {"ticker": ticker, "error": "No usable monthly history found."}
+                )
+                continue
+            override = review_override_for(ticker) if review_override_for else None
+            analysis = analyze_coil(payload["bars"], review_override=override)
+            state = review_state_for(ticker) if review_state_for else None
+            annotate_review(analysis, state, algorithm_version=ALGORITHM_VERSION)
+            bar_count = analysis.get("bar_count")
+            if isinstance(bar_count, int) and bar_count < DEFAULT_CONFIG.min_bars:
+                failures.append(
+                    {
+                        "ticker": ticker,
+                        "error": (
+                            f"Insufficient monthly history: {bar_count} bars; "
+                            f"requires {DEFAULT_CONFIG.min_bars}."
+                        ),
+                    }
+                )
+                continue
+            results.append(_lifecycle_row(ticker, payload, analysis))
+        except Exception as exc:
+            # One provider/analysis failure must not discard the rest of a run.
+            failures.append({"ticker": ticker, "error": str(exc) or type(exc).__name__})
+
+    results.sort(key=_screen_sort_key)
+    bucket_counts = {name: 0 for name in LIFECYCLE_ORDER}
+    for result in results:
+        lifecycle = str(result.get("lifecycle") or "no_structure")
+        bucket_counts[lifecycle] = bucket_counts.get(lifecycle, 0) + 1
+    screened_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
+    return {
+        "results": results,
+        "bucket_counts": bucket_counts,
+        "failures": failures,
+        "algorithm_version": ALGORITHM_VERSION,
+        "screened_at": screened_at,
+    }
+
+
+def run_screen(
+    tickers: Iterable[str], *, force_refresh: bool = False
+) -> pd.DataFrame:
+    """Compatibility DataFrame wrapper over the lifecycle-aware screener.
+
+    Existing CLI/CSV callers still receive a DataFrame, now enriched with v2
+    structure. Envelope metadata is retained in ``DataFrame.attrs``.
+    """
+    from reviews import get_review_store
+
+    store = get_review_store()
+    run = run_lifecycle_screen(
+        tickers,
+        review_override_for=lambda ticker: store.get_override(ticker, "3M"),
+        force_refresh=force_refresh,
+    )
+    df = pd.DataFrame(run["results"])
+    df.attrs.update({key: value for key, value in run.items() if key != "results"})
+    return df
 
 
 def load_sp500_tickers() -> List[str]:
@@ -372,19 +540,21 @@ def main() -> None:
 
     columns = [
         "ticker",
+        "lifecycle",
+        "grade",
+        "lid_grade",
+        "coil_score",
+        "lid_slope_pct_per_year",
+        "touches",
+        "span_years",
+        "reviewed",
         "score_total",
         "score_long_coil",
-        "score_tight_resistance",
-        "score_ascending_compression",
         "age_years",
         "last_close",
-        "pos_in_10y_range",
-        "dist_to_10y_high_pct",
-        "range_ratio_24_120",
-        "low_36m_above_10y_low_pct",
     ]
 
-    printable = df[columns].copy()
+    printable = df.reindex(columns=columns).copy()
     pd.set_option("display.width", 160)
     pd.set_option("display.max_columns", None)
     print(printable.to_string(index=False, float_format=lambda x: f"{x:0.3f}"))

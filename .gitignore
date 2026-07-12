@@ -12,6 +12,10 @@ __pycache__/
 # History disk cache (regenerated on demand from yfinance)
 cache/
 
+# Vision pipeline outputs (captured charts, raw detections, predictions)
+vision_runs/
+vision_dataset_uploads/
+
 *.log
 
 # web/ (Bun + Vite frontend)
@@ -21,3 +25,6 @@ web/dist-ssr/
 web/.env
 web/.env.*.local
 web/src/routeTree.gen.ts
+
+# Local review store (SQLite; production uses DATABASE_URL/PostgreSQL)
+reviews.db
