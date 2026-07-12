@@ -13,6 +13,8 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 import history_cache
+import reviews as reviews_module
+from reviews import ReviewStore
 from screen_monthly import compute_features
 
 
@@ -27,6 +29,14 @@ def tmp_cache(tmp_path, monkeypatch):
     cache_dir = tmp_path / "cache"
     monkeypatch.setattr(history_cache, "CACHE_DIR", cache_dir)
     return cache_dir
+
+
+@pytest.fixture(autouse=True)
+def tmp_review_store(tmp_path, monkeypatch):
+    """Isolate the review store in a per-test SQLite file."""
+    store = ReviewStore(sqlite_path=tmp_path / "reviews.db")
+    monkeypatch.setattr(reviews_module, "_store", store)
+    return store
 
 
 def _synthetic_monthly(rows: int = 130) -> pd.DataFrame:
@@ -117,6 +127,28 @@ def test_saved_run_success(client):
     assert "ticker" in body["results"][0]
 
 
+def test_curated_saved_run_is_materially_enriched_with_v2_fields(client):
+    body = client.get("/api/saved-runs/demo_curated_coils_results.csv").json()
+    required = {
+        "lifecycle",
+        "grade",
+        "lid_grade",
+        "coil_score",
+        "lid_slope_pct_per_year",
+        "span_years",
+        "touches",
+        "reviewed",
+        "data_date",
+        "freshness",
+    }
+    assert required <= body["results"][0].keys()
+    assert {row["lifecycle"] for row in body["results"]} >= {
+        "pre_breakout",
+        "forming",
+        "post_breakout",
+    }
+
+
 def test_saved_run_missing_returns_404(client):
     resp = client.get("/api/saved-runs/does_not_exist.csv")
     assert resp.status_code == 404
@@ -161,7 +193,8 @@ def test_history_cache_miss_then_hit(client, monkeypatch, tmp_cache):
     assert r1.status_code == 200
     body1 = r1.json()
     assert body1["ticker"] == "TEST"
-    assert set(body1.keys()) == {"ticker", "bars", "features"}
+    assert set(body1.keys()) == {"ticker", "bars", "features", "freshness"}
+    assert body1["freshness"]["status"] == "fresh"
     assert len(body1["bars"]) > 0
     bar = body1["bars"][0]
     assert set(bar.keys()) == {"date", "open", "high", "low", "close", "volume"}
@@ -187,8 +220,17 @@ def test_history_max_bars_trims_response(client, monkeypatch):
     assert bars[-1]["date"] == "2020-10-01"
 
 
-def test_history_uses_cache_without_fetch(client, monkeypatch, tmp_cache):
-    """A pre-seeded cache file is served without any live fetch."""
+def test_history_returns_full_listing_history_by_default(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module, "fetch_monthly_history", lambda s: _synthetic_monthly(240)
+    )
+    resp = client.get("/api/history/FULL")
+    assert resp.status_code == 200
+    assert len(resp.json()["bars"]) == 240
+
+
+def test_history_legacy_cache_refresh_failure_is_explicit_fallback(client, monkeypatch, tmp_cache):
+    """Metadata-free writable entries are stale and only fallback after refresh."""
     tmp_cache.mkdir(parents=True, exist_ok=True)
     payload = {
         "ticker": "SEED",
@@ -200,13 +242,17 @@ def test_history_uses_cache_without_fetch(client, monkeypatch, tmp_cache):
     (tmp_cache / "SEED.json").write_text(json.dumps(payload), encoding="utf-8")
 
     def boom(symbol: str):
-        raise AssertionError("live fetch must not be called on a cache hit")
+        raise RuntimeError("provider offline")
 
     monkeypatch.setattr(app_module, "fetch_monthly_history", boom)
 
     resp = client.get("/api/history/SEED")
     assert resp.status_code == 200
-    assert resp.json() == payload
+    body = resp.json()
+    assert body["bars"] == payload["bars"]
+    assert body["freshness"]["status"] == "stale_fallback"
+    assert body["freshness"]["origin"] == "writable_cache"
+    assert body["freshness"]["refresh_error"] == "provider offline"
 
 
 def test_history_404_when_no_data(client, monkeypatch):
@@ -278,7 +324,24 @@ def test_coil_endpoint_analyzes_cached_bars(client, monkeypatch, tmp_cache):
     assert body["grade"] == "A"
     assert body["resistance"]["touch_count"] == 3
     assert body["resistance"]["from"].keys() == {"idx", "date", "price"}
-    assert len(body["major_highs"]) >= 2
+    # v2 fits against every meaningful touch in the regime: all three exact
+    # lid touches are structure points, not just the strict displayed majors.
+    assert len(body["major_highs"]) == 3
+    assert [high["date"] for high in body["major_highs"]] == [
+        "2011-09-01",
+        "2015-01-01",
+        "2018-05-01",
+    ]
+    assert body["schema_version"] == 2
+    assert body["lifecycle"] == "pre_breakout"
+    assert body["active_lid"]["grade"] == "A"
+    assert body["breakout"]["state"] == "sealed"
+    assert {p["role"] for p in body["points"]} <= {
+        "major_top",
+        "structural_retest",
+        "provisional_top",
+        "breakout_peak",
+    }
 
 
 def test_coil_endpoint_as_of_replays_pre_breakout(client, tmp_cache):
@@ -318,8 +381,17 @@ def test_coil_endpoint_404_when_no_data(client, monkeypatch):
 # /api/screen contract (run_screen monkeypatched -> no network)
 # --------------------------------------------------------------------------- #
 def test_screen_contract(client, monkeypatch):
-    df = pd.DataFrame([compute_features("TEST", _synthetic_monthly()).__dict__])
-    monkeypatch.setattr(app_module, "run_screen", lambda tickers: df)
+    monkeypatch.setattr(
+        app_module,
+        "run_lifecycle_screen",
+        lambda tickers, **kwargs: {
+            "results": [{"ticker": "TEST", "lifecycle": "pre_breakout"}],
+            "bucket_counts": {"pre_breakout": 1},
+            "failures": [],
+            "algorithm_version": "test-v2",
+            "screened_at": "2026-01-01T00:00:00.000Z",
+        },
+    )
 
     resp = client.post("/api/screen", json={"tickers": ["TEST"]})
     assert resp.status_code == 200
@@ -327,3 +399,5 @@ def test_screen_contract(client, monkeypatch):
     assert body["count"] == 1
     assert body["tickers"] == ["TEST"]
     assert body["results"][0]["ticker"] == "TEST"
+    assert body["bucket_counts"] == {"pre_breakout": 1}
+    assert body["failures"] == []

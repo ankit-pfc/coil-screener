@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "chart": {
+    "interval": "3M",
+    "timeframe": "10Y",
+    "source": "timeseries"
+  },
+  "global_rule": {
+    "definition": "A major top is a mountain peak with a substantial rise before it and a substantial fall after it. Nearby plateau peaks are not separate majors. Once a major top establishes the level, later accepted peaks must be at the same level or higher.",
+    "right_edge": "Include an extreme-right high provisionally when it extends the established peak line even though a future decline cannot yet confirm it.",
+    "plateau_shelf": "Do not retain an older low-level shelf merely because it has large percentage prominence; it must still read as a major peak in the active ceiling regime.",
+    "two_sided_confirmation": "A confirmed top needs a meaningful valley on both sides. If price reaches a higher level before falling, the lower candidate is a shoulder on the same mountain and must be removed.",
+    "rise_fall_sharpness": "Depth alone is insufficient. The rise into a major top and the rejection after it must be steep; among comparable-level candidates, prefer the sharper mountain and discard the slower weaker one.",
+    "chart_scale_relevance": "Ignore locally valid swings that sit too low in the active ten-year price range. A major top must be visually material relative to the full chart, not merely prominent relative to a small local base.",
+    "active_line_classification": "Breakout and setup classification must use the reviewed active major-top line. An older historical resistance fit can falsely label a current good setup as already broken out.",
+    "interval_native_confirmation": "For a 3M chart, the significant fall after a peak must occur in a later 3M candle. A monthly high and crash inside the same quarterly candle cannot confirm that candle as a major top.",
+    "minimum_line_anchors": "Always plot at least two meaningful, well-separated ceiling anchors when the chart has enough history. If only one strict major mountain survives, add the strongest comparable structural retest so the lid has a measurable slope for coil grading.",
+    "intermediate_line_retests": "Once two well-separated endpoint anchors define a lid, retain a meaningful intermediate pivot that closely retests that same line. This can produce a three-touch flat lid even when the middle point is not independently strict enough to be a primary mountain."
+  },
+  "reviews": {
+    "AAPL": {
+      "removed": ["TS24", "TS25", "TS26", "TS28", "TS30"],
+      "kept": ["TS27", "TS29"],
+      "intended_highs": [
+        {"date": "2021-12", "price": 182.13, "note": "green quarter immediately left of TS27"},
+        {"date": "2024-12", "price": 260.1, "note": "accepted TS29"},
+        {"date": "2026-05", "price": 315.0, "note": "current extreme-right high instead of TS30"}
+      ]
+    },
+    "BG": {
+      "removed": ["TS14", "TS15", "TS16", "TS18", "TS19"],
+      "kept": ["TS13", "TS17"],
+      "intended_highs": [
+        {"date": "2017-05", "price": 83.75, "note": "accepted TS13"},
+        {"date": "2022-04", "price": 128.4, "note": "accepted TS17"},
+        {"date": "2026-05", "price": 133.93, "note": "extreme-right high aligned with TS17"}
+      ]
+    },
+    "CF": {
+      "removed": ["TS1"],
+      "kept": ["TS2", "TS3"],
+      "human_grade": "A",
+      "model_grade_at_review": "B",
+      "intended_highs": [
+        {"date": "2022-08", "price": 119.6, "note": "accepted TS2"},
+        {"date": "2026-03", "price": 141.96, "note": "accepted TS3"}
+      ],
+      "note": "The 2018 top is a lower historical plateau shelf, not a major peak for the active coil. With that shelf excluded, the chart is human-graded A."
+    },
+    "COF": {
+      "removed": ["TS2"],
+      "kept": ["TS1", "TS3"],
+      "intended_highs": [
+        {"date": "2021-08", "price": 177.95, "note": "accepted TS1"},
+        {"date": "2026-01", "price": 259.64, "note": "accepted TS3"}
+      ],
+      "note": "The 2025 candidate is not a separate top because price continued to the similar but higher 2026 peak before making a significant fall."
+    },
+    "CSX": {
+      "removed": ["TS2"],
+      "kept": ["TS1", "TS3"],
+      "intended_highs": [
+        {"date": "2022-03", "price": 38.63, "note": "accepted TS1"},
+        {"date": "2026-05", "price": 47.18, "note": "accepted TS3 provisional right-edge high"}
+      ],
+      "comparison": {
+        "TS1_body_fall_pct": 31.0,
+        "TS1_fall_months": 6,
+        "TS2_body_fall_pct": 30.0,
+        "TS2_fall_months": 14
+      },
+      "note": "TS1 and TS2 have similar fall depth, but TS1 completes the rejection much faster. TS2 is the weaker comparable-level top."
+    },
+    "EAT": {
+      "removed": ["TS1"],
+      "kept": ["TS2", "TS3"],
+      "intended_highs": [
+        {"date": "2021-03", "price": 78.33, "note": "accepted TS2"},
+        {"date": "2025-02", "price": 192.22, "note": "accepted TS3"}
+      ],
+      "range_position_pct": {
+        "TS1": 25.5,
+        "TS2": 38.5,
+        "TS3": 100.0
+      },
+      "note": "TS1 is locally prominent but visually minor in the ten-year price range. The other two are major tops."
+    },
+    "FCX": {
+      "removed": [],
+      "kept": ["TS1", "TS2", "TS3"],
+      "human_status": "good_spot_not_broken_out",
+      "model_status_at_review": "broken_out",
+      "human_lid_shape": "flattish",
+      "intended_highs": [
+        {"date": "2022-03", "price": 51.99, "note": "accepted TS1"},
+        {"date": "2024-05", "price": 55.24, "note": "accepted TS2"},
+        {"date": "2026-04", "price": 70.97, "note": "accepted TS3"}
+      ],
+      "comparison": {
+        "model_resistance_from": "2011-01",
+        "model_resistance_to": "2024-05",
+        "model_line_value_at_last": 54.32,
+        "reviewed_three_top_line_value_at_last": 68.94,
+        "reviewed_three_top_slope_pct_per_year": 6.64
+      },
+      "note": "All detected tops are correct. The broken-out label is false because the classifier uses an obsolete historical lid instead of the active three-top line."
+    },
+    "KN": {
+      "removed": [],
+      "kept": ["TS1", "TS2", "TS3"],
+      "intended_highs": [
+        {"date": "2019-11", "price": 22.79, "note": "accepted TS1"},
+        {"date": "2022-01", "price": 23.81, "note": "accepted TS2"},
+        {"date": "2026-06", "price": 42.93, "note": "accepted TS3 provisional right-edge high"}
+      ],
+      "note": "Clean three-for-three confirmation of the current peak detector."
+    },
+    "LH": {
+      "removed": ["TS1"],
+      "kept": ["TS2", "TS3"],
+      "human_grade": "A",
+      "model_grade_at_review": "B",
+      "human_status": "pre_breakout_coil",
+      "model_status_at_review": "coiling",
+      "intended_highs": [
+        {"date": "2021-12", "price": 272.48, "note": "accepted TS2"},
+        {"date": "2026-Q1", "price": 292.02, "note": "accepted right-edge quarter; the quarterly maximum occurs in February within the same Q1 candle labeled TS3 in the review"}
+      ],
+      "note": "TS1 was a false positive caused by monthly confirmation inside one 3M candle: the February 2020 high and March crash were treated as rise and fall, even though the next quarter recovered. Quarterly-native confirmation removes it. With TS1 excluded, the human assessment is grade A and pre-breakout."
+    },
+    "MSCI": {
+      "removed": [],
+      "kept": ["TS1"],
+      "missing": ["TS2"],
+      "intended_highs": [
+        {"date": "2021-11", "price": 679.85, "note": "accepted TS1 strict major mountain"},
+        {"date": "2024-12", "price": 642.45, "note": "secondary comparable ceiling retest used to define the active lid slope"}
+      ],
+      "comparison": {
+        "reviewed_anchor_slope_pct_per_year": -1.94,
+        "reviewed_line_value_at_last": 625.27,
+        "model_resistance_slope_pct_per_year": -1.94
+      },
+      "note": "The strict detector returned one valid mountain, which is insufficient to define a resistance line. Add the strongest comparable 2024 retest as TS2. The fallback is only for a meaningful near-ceiling structural anchor, not an arbitrary weak peak."
+    },
+    "MSFT": {
+      "removed": [],
+      "kept": ["TS1", "TS2"],
+      "intended_highs": [
+        {"date": "2021-11", "price": 349.67, "note": "accepted TS1"},
+        {"date": "2025-07", "price": 555.45, "note": "accepted TS2"}
+      ],
+      "comparison": {
+        "detector_match": "2_of_2",
+        "model_resistance_slope_pct_per_year": 2.58
+      },
+      "note": "Perfect two-for-two confirmation of the detector output. The two major mountains provide a valid rising lid slope without any missing or extra peaks."
+    },
+    "NSC": {
+      "removed": ["TS1"],
+      "kept": ["TS2"],
+      "missing": ["2021-12 quarterly candle at 299.2"],
+      "resolution_status": "exact_candle_selected",
+      "intended_highs": [
+        {"date": "2021-12", "price": 299.2, "note": "reviewer-selected missing major top on the exact 3M candle"},
+        {"date": "2026-05", "price": 326.0, "note": "accepted TS2 provisional right-edge high"}
+      ],
+      "detector_comparison": {
+        "false_positive": "The 2020-01 point inherits an overlong left-side rise and the pandemic fall, even though it does not read as the active major mountain.",
+        "false_negative": "The near-equal 2021 ceiling cluster is currently collapsed to an early representative that is then invalidated by a slightly higher neighboring quarter, causing the whole 2021 mountain to disappear."
+      },
+      "note": "Reviewer removed detected TS1 at 2020-01 / 219.88, kept detected TS2 at 2026-05 / 326.0, and selected the 2021-12 quarterly candle at 299.2 as the missing major top."
+    },
+    "NUE": {
+      "removed": [],
+      "kept": ["TS1", "TS2", "TS3"],
+      "model_status_at_review": "breaking_out",
+      "intended_highs": [
+        {"date": "2022-04", "price": 187.9, "note": "accepted TS1"},
+        {"date": "2024-04", "price": 203.0, "note": "accepted TS2"},
+        {"date": "2026-05", "price": 251.39, "note": "accepted TS3 provisional right-edge high"}
+      ],
+      "comparison": {
+        "detector_match": "3_of_3"
+      },
+      "note": "All three detected major highs were accepted with no missing top, so no detector correction is required for NUE."
+    },
+    "REG": {
+      "removed": [],
+      "kept": ["TS1", "TS2"],
+      "missing": ["2021-12 quarterly candle at 78.07"],
+      "human_grade": "A",
+      "model_grade_at_review": "B",
+      "model_status_at_review": "coiling",
+      "intended_highs": [
+        {"date": "2016-07", "price": 85.35, "note": "accepted TS1"},
+        {"date": "2021-12", "price": 78.07, "note": "reviewer-selected missing intermediate lid retest on the exact 3M candle"},
+        {"date": "2026-04", "price": 81.66, "note": "accepted TS2 provisional right-edge high"}
+      ],
+      "note": "Keep both detected endpoint anchors and add the 2021-12 quarterly high at 78.07. The reviewer grades the resulting nearly straight, minimal-slope three-point lid as A rather than the model's B."
+    },
+    "SPG": {
+      "removed": [],
+      "kept": ["TS1", "TS2"],
+      "human_grade": "A",
+      "human_status": "coiling_not_broken_out",
+      "model_status_at_review": "broken_out",
+      "intended_highs": [
+        {"date": "2016-07", "price": 229.1, "note": "accepted TS1"},
+        {"date": "2026-05", "price": 208.79, "note": "accepted TS2 provisional right-edge high in the same long-term price zone"}
+      ],
+      "comparison": {
+        "detector_match": "2_of_2",
+        "reviewed_active_lid_slope_pct_per_year": -0.99,
+        "reviewed_active_lid_value_at_last": 208.79,
+        "obsolete_model_line_value_at_last": 184.9
+      },
+      "note": "Both detected tops are correct, but the broken-out label is false. The 229.10 top and the current 208.79 top remain in the same price zone across roughly ten years; their active lid is nearly flat and the setup is a grade A coil to track."
+    },
+    "UEC": {
+      "removed": ["TS2"],
+      "kept": ["TS1", "TS3"],
+      "model_status_at_review": "basing",
+      "intended_highs": [
+        {"date": "2024-02", "price": 8.34, "note": "accepted TS1"},
+        {"date": "2026-01", "price": 20.34, "note": "accepted TS3"}
+      ],
+      "note": "Keep the first 2024 major top and the 2026 top. Remove the later 2024 TS2 retest at 8.93; it is not a separate major ceiling anchor."
+    },
+    "UNP": {
+      "removed": [],
+      "kept": ["TS1", "TS2"],
+      "model_status_at_review": "basing",
+      "intended_highs": [
+        {"date": "2022-03", "price": 278.94, "note": "accepted TS1"},
+        {"date": "2026-05", "price": 279.7, "note": "accepted TS2 provisional right-edge high"}
+      ],
+      "comparison": {
+        "detector_match": "2_of_2"
+      },
+      "note": "Both detected major highs were accepted with no missing or extra peak, so no detector correction is required for UNP."
+    },
+    "VTR": {
+      "removed": [],
+      "kept": ["TS1", "TS2"],
+      "missing": ["2019-09 quarterly candle at 75.4"],
+      "model_status_at_review": "no_structure",
+      "intended_highs": [
+        {"date": "2016-07", "price": 76.8, "note": "accepted TS1"},
+        {"date": "2019-09", "price": 75.4, "note": "reviewer-selected missing intermediate lid retest on the exact 3M candle"},
+        {"date": "2026-05", "price": 91.06, "note": "accepted TS2 provisional right-edge high"}
+      ],
+      "note": "Keep both detected endpoint anchors and add the 2019-09 quarterly high at 75.4 as the missing intermediate active-lid retest."
+    }
+  }
+}

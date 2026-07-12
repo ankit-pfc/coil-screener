@@ -7,6 +7,9 @@ requests==2.33.1
 uvicorn==0.40.0
 yfinance==1.2.2
 
+# Review persistence: PostgreSQL in production (DATABASE_URL); SQLite locally
+psycopg2-binary==2.9.11
+
 # Test deps (FastAPI TestClient needs httpx)
 httpx==0.28.1
 pytest==9.0.3

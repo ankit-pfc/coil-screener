@@ -25,3 +25,6 @@ web/dist-ssr/
 web/.env
 web/.env.*.local
 web/src/routeTree.gen.ts
+
+# Local review store (SQLite; production uses DATABASE_URL/PostgreSQL)
+reviews.db

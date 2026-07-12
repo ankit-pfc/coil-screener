@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -7,16 +8,17 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from coil_analysis import analyze_coil
+from coil_analysis import ALGORITHM_VERSION, analyze_coil
 from history_cache import get_history_payload
+from reviews import annotate_review, get_review_store
 from screen_monthly import (
     DEFAULT_TICKERS,
     build_ticker_list,
     compute_features,
     fetch_monthly_history,
-    run_screen,
+    run_lifecycle_screen,
 )
 from vision.run import VisionRunConfig, run_vision_pipeline
 from vision.storage import VisionRunStore
@@ -39,6 +41,108 @@ class ScreenRequest(BaseModel):
     tickers: list[str] = []
     universe: Literal["sp500"] | None = None
     limit: int | None = None
+    force_refresh: bool = False
+
+
+class CorrectionPoint(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    date: str
+    price: float = Field(gt=0)
+    role: Literal[
+        "major_top",
+        "structural_retest",
+        "provisional_top",
+        "breakout_peak",
+    ] = "major_top"
+    idx: int | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_iso_date(cls, value: str) -> str:
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("point dates must use YYYY-MM-DD") from exc
+        if parsed.isoformat() != value:
+            raise ValueError("point dates must use YYYY-MM-DD")
+        return value
+
+
+class CorrectionRecordRequest(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    schema_version: int = Field(alias="schemaVersion")
+    ticker: str
+    interval: Literal["3M"]
+    created_at: datetime = Field(alias="createdAt")
+    manual_highs: list[CorrectionPoint] = Field(alias="manualHighs")
+    algo_highs: list[CorrectionPoint] = Field(default_factory=list, alias="algoHighs")
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        symbol = value.strip().upper()
+        if not symbol:
+            raise ValueError("ticker is required")
+        return symbol
+
+    @model_validator(mode="after")
+    def require_lid_anchors(self) -> "CorrectionRecordRequest":
+        anchors = [p for p in self.manual_highs if p.role != "breakout_peak"]
+        if len(anchors) < 2:
+            raise ValueError("at least two non-breakout anchors are required")
+        return self
+
+
+class ReviewedHighPoint(CorrectionPoint):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    lid_member: bool | None = Field(default=None, alias="lidMember")
+
+
+class ReviewDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    schema_version: int = Field(default=3, alias="schemaVersion")
+    session_id: int | None = Field(default=None, alias="sessionId")
+    ticker: str
+    interval: Literal["3M"] = "3M"
+    as_of: str | None = Field(default=None, alias="asOf")
+    algorithm_version: str | None = Field(default=None, alias="algorithmVersion")
+    decision: Literal["approved", "corrected"]
+    algorithm: dict[str, Any] | None = None
+    reviewed_highs: list[ReviewedHighPoint] = Field(
+        default_factory=list, alias="reviewedHighs"
+    )
+    created_at: datetime | None = Field(default=None, alias="createdAt")
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        symbol = value.strip().upper()
+        if not symbol:
+            raise ValueError("ticker is required")
+        return symbol
+
+
+class ReviewSessionItemRequest(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    ticker: str
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReviewSessionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    source: str
+    items: list[ReviewSessionItemRequest]
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReviewSessionItemPatch(BaseModel):
+    status: Literal["pending", "skipped"]
 
 
 class VisionRunRequest(BaseModel):
@@ -61,6 +165,8 @@ class VisionReviewRequest(BaseModel):
     run_id: str
     ticker: str
     interval: Literal["1M", "3M", "6M", "1Y"] = "3M"
+    timeframe: Literal["1Y", "2Y", "5Y", "10Y", "All"]
+    chart_type: Literal["candles", "bars", "line", "area"]
     decision: Literal["accepted", "rejected", "edited"]
     accepted_highs: list[dict[str, Any]] = []
     notes: str | None = None
@@ -85,6 +191,38 @@ def serialize_frame(df: pd.DataFrame) -> list[dict[str, Any]]:
     for row in df.to_dict(orient="records"):
         records.append({key: clean_value(value) for key, value in row.items()})
     return records
+
+
+def normalize_saved_results(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Supply v2 display fields when loading a legacy numeric-only CSV."""
+    normalized = []
+    for raw in records:
+        row = dict(raw)
+        legacy_score = row.get("score_total")
+        row.setdefault("lifecycle", "pre_breakout")
+        row.setdefault("status", "coiling")
+        row.setdefault("grade", None)
+        row.setdefault("lid_grade", None)
+        row.setdefault(
+            "coil_score",
+            round(float(legacy_score) * 100.0, 1) if legacy_score is not None else 0.0,
+        )
+        row.setdefault("lid_slope_pct_per_year", None)
+        row.setdefault("proximity_pct", None)
+        row.setdefault("span_years", None)
+        row.setdefault("touches", None)
+        row.setdefault("touch_count", row.get("touches"))
+        row.setdefault("reviewed", False)
+        row.setdefault("review_status", None)
+        row.setdefault("review_id", None)
+        row.setdefault("review_as_of", None)
+        row.setdefault("review_algorithm_version", None)
+        row.setdefault("review_stale", False)
+        row.setdefault("review_effective", "algorithm")
+        row.setdefault("data_date", None)
+        row.setdefault("freshness", "saved")
+        normalized.append(row)
+    return normalized
 
 
 @app.get("/api/health")
@@ -126,10 +264,11 @@ def saved_run(filename: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Saved run not found.")
 
     df = pd.read_csv(file_path)
+    records = normalize_saved_results(serialize_frame(df))
     return {
         "name": filename,
-        "count": len(df),
-        "results": serialize_frame(df),
+        "count": len(records),
+        "results": records,
     }
 
 
@@ -140,18 +279,33 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
         universe=request.universe,
         limit=request.limit,
     )
-    df = run_screen(tickers)
+    run = run_lifecycle_screen(
+        tickers,
+        fetch_monthly=fetch_monthly_history,
+        review_override_for=lambda ticker: get_review_store().get_override(ticker, "3M"),
+        review_state_for=lambda ticker: get_review_store().get_review_state(ticker, "3M"),
+        force_refresh=request.force_refresh,
+    )
     return {
-        "count": len(df),
+        "count": len(run["results"]),
         "tickers": tickers,
-        "results": serialize_frame(df),
+        **run,
     }
 
 
 @app.get("/api/history/{ticker}")
-def history(ticker: str, max_bars: int = 180) -> dict[str, Any]:
+def history(
+    ticker: str,
+    max_bars: int | None = None,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
     symbol = ticker.strip().upper()
-    payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
+    payload = get_history_payload(
+        symbol,
+        fetch_monthly_history,
+        compute_features,
+        force_refresh=force_refresh,
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail="No monthly history found.")
 
@@ -162,25 +316,177 @@ def history(ticker: str, max_bars: int = 180) -> dict[str, Any]:
         "ticker": symbol,
         "bars": trimmed,
         "features": payload["features"],
+        "freshness": payload["freshness"],
     }
 
 
 @app.get("/api/coil/{ticker}")
-def coil(ticker: str, as_of: str | None = None) -> dict[str, Any]:
+def coil(
+    ticker: str,
+    as_of: str | None = None,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
     """Deterministic major-top / resistance-slope / coiling analysis.
 
     ``as_of`` truncates the history first (YYYY-MM-DD, inclusive), which lets
     the UI and validation scripts replay the pre-breakout state of a chart.
+    An approved human review for the ticker overrides the algorithm's
+    structure; the raw algorithm output is retained under ``review``.
     """
     if as_of is not None and (len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-"):
         raise HTTPException(status_code=400, detail="as_of must be YYYY-MM-DD.")
 
     symbol = ticker.strip().upper()
-    payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
+    payload = get_history_payload(
+        symbol,
+        fetch_monthly_history,
+        compute_features,
+        force_refresh=force_refresh,
+    )
     if payload is None:
         raise HTTPException(status_code=404, detail="No monthly history found.")
 
-    return {"ticker": symbol, **analyze_coil(payload["bars"], as_of=as_of)}
+    store = get_review_store()
+    override = store.get_override(symbol)
+    analysis = analyze_coil(payload["bars"], as_of=as_of, review_override=override)
+    annotate_review(analysis, store.get_review_state(symbol), algorithm_version=ALGORITHM_VERSION)
+    analysis["analysis_metadata"]["data_freshness"].update(payload["freshness"])
+    return {
+        "ticker": symbol,
+        **analysis,
+        "freshness": payload["freshness"],
+    }
+
+
+@app.post("/api/highs/corrections")
+def submit_highs_correction(record: CorrectionRecordRequest) -> dict[str, Any]:
+    """Approved internal review: append-only persistence + immediate override.
+
+    Body is the frontend ``CorrectionRecord`` (schemaVersion 1). The user's
+    ``manualHighs`` become the effective structure for the ticker; the full
+    record is retained verbatim for calibration.
+    """
+    try:
+        review = get_review_store().append_review(
+            record.model_dump(mode="json", by_alias=True)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"review": review}
+
+
+@app.delete("/api/highs/corrections/{ticker}")
+def revoke_highs_correction(
+    ticker: str, interval: Literal["3M"] = "3M"
+) -> dict[str, Any]:
+    """Revoke the effective override while retaining an append-only audit event."""
+    try:
+        revocation = get_review_store().revoke_override(ticker, interval)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if revocation is None:
+        raise HTTPException(status_code=404, detail="No active correction found.")
+    return {"revocation": revocation, "override": None}
+
+
+@app.get("/api/highs/corrections/{ticker}")
+def highs_corrections(
+    ticker: str, interval: Literal["3M"] = "3M"
+) -> dict[str, Any]:
+    """Current effective override plus the append-only review history."""
+    store = get_review_store()
+    return {
+        "ticker": ticker.strip().upper(),
+        "override": store.get_override(ticker, interval),
+        "reviews": store.list_reviews(ticker, interval),
+    }
+
+
+@app.post("/api/highs/reviews")
+def submit_review_decision(request: ReviewDecisionRequest) -> dict[str, Any]:
+    """Unified review decision: approve the algorithm or correct it.
+
+    ``approved`` records the sign-off and clears any older human override so
+    the algorithm becomes effective; ``corrected`` makes the reviewed highs
+    (with optional ``lidMember`` line anchors) the live analysis immediately.
+    The response returns the append-only review event, the effective
+    override, the recomputed coil analysis, and the updated session item.
+    """
+    store = get_review_store()
+    try:
+        outcome = store.record_decision(request.model_dump(mode="json", by_alias=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    symbol = request.ticker
+    analysis: dict[str, Any] | None = None
+    payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
+    if payload is not None:
+        analysis = analyze_coil(
+            payload["bars"], review_override=store.get_override(symbol)
+        )
+        annotate_review(
+            analysis, store.get_review_state(symbol), algorithm_version=ALGORITHM_VERSION
+        )
+        analysis["analysis_metadata"]["data_freshness"].update(payload["freshness"])
+
+    session_item = None
+    if request.session_id is not None:
+        session_item = store.get_session_item(
+            request.session_id, symbol, algorithm_version=ALGORITHM_VERSION
+        )
+    return {
+        "review": outcome["review"],
+        "override": outcome["override"],
+        "analysis": analysis,
+        "session_item": session_item,
+    }
+
+
+@app.post("/api/review-sessions")
+def create_review_session(request: ReviewSessionCreateRequest) -> dict[str, Any]:
+    """Create a review session for one screener snapshot, or resume it.
+
+    The queue keeps the backend-ranked order it was posted with. Identity is
+    a snapshot fingerprint (source + ordered tickers + data dates), so the
+    same screen resumes its session while new data starts a fresh one.
+    """
+    try:
+        session, created = get_review_store().create_session(
+            request.source,
+            [item.model_dump() for item in request.items],
+            snapshot=request.snapshot,
+            algorithm_version=ALGORITHM_VERSION,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"session": session, "created": created}
+
+
+@app.get("/api/review-sessions/{session_id}")
+def review_session(session_id: int) -> dict[str, Any]:
+    session = get_review_store().get_session(
+        session_id, algorithm_version=ALGORITHM_VERSION
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return {"session": session}
+
+
+@app.patch("/api/review-sessions/{session_id}/items/{ticker}")
+def patch_review_session_item(
+    session_id: int, ticker: str, patch: ReviewSessionItemPatch
+) -> dict[str, Any]:
+    """Session-specific deferral: pending/skipped only; reviewed is derived."""
+    try:
+        item = get_review_store().set_item_status(
+            session_id, ticker, patch.status, algorithm_version=ALGORITHM_VERSION
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    return {"item": item}
 
 
 def vision_store() -> VisionRunStore:
@@ -236,9 +542,17 @@ def vision_prediction(
     ticker: str,
     interval: Literal["1M", "3M", "6M", "1Y"] = "3M",
     run_id: str = "latest",
+    timeframe: Literal["1Y", "2Y", "5Y", "10Y", "All"] | None = None,
+    chart_type: Literal["candles", "bars", "line", "area"] | None = None,
 ) -> dict[str, Any]:
     try:
-        return vision_store().read_prediction(ticker, interval, run_id)
+        return vision_store().read_prediction(
+            ticker,
+            interval,
+            run_id,
+            timeframe=timeframe,
+            chart_type=chart_type,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Vision prediction not found.") from exc
     except ValueError as exc:
@@ -247,8 +561,32 @@ def vision_prediction(
 
 @app.post("/api/vision/reviews")
 def vision_review(request: VisionReviewRequest) -> dict[str, Any]:
+    store = vision_store()
     try:
-        review = vision_store().append_review(request.model_dump())
+        prediction = store.read_prediction(request.ticker, run_id=request.run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Vision prediction not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    expected = {
+        "ticker": request.ticker.strip().upper(),
+        "interval": request.interval,
+        "timeframe": request.timeframe,
+        "chart_type": request.chart_type,
+    }
+    actual = {
+        "ticker": str(prediction.get("ticker") or "").strip().upper(),
+        "interval": prediction.get("interval"),
+        "timeframe": prediction.get("timeframe"),
+        "chart_type": prediction.get("chart_type"),
+    }
+    if actual != expected:
+        raise HTTPException(
+            status_code=409,
+            detail="Vision review context does not match the stored prediction.",
+        )
+    try:
+        review = store.append_review(request.model_dump())
         return {"review": review}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

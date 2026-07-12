@@ -139,11 +139,17 @@ class VisionRunStore:
         ticker: str,
         interval: str | None = None,
         run_id: str = "latest",
+        timeframe: str | None = None,
+        chart_type: str | None = None,
     ) -> dict[str, Any]:
         symbol = ticker.upper()
         run_ids = [run_id]
         if run_id == "latest":
-            run_ids = [str(run["run_id"]) for run in self.list_runs()]
+            run_ids = [
+                str(run["run_id"])
+                for run in self.list_runs()
+                if run.get("status") in {"completed", "completed_with_errors"}
+            ]
 
         for rid in run_ids:
             path = self.prediction_path(rid, symbol)
@@ -151,6 +157,10 @@ class VisionRunStore:
                 continue
             prediction = read_json(path)
             if interval and prediction.get("interval") != interval:
+                continue
+            if timeframe and prediction.get("timeframe") != timeframe:
+                continue
+            if chart_type and prediction.get("chart_type") != chart_type:
                 continue
             return prediction
         raise FileNotFoundError(f"No vision prediction for {symbol}.")

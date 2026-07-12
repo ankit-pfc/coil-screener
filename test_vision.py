@@ -437,6 +437,9 @@ def _write_prediction(
     run_id: str,
     ticker: str = "AAPL",
     interval: str = "3M",
+    timeframe: str = "10Y",
+    chart_type: str = "candles",
+    status: str = "completed",
     created_at: str = "2026-06-01T00:00:00Z",
 ) -> None:
     store = VisionRunStore(root / "vision_runs")
@@ -445,8 +448,12 @@ def _write_prediction(
         {
             "created_at": created_at,
             "completed_at": created_at,
-            "status": "completed",
-            "request": {"interval": interval},
+            "status": status,
+            "request": {
+                "interval": interval,
+                "timeframe": timeframe,
+                "chart_type": chart_type,
+            },
             "summary": {"requested": 1, "completed": 1, "failed": 0},
             "predictions": [{"ticker": ticker, "path": f"predictions/{ticker}.json"}],
             "errors": [],
@@ -457,8 +464,8 @@ def _write_prediction(
         ticker,
         {
             "interval": interval,
-            "timeframe": "10Y",
-            "chart_type": "candles",
+            "timeframe": timeframe,
+            "chart_type": chart_type,
             "mapped_highs": [{"idx": 1, "date": "2024-04-01", "price": 178}],
             "trendline": None,
             "raw_detections": [],
@@ -480,6 +487,63 @@ def test_vision_predictions_latest_reads_filesystem_json(monkeypatch, tmp_path):
     assert body["mapped_highs"][0]["date"] == "2024-04-01"
 
 
+def test_vision_predictions_latest_filters_complete_chart_context(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "VISION_RUNS_DIR", tmp_path / "vision_runs")
+    _write_prediction(
+        tmp_path,
+        "vision_matching_old",
+        timeframe="5Y",
+        chart_type="area",
+        created_at="2026-01-01T00:00:00Z",
+    )
+    _write_prediction(
+        tmp_path,
+        "vision_new_wrong_context",
+        timeframe="10Y",
+        chart_type="candles",
+        created_at="2026-06-01T00:00:00Z",
+    )
+
+    resp = client().get(
+        "/api/vision/predictions/AAPL",
+        params={
+            "interval": "3M",
+            "timeframe": "5Y",
+            "chart_type": "area",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["run_id"] == "vision_matching_old"
+
+
+def test_vision_predictions_latest_ignores_incomplete_runs(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "VISION_RUNS_DIR", tmp_path / "vision_runs")
+    _write_prediction(
+        tmp_path,
+        "vision_completed",
+        created_at="2026-01-01T00:00:00Z",
+    )
+    _write_prediction(
+        tmp_path,
+        "vision_running",
+        status="running",
+        created_at="2026-06-01T00:00:00Z",
+    )
+
+    resp = client().get(
+        "/api/vision/predictions/AAPL",
+        params={
+            "interval": "3M",
+            "timeframe": "10Y",
+            "chart_type": "candles",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["run_id"] == "vision_completed"
+
+
 def test_vision_review_appends_review_and_updates_prediction(monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "VISION_RUNS_DIR", tmp_path / "vision_runs")
     _write_prediction(tmp_path, "vision_review")
@@ -490,6 +554,8 @@ def test_vision_review_appends_review_and_updates_prediction(monkeypatch, tmp_pa
             "run_id": "vision_review",
             "ticker": "AAPL",
             "interval": "3M",
+            "timeframe": "10Y",
+            "chart_type": "candles",
             "decision": "accepted",
             "accepted_highs": [{"idx": 1, "date": "2024-04-01", "price": 178}],
         },
@@ -505,3 +571,45 @@ def test_vision_review_appends_review_and_updates_prediction(monkeypatch, tmp_pa
     assert prediction["review"]["decision"] == "accepted"
     review_log = tmp_path / "vision_runs" / "vision_review" / "reviews" / "AAPL.jsonl"
     assert review_log.exists()
+
+
+def test_vision_review_rejects_missing_prediction(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "VISION_RUNS_DIR", tmp_path / "vision_runs")
+
+    resp = client().post(
+        "/api/vision/reviews",
+        json={
+            "run_id": "missing",
+            "ticker": "AAPL",
+            "interval": "3M",
+            "timeframe": "10Y",
+            "chart_type": "candles",
+            "decision": "accepted",
+            "accepted_highs": [],
+        },
+    )
+
+    assert resp.status_code == 404
+
+
+def test_vision_review_rejects_mismatched_chart_context(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "VISION_RUNS_DIR", tmp_path / "vision_runs")
+    _write_prediction(tmp_path, "vision_context")
+
+    resp = client().post(
+        "/api/vision/reviews",
+        json={
+            "run_id": "vision_context",
+            "ticker": "AAPL",
+            "interval": "3M",
+            "timeframe": "5Y",
+            "chart_type": "area",
+            "decision": "accepted",
+            "accepted_highs": [],
+        },
+    )
+
+    assert resp.status_code == 409
+    assert not (
+        tmp_path / "vision_runs" / "vision_context" / "reviews" / "AAPL.jsonl"
+    ).exists()
