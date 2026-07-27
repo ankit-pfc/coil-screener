@@ -1,18 +1,47 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+import hashlib
+import hmac
+import os
+import re
+import secrets
+import tempfile
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from coil_analysis import ALGORITHM_VERSION, analyze_coil
 from history_cache import get_history_payload, read_cache
-from reviews import annotate_review, get_review_store, reject_incomplete_quarter_points
+from review_capture import (
+    BaseClassificationLockRequest,
+    CaptureDraftRequest,
+    CaptureFinalizeRequest,
+    validate_capture_against_context,
+)
+from review_snapshots import (
+    ReviewSnapshotError,
+    canonical_json,
+    load_blind_review_context,
+    load_review_context,
+    load_review_manifest,
+    review_snapshot_identity,
+    verify_manifest_identity,
+)
+from reviews import (
+    ReviewAccessError,
+    ReviewConflictError,
+    annotate_review,
+    get_review_store,
+    hash_review_token,
+    reject_incomplete_quarter_points,
+)
 from screen_monthly import (
     DEFAULT_TICKERS,
     build_ticker_list,
@@ -22,6 +51,7 @@ from screen_monthly import (
 )
 from vision.run import VisionRunConfig, run_vision_pipeline
 from vision.storage import VisionRunStore
+from starlette.background import BackgroundTask
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_ROOT / "static"
@@ -35,6 +65,223 @@ VISION_RUNS_DIR = PROJECT_ROOT / "vision_runs"
 DEMO_DEFAULT_RUN = "demo_curated_coils_results.csv"
 
 app = FastAPI(title="Coil Screening")
+
+_CAPTURE_API_ROUTES = (
+    ("GET", re.compile(r"^/api/review-sessions/[0-9]+$")),
+    ("GET", re.compile(r"^/api/review-sessions/[0-9]+/export$")),
+    (
+        "GET",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/items/[^/]+/context$"
+        ),
+    ),
+    ("POST", re.compile(r"^/api/review-sessions$")),
+    (
+        "PUT",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/items/[^/]+/draft$"
+        ),
+    ),
+    (
+        "POST",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/items/[^/]+/finalize$"
+        ),
+    ),
+    (
+        "POST",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/items/[^/]+/base-lock$"
+        ),
+    ),
+    (
+        "PATCH",
+        re.compile(r"^/api/review-sessions/[0-9]+/items/[^/]+$"),
+    ),
+    ("POST", re.compile(r"^/api/review-sessions/[0-9]+/finalize$")),
+    (
+        "POST",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/access-token/(rotate|revoke)$"
+        ),
+    ),
+    ("GET", re.compile(r"^/api/admin/review-storage/backup$")),
+)
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def capture_only_mode() -> bool:
+    return _truthy_env("CAPTURE_ONLY_MODE")
+
+
+def _railway_runtime() -> bool:
+    return any(
+        os.environ.get(name)
+        for name in (
+            "RAILWAY_ENVIRONMENT_ID",
+            "RAILWAY_ENVIRONMENT_NAME",
+            "RAILWAY_PROJECT_ID",
+            "RAILWAY_SERVICE_ID",
+            "RAILWAY_STATIC_URL",
+        )
+    )
+
+
+def review_persistence_readiness(*, probe: bool) -> dict[str, Any]:
+    """Describe and, when requested, probe the review store durability."""
+    database_url = os.environ.get("DATABASE_URL", "").strip()
+    review_db_path = os.environ.get("REVIEW_DB_PATH", "").strip()
+    volume_mount = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", "").strip()
+    railway = _railway_runtime()
+    environment = (
+        os.environ.get("APP_ENV")
+        or os.environ.get("ENVIRONMENT")
+        or ""
+    ).strip().lower()
+    dev_escape = (
+        _truthy_env("CAPTURE_ONLY_ALLOW_EPHEMERAL")
+        and environment in {"test", "dev", "development", "local"}
+        and not railway
+    )
+
+    backend = "ephemeral_sqlite"
+    durable = False
+    configured = False
+    reason: str | None = None
+    if database_url:
+        backend = "postgresql"
+        durable = configured = True
+    elif volume_mount:
+        volume_path = Path(volume_mount).expanduser()
+        if not volume_path.is_absolute():
+            reason = "RAILWAY_VOLUME_MOUNT_PATH must be absolute"
+        else:
+            volume = volume_path.resolve()
+            if review_db_path:
+                configured_path = Path(review_db_path).expanduser().resolve()
+                if configured_path == volume or volume in configured_path.parents:
+                    backend = "sqlite_railway_volume"
+                    durable = configured = True
+                else:
+                    reason = "REVIEW_DB_PATH is outside RAILWAY_VOLUME_MOUNT_PATH"
+            else:
+                backend = "sqlite_railway_volume"
+                durable = configured = True
+    elif review_db_path and not railway:
+        configured_path = Path(review_db_path).expanduser()
+        if not configured_path.is_absolute():
+            reason = "REVIEW_DB_PATH must be absolute"
+        else:
+            backend = "sqlite_explicit"
+            durable = configured = True
+    elif review_db_path and railway:
+        reason = "Railway SQLite requires RAILWAY_VOLUME_MOUNT_PATH"
+
+    required = capture_only_mode()
+    ready = bool(durable or dev_escape or not required)
+    if required and not ready and reason is None:
+        reason = (
+            "capture-only mode requires DATABASE_URL or explicitly mounted "
+            "persistent SQLite storage"
+        )
+    if ready and probe:
+        try:
+            store = get_review_store()
+            if durable and backend == "postgresql" and not store.is_postgres:
+                raise RuntimeError("configured PostgreSQL store is not active")
+            if durable and backend != "postgresql":
+                if store.is_postgres or store.sqlite_path is None:
+                    raise RuntimeError("configured SQLite store is not active")
+                actual_path = store.sqlite_path.expanduser().resolve()
+                if backend == "sqlite_explicit":
+                    expected_path = Path(review_db_path).expanduser().resolve()
+                    if actual_path != expected_path:
+                        raise RuntimeError(
+                            "active SQLite path differs from REVIEW_DB_PATH"
+                        )
+                elif backend == "sqlite_railway_volume":
+                    expected_volume = Path(volume_mount).expanduser().resolve()
+                    if not (
+                        actual_path == expected_volume
+                        or expected_volume in actual_path.parents
+                    ):
+                        raise RuntimeError(
+                            "active SQLite path is outside the Railway volume"
+                        )
+            store.persistence_probe()
+        except Exception as exc:  # readiness must fail closed on backend errors
+            ready = False
+            reason = f"review store probe failed: {type(exc).__name__}"
+    return {
+        "ready": ready,
+        "required": required,
+        "configured": configured,
+        "durable": durable,
+        "backend": backend,
+        "development_escape": dev_escape,
+        "reason": reason,
+    }
+
+
+@app.middleware("http")
+async def capture_only_boundary(request: Request, call_next):
+    """Expose only the SPA, readiness, and protected/admin capture APIs."""
+    if capture_only_mode():
+        method = request.method.upper()
+        path = request.url.path
+        if path == "/api/health" and method in {"GET", "HEAD"}:
+            return await call_next(request)
+        if path in {"/docs", "/redoc", "/openapi.json"}:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Developer API surfaces are disabled."},
+            )
+        if path.startswith("/api/"):
+            readiness = review_persistence_readiness(probe=False)
+            if not readiness["ready"]:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "not_ready",
+                        "persistence": readiness,
+                    },
+                )
+            allowed = any(
+                method == allowed_method and pattern.fullmatch(path)
+                for allowed_method, pattern in _CAPTURE_API_ROUTES
+            )
+            if not allowed:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": (
+                            "This deployment exposes only protected review APIs."
+                        )
+                    },
+                )
+        elif method not in {"GET", "HEAD"}:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Only static frontend reads are allowed."},
+            )
+    return await call_next(request)
+
+
+@app.on_event("startup")
+def enforce_capture_persistence_on_startup() -> None:
+    readiness = review_persistence_readiness(probe=True)
+    if capture_only_mode() and not readiness["ready"]:
+        raise RuntimeError(
+            f"capture-only persistence is not ready: {readiness['reason']}"
+        )
 
 
 class ScreenRequest(BaseModel):
@@ -151,10 +398,20 @@ class ReviewSessionCreateRequest(BaseModel):
     source: str
     items: list[ReviewSessionItemRequest]
     snapshot: dict[str, Any] = Field(default_factory=dict)
+    reviewer_name: str | None = Field(
+        default=None, min_length=2, max_length=120, alias="reviewerName"
+    )
+    access_token: str | None = Field(
+        default=None, min_length=24, max_length=512, alias="accessToken"
+    )
+    require_fresh_review: bool = Field(
+        default=False, alias="requireFreshReview"
+    )
 
 
 class ReviewSessionItemPatch(BaseModel):
     status: Literal["pending", "skipped"]
+    reason: str | None = Field(default=None, max_length=5000)
 
 
 class VisionRunRequest(BaseModel):
@@ -242,8 +499,17 @@ def normalize_saved_results(records: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health():
+    persistence = review_persistence_readiness(probe=True)
+    status = "ok" if persistence["ready"] else "not_ready"
+    payload = {
+        "status": status,
+        "capture_only": capture_only_mode(),
+        "persistence": persistence,
+    }
+    if not persistence["ready"]:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.get("/api/default-tickers")
@@ -437,7 +703,9 @@ def highs_corrections(
     return {
         "ticker": ticker.strip().upper(),
         "override": store.get_override(ticker, interval),
-        "reviews": store.list_reviews(ticker, interval),
+        "reviews": store.list_reviews(
+            ticker, interval, include_capture_only=False
+        ),
     }
 
 
@@ -491,28 +759,221 @@ def submit_review_decision(request: ReviewDecisionRequest) -> dict[str, Any]:
     }
 
 
+def require_review_session_access(
+    session_id: int,
+    x_review_token: str | None = Header(
+        default=None, alias="X-Review-Token"
+    ),
+) -> dict[str, Any]:
+    """Central object-level capability check for every session read/write."""
+    try:
+        security = get_review_store().authorize_session(
+            session_id, x_review_token
+        )
+    except ReviewAccessError as exc:
+        raise HTTPException(status_code=403, detail="Review session access denied.") from exc
+    if security is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    if capture_only_mode() and not (
+        security["require_fresh_review"] and security["protected"]
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Capture-only deployments expose only protected fresh sessions.",
+        )
+    return security
+
+
+def require_review_admin_access(
+    x_review_admin_key: str | None = Header(
+        default=None, alias="X-Review-Admin-Key"
+    ),
+) -> bool:
+    """Authenticate operational endpoints with the server-held admin key."""
+    expected_admin_key = os.environ.get("REVIEW_SESSION_CREATE_KEY", "")
+    if not expected_admin_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Review administration is not configured.",
+        )
+    if not (
+        x_review_admin_key
+        and hmac.compare_digest(expected_admin_key, x_review_admin_key)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Review administration is not authorized.",
+        )
+    return True
+
+
 @app.post("/api/review-sessions")
-def create_review_session(request: ReviewSessionCreateRequest) -> dict[str, Any]:
+def create_review_session(
+    request: ReviewSessionCreateRequest,
+    x_review_admin_key: str | None = Header(
+        default=None, alias="X-Review-Admin-Key"
+    ),
+) -> dict[str, Any]:
     """Create a review session for one screener snapshot, or resume it.
 
     The queue keeps the backend-ranked order it was posted with. Identity is
     a snapshot fingerprint (source + ordered tickers + data dates), so the
     same screen resumes its session while new data starts a fresh one.
     """
+    expected_admin_key = os.environ.get("REVIEW_SESSION_CREATE_KEY")
+    if capture_only_mode() and not expected_admin_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Capture-only session creation is not configured.",
+        )
+    if expected_admin_key and not (
+        x_review_admin_key
+        and hmac.compare_digest(expected_admin_key, x_review_admin_key)
+    ):
+        raise HTTPException(
+            status_code=403, detail="Review session creation is not authorized."
+        )
+    if capture_only_mode() and not request.require_fresh_review:
+        raise HTTPException(
+            status_code=403,
+            detail="Capture-only deployments may create only fresh protected sessions.",
+        )
     try:
+        items: list[dict[str, Any]]
+        session_snapshot = dict(request.snapshot)
+        if request.require_fresh_review:
+            if not request.reviewer_name:
+                raise ValueError(
+                    "fresh review sessions require reviewerName"
+                )
+            if not request.access_token:
+                raise ValueError(
+                    "fresh review sessions require a capability accessToken"
+                )
+            manifest = load_review_manifest(request.source)
+            manifest_order = [
+                str(ticker).strip().upper()
+                for ticker in (
+                    manifest.get("ordered_universe")
+                    or [
+                        item.get("ticker")
+                        for item in manifest["items"]
+                        if isinstance(item, dict)
+                    ]
+                )
+            ]
+            requested_order = [
+                item.ticker.strip().upper() for item in request.items
+            ]
+            if requested_order != manifest_order:
+                raise ValueError(
+                    "fresh review sessions require the complete manifest universe "
+                    "in exact order"
+                )
+            manifest_items = {
+                str(item.get("ticker", "")).strip().upper(): item
+                for item in manifest["items"]
+                if isinstance(item, dict)
+            }
+            items = []
+            frozen_run: dict[str, Any] | None = None
+            for requested_item in request.items:
+                identity = review_snapshot_identity(
+                    request.source, requested_item.ticker
+                )
+                if identity["ticker"] not in manifest_items:
+                    raise ValueError(
+                        f"{identity['ticker']} is not present in the frozen manifest"
+                    )
+                verify_manifest_identity(
+                    identity, manifest_items[identity["ticker"]]
+                )
+                if frozen_run is None:
+                    frozen_run = identity["run"]
+                items.append(
+                    {
+                        "ticker": identity["ticker"],
+                        "snapshot": {
+                            "screen_snapshot": identity["screen_snapshot"],
+                            "corpus_labels": identity["corpus_labels"],
+                            "data_quality": identity["data_quality"],
+                            "data_quality_validation": identity[
+                                "data_quality_validation"
+                            ],
+                            "reviewable": identity["reviewable"],
+                            "frozen": {
+                                "source": identity["source"],
+                                "data_date": identity["data_date"],
+                                "sample_id": identity["sample_id"],
+                                "bars_hash": identity["bars_hash"],
+                                "snapshot_sha256": identity["snapshot_sha256"],
+                                "provenance": identity["provenance"],
+                            },
+                        },
+                        "sample_id": identity["sample_id"],
+                        "bars_hash": identity["bars_hash"],
+                        "reviewable": identity["reviewable"],
+                    }
+                )
+            session_snapshot.update(
+                {
+                    "frozen_run": manifest.get("run")
+                    or {
+                        "corpus_id": manifest.get("corpus_id"),
+                        "source_run": manifest.get("source_run"),
+                        "algorithm_version": (
+                            (manifest.get("source_run") or {}).get(
+                                "algorithm_version"
+                            )
+                            if isinstance(manifest.get("source_run"), dict)
+                            else ALGORITHM_VERSION
+                        ),
+                        "canonicalization": manifest.get("canonicalization"),
+                        "generator": manifest.get("generator"),
+                    },
+                    "frozen_source": request.source,
+                    "frozen_item_count": len(items),
+                    "frozen_manifest": {
+                        "schema_version": manifest.get("schema_version"),
+                        "kind": manifest.get("kind"),
+                        "sha256": manifest.get("_manifest_sha256"),
+                        "item_count": manifest.get(
+                            "item_count", len(manifest["items"])
+                        ),
+                        "trust_status": manifest.get("trust_status"),
+                        "source_run": manifest.get("source_run"),
+                    },
+                }
+            )
+        else:
+            items = [item.model_dump() for item in request.items]
         session, created = get_review_store().create_session(
             request.source,
-            [item.model_dump() for item in request.items],
-            snapshot=request.snapshot,
+            items,
+            snapshot=session_snapshot,
             algorithm_version=ALGORITHM_VERSION,
+            reviewer_name=request.reviewer_name,
+            capability_token_hash=(
+                hash_review_token(request.access_token)
+                if request.access_token
+                else None
+            ),
+            require_fresh_review=request.require_fresh_review,
         )
+    except ReviewAccessError as exc:
+        raise HTTPException(status_code=403, detail="Review session access denied.") from exc
+    except ReviewSnapshotError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"session": session, "created": created}
 
 
 @app.get("/api/review-sessions/{session_id}")
-def review_session(session_id: int) -> dict[str, Any]:
+def review_session(
+    session_id: int,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
     session = get_review_store().get_session(
         session_id, algorithm_version=ALGORITHM_VERSION
     )
@@ -521,8 +982,64 @@ def review_session(session_id: int) -> dict[str, Any]:
     return {"session": session}
 
 
+@app.post("/api/review-sessions/{session_id}/access-token/rotate")
+def rotate_review_session_access_token(
+    session_id: int,
+    _admin: bool = Depends(require_review_admin_access),
+) -> JSONResponse:
+    """Issue a new reviewer capability and invalidate the old one immediately."""
+    token = secrets.token_urlsafe(32)
+    try:
+        result = get_review_store().rotate_session_token(
+            session_id, hash_review_token(token)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return JSONResponse(
+        content={
+            "accessToken": token,
+            "tokenRevision": result["token_revision"],
+            "rotatedAt": result["rotated_at"],
+        },
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.post("/api/review-sessions/{session_id}/access-token/revoke")
+def revoke_review_session_access_token(
+    session_id: int,
+    _admin: bool = Depends(require_review_admin_access),
+) -> JSONResponse:
+    """Revoke the active reviewer capability without deleting review data."""
+    try:
+        result = get_review_store().revoke_session_token(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return JSONResponse(
+        content={
+            "revoked": True,
+            "tokenRevision": result["token_revision"],
+            "revokedAt": result["revoked_at"],
+        },
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
+    )
+
+
 @app.get("/api/review-sessions/{session_id}/export")
-def review_session_export(session_id: int) -> dict[str, Any]:
+def review_session_export(
+    session_id: int,
+    security: dict[str, Any] = Depends(require_review_session_access),
+) -> Response:
     """Portable, versioned corpus for analysis and offline handoff.
 
     The response contains the complete queue snapshot, current item states, and
@@ -530,28 +1047,280 @@ def review_session_export(session_id: int) -> dict[str, Any]:
     frontend wraps this JSON in a readable Markdown file without weakening the
     machine-readable contract.
     """
+    if security["require_fresh_review"] and security["finalized_at"] is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Fresh-session export is available only after finalization.",
+        )
     export = get_review_store().export_session(
         session_id, algorithm_version=ALGORITHM_VERSION
     )
     if export is None:
         raise HTTPException(status_code=404, detail="Review session not found.")
-    return export
+    canonical = canonical_json(export)
+    content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return Response(
+        content=canonical,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "X-Export-SHA256": content_hash,
+            "X-Export-Canonicalization": "coilingview-canonical-json-v1",
+        },
+    )
 
 
-@app.patch("/api/review-sessions/{session_id}/items/{ticker}")
-def patch_review_session_item(
-    session_id: int, ticker: str, patch: ReviewSessionItemPatch
+@app.get("/api/review-sessions/{session_id}/items/{ticker}/context")
+def review_session_item_context(
+    session_id: int,
+    ticker: str,
+    security: dict[str, Any] = Depends(require_review_session_access),
 ) -> dict[str, Any]:
-    """Session-specific deferral: pending/skipped only; reviewed is derived."""
-    try:
-        item = get_review_store().set_item_status(
-            session_id, ticker, patch.status, algorithm_version=ALGORITHM_VERSION
+    """Return price-only evidence until the persisted blind verdict is locked."""
+    if not security["require_fresh_review"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Frozen context is available only for fresh-review sessions.",
         )
+    item = get_review_store().get_session_item(
+        session_id, ticker, algorithm_version=ALGORITHM_VERSION
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    try:
+        if item.get("base_classification_locked"):
+            context = load_review_context(security["source"], ticker)
+        else:
+            context = load_blind_review_context(security["source"], ticker)
+    except ReviewSnapshotError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if item.get("sample_id") != context["sample_id"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Frozen context no longer matches the session sample.",
+        )
+    context["item_snapshot"] = item["snapshot"]
+    context["base_classification_locked"] = bool(
+        item.get("base_classification_locked")
+    )
+    context["base_classification_locked_at"] = item.get(
+        "base_classification_locked_at"
+    )
+    return {"context": context}
+
+
+@app.put("/api/review-sessions/{session_id}/items/{ticker}/draft")
+def put_review_session_item_draft(
+    session_id: int,
+    ticker: str,
+    request: CaptureDraftRequest,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    try:
+        item = get_review_store().save_draft(
+            session_id,
+            ticker,
+            expected_revision=request.expected_revision,
+            payload=request.payload,
+            algorithm_version=ALGORITHM_VERSION,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if item is None:
         raise HTTPException(status_code=404, detail="Review session item not found.")
     return {"item": item}
+
+
+@app.post("/api/review-sessions/{session_id}/items/{ticker}/base-lock")
+def lock_review_session_item_base_classification(
+    session_id: int,
+    ticker: str,
+    request: BaseClassificationLockRequest,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    """Atomically lock the persisted blind verdict before model reveal."""
+    try:
+        item = get_review_store().lock_base_classification(
+            session_id,
+            ticker,
+            expected_draft_revision=request.expected_draft_revision,
+            classification=request.base_classification.model_dump(
+                mode="json", by_alias=True
+            ),
+            algorithm_version=ALGORITHM_VERSION,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    return {"item": item}
+
+
+@app.post("/api/review-sessions/{session_id}/items/{ticker}/finalize")
+def finalize_review_session_item(
+    session_id: int,
+    ticker: str,
+    request: CaptureFinalizeRequest,
+    security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    """Validate and append schema-v5 feedback without changing production truth."""
+    symbol = ticker.strip().upper()
+    if request.session_id != session_id or request.ticker != symbol:
+        raise HTTPException(
+            status_code=400,
+            detail="sessionId/ticker must match the finalize route.",
+        )
+    if not security["require_fresh_review"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Capture-only finalization requires a fresh-review session.",
+        )
+    if request.learning_capture.reviewer_name != security["reviewer_name"]:
+        raise HTTPException(
+            status_code=400,
+            detail="reviewerName must match the assigned reviewer.",
+        )
+    try:
+        context = load_review_context(security["source"], symbol)
+    except ReviewSnapshotError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if request.sample_id != context["sample_id"]:
+        raise HTTPException(
+            status_code=409,
+            detail="sampleId does not match the frozen review sample.",
+        )
+    try:
+        validate_capture_against_context(request, context)
+        record = request.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude={
+                "idempotency_key",
+                "expected_draft_revision",
+                "sample_id",
+            },
+        )
+        client_provenance = record.get("provenance")
+        record["algorithm"] = context["analysis"]
+        record["provenance"] = {
+            "frozen": True,
+            "source": context["source"],
+            "sampleId": context["sample_id"],
+            "barsHash": context["bars_hash"],
+            "dataDate": context["monthly_bars"][-1]["date"],
+            "algorithmVersion": ALGORITHM_VERSION,
+            "reviewOverrideApplied": False,
+            "client": client_provenance,
+        }
+        result = get_review_store().capture_decision(
+            session_id,
+            symbol,
+            expected_draft_revision=request.expected_draft_revision,
+            sample_id=request.sample_id,
+            idempotency_key=request.idempotency_key,
+            record=record,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    item = get_review_store().get_session_item(
+        session_id, symbol, algorithm_version=ALGORITHM_VERSION
+    )
+    return {**result, "session_item": item}
+
+
+@app.post("/api/review-sessions/{session_id}/finalize")
+def finalize_review_session(
+    session_id: int,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    try:
+        result = get_review_store().finalize_session(
+            session_id, algorithm_version=ALGORITHM_VERSION
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return result
+
+
+@app.patch("/api/review-sessions/{session_id}/items/{ticker}")
+def patch_review_session_item(
+    session_id: int,
+    ticker: str,
+    patch: ReviewSessionItemPatch,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    """Session-specific deferral: pending/skipped only; reviewed is derived."""
+    try:
+        item = get_review_store().set_item_status(
+            session_id,
+            ticker,
+            patch.status,
+            reason=patch.reason,
+            algorithm_version=ALGORITHM_VERSION,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    return {"item": item}
+
+
+@app.get("/api/admin/review-storage/backup")
+def download_review_storage_backup(
+    _admin: bool = Depends(require_review_admin_access),
+):
+    """Stream a transactionally consistent SQLite backup for off-service storage."""
+    store = get_review_store()
+    if store.is_postgres:
+        raise HTTPException(
+            status_code=400,
+            detail="Use managed PostgreSQL backups for this review store.",
+        )
+    handle = tempfile.NamedTemporaryFile(
+        prefix="coilingview-review-backup-",
+        suffix=".sqlite3",
+        delete=False,
+    )
+    backup_path = Path(handle.name)
+    handle.close()
+    try:
+        store.backup_sqlite(backup_path)
+    except (OSError, ValueError) as exc:
+        backup_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Review backup could not be created.",
+        ) from exc
+    filename = (
+        "coilingview-review-backup-"
+        f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.sqlite3"
+    )
+    return FileResponse(
+        backup_path,
+        media_type="application/vnd.sqlite3",
+        filename=filename,
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+        background=BackgroundTask(backup_path.unlink, missing_ok=True),
+    )
 
 
 def vision_store() -> VisionRunStore:

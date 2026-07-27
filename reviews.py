@@ -35,6 +35,7 @@ parity.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -69,6 +70,108 @@ DECISION_CORRECTED = "corrected"
 ITEM_STATUS_PENDING = "pending"
 ITEM_STATUS_SKIPPED = "skipped"
 ITEM_STATUS_REVIEWED = "reviewed"
+
+
+class ReviewConflictError(ValueError):
+    """A protected-session write lost an optimistic or immutable-state check."""
+
+
+class ReviewAccessError(PermissionError):
+    """A protected session was addressed without its capability token."""
+
+
+def hash_review_token(token: str) -> str:
+    """One-way representation of a high-entropy review capability."""
+    value = str(token or "")
+    if not value:
+        raise ValueError("review access token is required")
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def _draft_learning_capture(draft: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(draft, dict):
+        return None
+    payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else draft
+    capture = payload.get("learningCapture", payload.get("learning_capture"))
+    return capture if isinstance(capture, dict) else None
+
+
+def _draft_matches_base_classification(
+    draft: Any,
+    classification: dict[str, Any],
+    *,
+    reviewer_name: Optional[str],
+) -> bool:
+    capture = _draft_learning_capture(draft)
+    if capture is None or capture.get("baseAssessmentLocked") is not True:
+        return False
+    if str(capture.get("reviewerName", "")).strip() != str(reviewer_name or ""):
+        return False
+    if capture.get("sequencePolicyVersion") != 1:
+        return False
+    if capture.get("basePath") != classification.get("basePath"):
+        return False
+    raw_failed = capture.get("failedBaseRules")
+    if not isinstance(raw_failed, list):
+        return False
+    if raw_failed != classification.get("failedBaseRules"):
+        return False
+    return str(capture.get("baseRationale", "")).strip() == str(
+        classification.get("rationale", "")
+    ).strip()
+
+
+def _redacted_prelock_snapshot(
+    snapshot: dict[str, Any], *, position: int
+) -> dict[str, Any]:
+    frozen = snapshot.get("frozen") if isinstance(snapshot.get("frozen"), dict) else {}
+    return {
+        "cohort_position": position + 1,
+        "reviewable": bool(snapshot.get("reviewable", True)),
+        "data_quality": snapshot.get("data_quality"),
+        "data_quality_validation": snapshot.get("data_quality_validation"),
+        "frozen": {
+            key: frozen.get(key)
+            for key in (
+                "source",
+                "data_date",
+                "sample_id",
+                "bars_hash",
+                "snapshot_sha256",
+            )
+        },
+    }
+
+
+def _redacted_prelock_draft(draft: Any) -> Optional[dict[str, Any]]:
+    capture = _draft_learning_capture(draft)
+    if capture is None:
+        return None
+    return {
+        "schemaVersion": 5,
+        "learningCapture": {
+            key: capture.get(key)
+            for key in (
+                "reviewerName",
+                "sequencePolicyVersion",
+                "baseAssessmentLocked",
+                "basePath",
+                "failedBaseRules",
+                "baseRationale",
+                "commentary",
+            )
+        },
+    }
 
 
 class ReviewedPoint(BaseModel):
@@ -389,6 +492,19 @@ _DDL = [
         PRIMARY KEY (session_id, ticker)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS review_capture_idempotency (
+        session_id INTEGER NOT NULL,
+        ticker TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        request_hash TEXT NOT NULL,
+        review_id INTEGER NOT NULL,
+        event_id TEXT NOT NULL,
+        response TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (session_id, ticker, idempotency_key)
+    )
+    """,
 ]
 
 # Pre-session deployments created high_overrides without decision provenance.
@@ -401,6 +517,31 @@ _MIGRATION_COLUMNS = {
         ("note", "TEXT"),
         ("label_policy_version", "INTEGER"),
         ("event_id", "TEXT"),
+    ],
+    "review_sessions": [
+        ("reviewer_name", "TEXT"),
+        ("capability_token_hash", "TEXT"),
+        ("require_fresh_review", "INTEGER NOT NULL DEFAULT 0"),
+        ("finalized_at", "TEXT"),
+        ("final_export", "TEXT"),
+        ("final_export_hash", "TEXT"),
+        ("token_revision", "INTEGER NOT NULL DEFAULT 1"),
+        ("token_rotated_at", "TEXT"),
+        ("token_revoked_at", "TEXT"),
+    ],
+    "review_session_items": [
+        ("draft", "TEXT"),
+        ("draft_revision", "INTEGER NOT NULL DEFAULT 0"),
+        ("draft_updated_at", "TEXT"),
+        ("completed_review_id", "INTEGER"),
+        ("completed_event_id", "TEXT"),
+        ("sample_id", "TEXT"),
+        ("bars_hash", "TEXT"),
+        ("reviewable", "INTEGER NOT NULL DEFAULT 1"),
+        ("skip_reason", "TEXT"),
+        ("completed_at", "TEXT"),
+        ("base_classification", "TEXT"),
+        ("base_classification_locked_at", "TEXT"),
     ],
 }
 
@@ -540,7 +681,9 @@ class ReviewStore:
 
     def __init__(self, database_url: Optional[str] = None, sqlite_path: Optional[Path] = None):
         self._database_url = database_url
-        self._sqlite_path = Path(sqlite_path) if sqlite_path else DEFAULT_SQLITE_PATH
+        self._sqlite_path = (
+            Path(sqlite_path) if sqlite_path else _default_sqlite_path()
+        )
         self._is_postgres = bool(database_url)
         self._ph = "%s" if self._is_postgres else "?"
         self._ensure_schema()
@@ -551,7 +694,36 @@ class ReviewStore:
 
             return psycopg2.connect(self._database_url)
         self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self._sqlite_path)
+        return sqlite3.connect(self._sqlite_path, timeout=30.0)
+
+    def _begin_protected_write(self, conn) -> None:
+        """Serialize SQLite protected-session writes before read/compare/update."""
+        if not self._is_postgres:
+            conn.execute("BEGIN IMMEDIATE")
+
+    @property
+    def is_postgres(self) -> bool:
+        return self._is_postgres
+
+    @property
+    def sqlite_path(self) -> Optional[Path]:
+        return None if self._is_postgres else self._sqlite_path
+
+    def persistence_probe(self) -> None:
+        """Verify the configured review store can be opened and queried."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM review_sessions")
+            cursor.fetchone()
+
+    def backup_sqlite(self, destination: Path) -> None:
+        """Create a transactionally consistent SQLite backup, including WAL state."""
+        if self._is_postgres:
+            raise ValueError("SQLite backup is unavailable for PostgreSQL stores")
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as source, sqlite3.connect(target) as backup:
+            source.backup(backup)
 
     def _ensure_schema(self) -> None:
         pk = "SERIAL PRIMARY KEY" if self._is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
@@ -891,7 +1063,13 @@ class ReviewStore:
             "event_id": row[10],
         }
 
-    def list_reviews(self, ticker: str, interval: str = "3M") -> list[dict[str, Any]]:
+    def list_reviews(
+        self,
+        ticker: str,
+        interval: str = "3M",
+        *,
+        include_capture_only: bool = True,
+    ) -> list[dict[str, Any]]:
         """Full append-only review history for a ticker, oldest first."""
         symbol = ticker.strip().upper()
         interval = _authoritative_interval(interval)
@@ -903,10 +1081,19 @@ class ReviewStore:
                 (symbol, interval),
             )
             rows = cursor.fetchall()
-        return [
-            {"id": int(row[0]), "created_at": str(row[1]), "record": json.loads(row[2])}
-            for row in rows
-        ]
+        history: list[dict[str, Any]] = []
+        for row in rows:
+            record = json.loads(row[2])
+            if not include_capture_only and bool(record.get("captureOnly")):
+                continue
+            history.append(
+                {
+                    "id": int(row[0]),
+                    "created_at": str(row[1]),
+                    "record": record,
+                }
+            )
+        return history
 
     # ------------------------------------------------------------------ #
     # Review sessions
@@ -918,6 +1105,9 @@ class ReviewStore:
         *,
         snapshot: Optional[dict[str, Any]] = None,
         algorithm_version: Optional[str] = None,
+        reviewer_name: Optional[str] = None,
+        capability_token_hash: Optional[str] = None,
+        require_fresh_review: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         """Create a session for one screener snapshot, or resume the existing one.
 
@@ -928,6 +1118,9 @@ class ReviewStore:
         name = str(source or "").strip()
         if not name:
             raise ValueError("Review sessions require a source.")
+        reviewer = str(reviewer_name or "").strip() or None
+        if require_fresh_review and reviewer is None:
+            raise ValueError("fresh review sessions require an assigned reviewer")
         normalized: list[dict[str, Any]] = []
         seen: set[str] = set()
         for item in items:
@@ -935,62 +1128,463 @@ class ReviewStore:
             if not ticker or ticker in seen:
                 continue
             seen.add(ticker)
-            normalized.append({"ticker": ticker, "snapshot": item.get("snapshot") or {}})
+            normalized.append(
+                {
+                    "ticker": ticker,
+                    "snapshot": item.get("snapshot") or {},
+                    "sample_id": item.get("sample_id"),
+                    "bars_hash": item.get("bars_hash"),
+                    "reviewable": bool(item.get("reviewable", True)),
+                }
+            )
         if not normalized:
             raise ValueError("Review sessions require at least one ticker.")
 
+        session_snapshot_data = dict(snapshot or {})
+        if require_fresh_review or reviewer is not None:
+            session_snapshot_data["_review_policy"] = {
+                "require_fresh_review": bool(require_fresh_review),
+                "reviewer_name": reviewer,
+            }
+        fingerprint_snapshot = dict(session_snapshot_data)
+        if require_fresh_review:
+            fingerprint_snapshot["_capability_identity"] = capability_token_hash
         fingerprint = session_fingerprint(
             name,
             normalized,
-            snapshot=snapshot,
+            snapshot=fingerprint_snapshot,
             algorithm_version=algorithm_version,
         )
         with self._connect() as conn:
+            self._begin_protected_write(conn)
             cursor = conn.cursor()
             cursor.execute(
-                f"SELECT id FROM review_sessions WHERE fingerprint = {self._ph}",
+                f"SELECT id, capability_token_hash, reviewer_name, "
+                f"require_fresh_review FROM review_sessions "
+                f"WHERE fingerprint = {self._ph}",
                 (fingerprint,),
             )
             row = cursor.fetchone()
             if row is not None:
                 session_id = int(row[0])
+                stored_hash = row[1]
+                if stored_hash and not (
+                    capability_token_hash
+                    and hmac.compare_digest(
+                        str(stored_hash), str(capability_token_hash)
+                    )
+                ):
+                    raise ReviewAccessError("review session access denied")
                 created = False
             else:
                 created_at = _utcnow()
-                session_snapshot = json.dumps(snapshot or {})
+                session_snapshot = _canonical_json(session_snapshot_data)
                 if self._is_postgres:
                     cursor.execute(
-                        f"INSERT INTO review_sessions (fingerprint, source, created_at, snapshot) "
-                        f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}) RETURNING id",
-                        (fingerprint, name, created_at, session_snapshot),
-                    )
-                    session_id = int(cursor.fetchone()[0])
-                else:
-                    cursor.execute(
-                        f"INSERT INTO review_sessions (fingerprint, source, created_at, snapshot) "
-                        f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph})",
-                        (fingerprint, name, created_at, session_snapshot),
-                    )
-                    session_id = int(cursor.lastrowid)
-                for position, item in enumerate(normalized):
-                    cursor.execute(
-                        f"INSERT INTO review_session_items "
-                        f"(session_id, position, ticker, status, snapshot, updated_at) "
-                        f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph})",
+                        f"INSERT INTO review_sessions "
+                        f"(fingerprint, source, created_at, snapshot, reviewer_name, "
+                        f"capability_token_hash, require_fresh_review) "
+                        f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+                        f"{self._ph}, {self._ph}, {self._ph}) "
+                        f"ON CONFLICT (fingerprint) DO NOTHING RETURNING id",
                         (
-                            session_id,
-                            position,
-                            item["ticker"],
-                            ITEM_STATUS_PENDING,
-                            json.dumps(item["snapshot"]),
+                            fingerprint,
+                            name,
                             created_at,
+                            session_snapshot,
+                            reviewer,
+                            capability_token_hash,
+                            int(require_fresh_review),
                         ),
                     )
-                created = True
+                    inserted = cursor.fetchone()
+                    if inserted is None:
+                        cursor.execute(
+                            f"SELECT id, capability_token_hash, reviewer_name, "
+                            f"require_fresh_review FROM review_sessions "
+                            f"WHERE fingerprint = {self._ph}",
+                            (fingerprint,),
+                        )
+                        winning = cursor.fetchone()
+                        if winning is None:
+                            raise ReviewConflictError(
+                                "session creation conflict could not be resolved"
+                            )
+                        session_id = int(winning[0])
+                        stored_hash = winning[1]
+                        if stored_hash and not (
+                            capability_token_hash
+                            and hmac.compare_digest(
+                                str(stored_hash), str(capability_token_hash)
+                            )
+                        ):
+                            raise ReviewAccessError("review session access denied")
+                        created = False
+                    else:
+                        session_id = int(inserted[0])
+                        created = True
+                else:
+                    cursor.execute(
+                        f"INSERT INTO review_sessions "
+                        f"(fingerprint, source, created_at, snapshot, reviewer_name, "
+                        f"capability_token_hash, require_fresh_review) "
+                        f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+                        f"{self._ph}, {self._ph}, {self._ph})",
+                        (
+                            fingerprint,
+                            name,
+                            created_at,
+                            session_snapshot,
+                            reviewer,
+                            capability_token_hash,
+                            int(require_fresh_review),
+                        ),
+                    )
+                    session_id = int(cursor.lastrowid)
+                    created = True
+                if created:
+                    for position, item in enumerate(normalized):
+                        cursor.execute(
+                            f"INSERT INTO review_session_items "
+                            f"(session_id, position, ticker, status, snapshot, updated_at, "
+                            f"sample_id, bars_hash, reviewable) "
+                            f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+                            f"{self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+                            f"{self._ph})",
+                            (
+                                session_id,
+                                position,
+                                item["ticker"],
+                                ITEM_STATUS_PENDING,
+                                _canonical_json(item["snapshot"]),
+                                created_at,
+                                item["sample_id"],
+                                item["bars_hash"],
+                                int(item["reviewable"]),
+                            ),
+                        )
             conn.commit()
         session = self.get_session(session_id, algorithm_version=algorithm_version)
         assert session is not None
         return session, created
+
+    def get_session_security(self, session_id: int) -> Optional[dict[str, Any]]:
+        """Return non-secret access metadata for one session."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT id, source, reviewer_name, capability_token_hash, "
+                f"require_fresh_review, finalized_at, token_revision, "
+                f"token_revoked_at "
+                f"FROM review_sessions WHERE id = {self._ph}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": int(row[0]),
+            "source": str(row[1]),
+            "reviewer_name": row[2],
+            "protected": bool(row[3]),
+            "require_fresh_review": bool(row[4]),
+            "finalized_at": row[5],
+            "token_revision": int(row[6] or 1),
+            "token_revoked_at": row[7],
+        }
+
+    def authorize_session(
+        self, session_id: int, access_token: Optional[str]
+    ) -> Optional[dict[str, Any]]:
+        """Object-level authorization for protected review sessions."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT id, source, reviewer_name, capability_token_hash, "
+                f"require_fresh_review, finalized_at, token_revision, "
+                f"token_revoked_at "
+                f"FROM review_sessions WHERE id = {self._ph}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        stored_hash = row[3]
+        if row[7] is not None:
+            raise ReviewAccessError("review session access denied")
+        if stored_hash:
+            supplied_hash = (
+                hash_review_token(access_token) if access_token else ""
+            )
+            if not supplied_hash or not hmac.compare_digest(
+                str(stored_hash), supplied_hash
+            ):
+                raise ReviewAccessError("review session access denied")
+        return {
+            "id": int(row[0]),
+            "source": str(row[1]),
+            "reviewer_name": row[2],
+            "protected": bool(stored_hash),
+            "require_fresh_review": bool(row[4]),
+            "finalized_at": row[5],
+            "token_revision": int(row[6] or 1),
+            "token_revoked_at": row[7],
+        }
+
+    def rotate_session_token(
+        self, session_id: int, token_hash: str
+    ) -> Optional[dict[str, Any]]:
+        """Replace one fresh session capability and invalidate the old token."""
+        if not token_hash:
+            raise ValueError("new token hash is required")
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, token_revision "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            if not bool(row[0]):
+                raise ValueError("token rotation requires a fresh-review session")
+            revision = int(row[1] or 1) + 1
+            rotated_at = _utcnow()
+            cursor.execute(
+                f"UPDATE review_sessions SET capability_token_hash = {self._ph}, "
+                f"token_revision = {self._ph}, token_rotated_at = {self._ph}, "
+                f"token_revoked_at = NULL WHERE id = {self._ph}",
+                (token_hash, revision, rotated_at, session_id),
+            )
+            conn.commit()
+        return {
+            "session_id": session_id,
+            "token_revision": revision,
+            "rotated_at": rotated_at,
+        }
+
+    def revoke_session_token(self, session_id: int) -> Optional[dict[str, Any]]:
+        """Immediately disable the current capability while retaining its hash."""
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, token_revision "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            if not bool(row[0]):
+                raise ValueError("token revocation requires a fresh-review session")
+            revision = int(row[1] or 1) + 1
+            revoked_at = _utcnow()
+            cursor.execute(
+                f"UPDATE review_sessions SET token_revision = {self._ph}, "
+                f"token_revoked_at = {self._ph} WHERE id = {self._ph}",
+                (revision, revoked_at, session_id),
+            )
+            conn.commit()
+        return {
+            "session_id": session_id,
+            "token_revision": revision,
+            "revoked_at": revoked_at,
+        }
+
+    def _get_fresh_session(
+        self, session_id: int, *, algorithm_version: Optional[str]
+    ) -> Optional[dict[str, Any]]:
+        """Session-owned view that deliberately ignores global review_state."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT id, fingerprint, source, created_at, snapshot, "
+                f"reviewer_name, require_fresh_review, finalized_at, "
+                f"final_export_hash, token_revision, token_rotated_at, "
+                f"token_revoked_at "
+                f"FROM review_sessions WHERE id = {self._ph}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None or not bool(session_row[6]):
+                return None
+            cursor.execute(
+                f"SELECT position, ticker, status, snapshot, updated_at, draft, "
+                f"draft_revision, draft_updated_at, completed_review_id, "
+                f"completed_event_id, sample_id, bars_hash, reviewable, "
+                f"skip_reason, completed_at, base_classification, "
+                f"base_classification_locked_at "
+                f"FROM review_session_items WHERE session_id = {self._ph} "
+                f"ORDER BY position",
+                (session_id,),
+            )
+            item_rows = cursor.fetchall()
+            review_ids = [
+                int(row[8]) for row in item_rows if row[8] is not None
+            ]
+            records: dict[int, dict[str, Any]] = {}
+            if review_ids:
+                marks = ", ".join([self._ph] * len(review_ids))
+                cursor.execute(
+                    f"SELECT id, record FROM high_reviews WHERE id IN ({marks})",
+                    tuple(review_ids),
+                )
+                records = {
+                    int(row[0]): json.loads(row[1]) for row in cursor.fetchall()
+                }
+
+        items: list[dict[str, Any]] = []
+        counts = {
+            ITEM_STATUS_PENDING: 0,
+            ITEM_STATUS_REVIEWED: 0,
+            ITEM_STATUS_SKIPPED: 0,
+        }
+        next_pending: Optional[str] = None
+        for row in item_rows:
+            (
+                position,
+                ticker,
+                stored_status,
+                item_snapshot,
+                updated_at,
+                raw_draft,
+                draft_revision,
+                draft_updated_at,
+                completed_review_id,
+                completed_event_id,
+                sample_id,
+                bars_hash,
+                reviewable,
+                skip_reason,
+                completed_at,
+                raw_base_classification,
+                base_classification_locked_at,
+            ) = row
+            base_classification = (
+                json.loads(raw_base_classification)
+                if raw_base_classification
+                else None
+            )
+            base_locked = bool(
+                base_classification is not None
+                and base_classification_locked_at is not None
+            )
+            full_snapshot = json.loads(item_snapshot) if item_snapshot else {}
+            full_draft = json.loads(raw_draft) if raw_draft else None
+            status = (
+                ITEM_STATUS_REVIEWED
+                if completed_review_id is not None
+                else str(stored_status)
+            )
+            record = (
+                records.get(int(completed_review_id), {})
+                if completed_review_id is not None
+                else {}
+            )
+            item: dict[str, Any] = {
+                "ticker": str(ticker),
+                "position": int(position),
+                "status": status,
+                "stored_status": str(stored_status),
+                "snapshot": (
+                    full_snapshot
+                    if base_locked
+                    else _redacted_prelock_snapshot(
+                        full_snapshot, position=int(position)
+                    )
+                ),
+                "draft": (
+                    full_draft
+                    if base_locked
+                    else _redacted_prelock_draft(full_draft)
+                ),
+                "draft_revision": int(draft_revision or 0),
+                "draft_updated_at": draft_updated_at,
+                "sample_id": sample_id,
+                "bars_hash": bars_hash,
+                "reviewable": bool(reviewable),
+                "skip_reason": skip_reason,
+                "completed_at": completed_at,
+                "base_classification_locked": base_locked,
+                "base_classification_locked_at": base_classification_locked_at,
+                "base_classification": base_classification,
+                "updated_at": str(updated_at),
+            }
+            if base_locked:
+                item.update(
+                    {
+                        "review_stale": False,
+                        "review_id": (
+                            int(completed_review_id)
+                            if completed_review_id is not None
+                            else None
+                        ),
+                        "review_decision": record.get("decision"),
+                        "review_as_of": record.get("asOf"),
+                        "review_algorithm_version": record.get(
+                            "algorithmVersion"
+                        ),
+                        "review_coil_label": record.get("coilLabel"),
+                        "review_human_grade": record.get("humanGrade"),
+                        "review_confidence": record.get("confidence"),
+                        "review_note": record.get("note"),
+                        "review_label_policy_version": record.get(
+                            "labelPolicyVersion"
+                        ),
+                        "review_event_id": completed_event_id,
+                        "effective": "algorithm",
+                    }
+                )
+            counts[status] = counts.get(status, 0) + 1
+            if status == ITEM_STATUS_PENDING and next_pending is None:
+                next_pending = str(ticker)
+            items.append(item)
+
+        raw_session_snapshot = (
+            json.loads(session_row[4]) if session_row[4] else {}
+        )
+        manifest_snapshot = raw_session_snapshot.get("frozen_manifest")
+        safe_manifest = (
+            {
+                key: manifest_snapshot.get(key)
+                for key in (
+                    "schema_version",
+                    "kind",
+                    "sha256",
+                    "item_count",
+                    "trust_status",
+                )
+            }
+            if isinstance(manifest_snapshot, dict)
+            else None
+        )
+        return {
+            "id": int(session_row[0]),
+            "fingerprint": str(session_row[1]),
+            "source": str(session_row[2]),
+            "created_at": str(session_row[3]),
+            "snapshot": {
+                "frozen_source": raw_session_snapshot.get("frozen_source"),
+                "frozen_item_count": raw_session_snapshot.get(
+                    "frozen_item_count"
+                ),
+                "frozen_manifest": safe_manifest,
+            },
+            "reviewer_name": session_row[5],
+            "require_fresh_review": True,
+            "finalized_at": session_row[7],
+            "export_sha256": session_row[8],
+            "token_revision": int(session_row[9] or 1),
+            "token_rotated_at": session_row[10],
+            "items": items,
+            "counts": {**counts, "total": len(items)},
+            "next_pending_ticker": next_pending,
+        }
 
     def get_session(
         self, session_id: int, *, algorithm_version: Optional[str] = None
@@ -1003,6 +1597,14 @@ class ReviewStore:
         pending/skipped stored status applies. Data staleness compares the
         decision's ``as_of`` against the item snapshot's ``data_date``.
         """
+        security = self.get_session_security(session_id)
+        if security is None:
+            return None
+        if security["require_fresh_review"]:
+            return self._get_fresh_session(
+                session_id, algorithm_version=algorithm_version
+            )
+
         with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -1105,6 +1707,133 @@ class ReviewStore:
             "next_pending_ticker": next_pending,
         }
 
+    def _build_fresh_export(
+        self,
+        cursor,
+        session_id: int,
+        *,
+        exported_at: str,
+        algorithm_version: Optional[str],
+    ) -> Optional[dict[str, Any]]:
+        """Build a capture corpus using only session-linked immutable events."""
+        cursor.execute(
+            f"SELECT id, fingerprint, source, created_at, snapshot, reviewer_name, "
+            f"require_fresh_review, finalized_at "
+            f"FROM review_sessions WHERE id = {self._ph}",
+            (session_id,),
+        )
+        session_row = cursor.fetchone()
+        if session_row is None or not bool(session_row[6]):
+            return None
+        cursor.execute(
+            f"SELECT position, ticker, status, snapshot, updated_at, draft_revision, "
+            f"draft_updated_at, completed_review_id, completed_event_id, sample_id, "
+            f"bars_hash, reviewable, skip_reason, completed_at, "
+            f"base_classification, base_classification_locked_at "
+            f"FROM review_session_items WHERE session_id = {self._ph} "
+            f"ORDER BY position",
+            (session_id,),
+        )
+        item_rows = cursor.fetchall()
+        export_items: list[dict[str, Any]] = []
+        counts = {
+            ITEM_STATUS_PENDING: 0,
+            ITEM_STATUS_REVIEWED: 0,
+            ITEM_STATUS_SKIPPED: 0,
+        }
+        next_pending: Optional[str] = None
+        for row in item_rows:
+            status = (
+                ITEM_STATUS_REVIEWED if row[7] is not None else str(row[2])
+            )
+            base_classification = (
+                json.loads(row[14]) if row[14] else None
+            )
+            base_locked = bool(
+                base_classification is not None and row[15] is not None
+            )
+            full_snapshot = json.loads(row[3]) if row[3] else {}
+            counts[status] = counts.get(status, 0) + 1
+            if status == ITEM_STATUS_PENDING and next_pending is None:
+                next_pending = str(row[1])
+            export_items.append(
+                {
+                    "position": int(row[0]),
+                    "ticker": str(row[1]),
+                    "status": status,
+                    "snapshot": (
+                        full_snapshot
+                        if base_locked
+                        else _redacted_prelock_snapshot(
+                            full_snapshot, position=int(row[0])
+                        )
+                    ),
+                    "updated_at": str(row[4]),
+                    "draft_revision": int(row[5] or 0),
+                    "draft_updated_at": row[6],
+                    "linked_review_id": (
+                        int(row[7]) if row[7] is not None else None
+                    ),
+                    "linked_event_id": row[8],
+                    "sample_id": row[9],
+                    "bars_hash": row[10],
+                    "reviewable": bool(row[11]),
+                    "skip_reason": row[12],
+                    "completed_at": row[13],
+                    "base_classification": base_classification,
+                    "base_classification_locked_at": row[15],
+                }
+            )
+
+        cursor.execute(
+            f"SELECT DISTINCT review_id FROM review_capture_idempotency "
+            f"WHERE session_id = {self._ph} ORDER BY review_id",
+            (session_id,),
+        )
+        review_ids = [int(row[0]) for row in cursor.fetchall()]
+        records: list[dict[str, Any]] = []
+        if review_ids:
+            marks = ", ".join([self._ph] * len(review_ids))
+            cursor.execute(
+                f"SELECT id, ticker, interval, created_at, record "
+                f"FROM high_reviews WHERE id IN ({marks}) ORDER BY id",
+                tuple(review_ids),
+            )
+            for review_id, ticker, interval, created_at, raw_record in cursor.fetchall():
+                record = json.loads(raw_record)
+                records.append(
+                    {
+                        "id": int(review_id),
+                        "event_id": record.get("eventId"),
+                        "ticker": str(ticker),
+                        "interval": str(interval),
+                        "created_at": str(created_at),
+                        "record": record,
+                    }
+                )
+
+        session_snapshot = json.loads(session_row[4]) if session_row[4] else {}
+        return {
+            "schema_version": 3,
+            "kind": "coilingview.fresh-review-session-feedback",
+            "exported_at": exported_at,
+            "algorithm_version": algorithm_version,
+            "reviewer": {"name": session_row[5]},
+            "frozen_run": session_snapshot.get("frozen_run"),
+            "session": {
+                "id": int(session_row[0]),
+                "fingerprint": str(session_row[1]),
+                "source": str(session_row[2]),
+                "created_at": str(session_row[3]),
+                "finalized_at": session_row[7],
+                "snapshot": session_snapshot,
+                "items": export_items,
+                "counts": {**counts, "total": len(export_items)},
+                "next_pending_ticker": next_pending,
+            },
+            "records": records,
+        }
+
     def export_session(
         self, session_id: int, *, algorithm_version: Optional[str] = None
     ) -> Optional[dict[str, Any]]:
@@ -1121,6 +1850,26 @@ class ReviewStore:
         as a model-update unit. Consumers can combine exports, deduplicate by
         session fingerprint + review id, and train/evaluate on the full corpus.
         """
+        security = self.get_session_security(session_id)
+        if security is None:
+            return None
+        if security["require_fresh_review"]:
+            with self._connect() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT final_export FROM review_sessions WHERE id = {self._ph}",
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return json.loads(row[0])
+                return self._build_fresh_export(
+                    cursor,
+                    session_id,
+                    exported_at=_utcnow(),
+                    algorithm_version=algorithm_version,
+                )
+
         session = self.get_session(session_id, algorithm_version=algorithm_version)
         if session is None:
             return None
@@ -1173,12 +1922,460 @@ class ReviewStore:
             "records": records,
         }
 
+    def finalize_session(
+        self, session_id: int, *, algorithm_version: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
+        """Freeze a complete fresh-session export and make every item immutable."""
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, finalized_at, final_export, "
+                f"final_export_hash FROM review_sessions "
+                f"WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            if not bool(row[0]):
+                raise ValueError("only fresh-review sessions can be finalized")
+            if row[2]:
+                return {
+                    "export": json.loads(row[2]),
+                    "sha256": str(row[3]),
+                    "finalized_at": row[1],
+                }
+
+            cursor.execute(
+                f"SELECT ticker, status, completed_review_id, skip_reason "
+                f"FROM review_session_items WHERE session_id = {self._ph} "
+                f"ORDER BY position",
+                (session_id,),
+            )
+            pending: list[str] = []
+            for ticker, status, completed_review_id, skip_reason in cursor.fetchall():
+                complete = completed_review_id is not None
+                valid_skip = (
+                    str(status) == ITEM_STATUS_SKIPPED
+                    and bool(str(skip_reason or "").strip())
+                )
+                if not complete and not valid_skip:
+                    pending.append(str(ticker))
+            if pending:
+                raise ReviewConflictError(
+                    "session still has pending items: " + ", ".join(pending)
+                )
+
+            finalized_at = _utcnow()
+            payload = self._build_fresh_export(
+                cursor,
+                session_id,
+                exported_at=finalized_at,
+                algorithm_version=algorithm_version,
+            )
+            assert payload is not None
+            payload["session"]["finalized_at"] = finalized_at
+            content_hash = hashlib.sha256(
+                _canonical_json(payload).encode("utf-8")
+            ).hexdigest()
+            frozen = _canonical_json(payload)
+            cursor.execute(
+                f"UPDATE review_sessions SET finalized_at = {self._ph}, "
+                f"final_export = {self._ph}, final_export_hash = {self._ph} "
+                f"WHERE id = {self._ph} AND finalized_at IS NULL",
+                (finalized_at, frozen, content_hash, session_id),
+            )
+            if cursor.rowcount != 1:
+                raise ReviewConflictError("session finalization lost a race")
+            conn.commit()
+        return {
+            "export": json.loads(frozen),
+            "sha256": content_hash,
+            "finalized_at": finalized_at,
+        }
+
+    def save_draft(
+        self,
+        session_id: int,
+        ticker: str,
+        *,
+        expected_revision: int,
+        payload: dict[str, Any],
+        algorithm_version: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Durably save one incomplete item draft with optimistic concurrency."""
+        symbol = ticker.strip().upper()
+        serialized = _canonical_json(payload)
+        if len(serialized.encode("utf-8")) > 256_000:
+            raise ValueError("review draft exceeds the 256 KB limit")
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, finalized_at, reviewer_name "
+                f"FROM review_sessions "
+                f"WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            if not bool(session_row[0]):
+                raise ValueError("durable drafts require a fresh-review session")
+            if session_row[1] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            cursor.execute(
+                f"SELECT draft_revision, completed_review_id, base_classification "
+                f"FROM review_session_items "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                (session_id, symbol),
+            )
+            item_row = cursor.fetchone()
+            if item_row is None:
+                return None
+            if item_row[1] is not None:
+                raise ReviewConflictError("reviewed items are immutable")
+            if item_row[2]:
+                classification = json.loads(item_row[2])
+                if not _draft_matches_base_classification(
+                    payload,
+                    classification,
+                    reviewer_name=session_row[2],
+                ):
+                    raise ReviewConflictError(
+                        "locked base classification cannot be changed"
+                    )
+            current_revision = int(item_row[0] or 0)
+            if current_revision != expected_revision:
+                raise ReviewConflictError(
+                    f"draft revision conflict: current revision is {current_revision}"
+                )
+            next_revision = current_revision + 1
+            updated_at = _utcnow()
+            cursor.execute(
+                f"UPDATE review_session_items SET draft = {self._ph}, "
+                f"draft_revision = {self._ph}, draft_updated_at = {self._ph}, "
+                f"updated_at = {self._ph}, status = {self._ph}, skip_reason = NULL "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND draft_revision = {self._ph} AND completed_review_id IS NULL",
+                (
+                    serialized,
+                    next_revision,
+                    updated_at,
+                    updated_at,
+                    ITEM_STATUS_PENDING,
+                    session_id,
+                    symbol,
+                    current_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ReviewConflictError("draft revision conflict")
+            conn.commit()
+        return self.get_session_item(
+            session_id, symbol, algorithm_version=algorithm_version
+        )
+
+    def lock_base_classification(
+        self,
+        session_id: int,
+        ticker: str,
+        *,
+        expected_draft_revision: int,
+        classification: dict[str, Any],
+        algorithm_version: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Persist the blind Step-1 verdict that unlocks model evidence."""
+        symbol = ticker.strip().upper()
+        serialized = _canonical_json(classification)
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, finalized_at, reviewer_name "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            if not bool(session_row[0]):
+                raise ValueError("base locks require a fresh-review session")
+            if session_row[1] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            cursor.execute(
+                f"SELECT draft_revision, draft, completed_review_id, reviewable, "
+                f"status, base_classification, base_classification_locked_at "
+                f"FROM review_session_items "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                (session_id, symbol),
+            )
+            item_row = cursor.fetchone()
+            if item_row is None:
+                return None
+            existing = json.loads(item_row[5]) if item_row[5] else None
+            if existing is not None and item_row[6] is not None:
+                if hmac.compare_digest(
+                    _canonical_json(existing), serialized
+                ):
+                    conn.commit()
+                    return self.get_session_item(
+                        session_id,
+                        symbol,
+                        algorithm_version=algorithm_version,
+                    )
+                raise ReviewConflictError(
+                    "base classification is already locked"
+                )
+            if item_row[2] is not None:
+                raise ReviewConflictError("reviewed items are immutable")
+            if not bool(item_row[3]):
+                raise ReviewConflictError(
+                    "quarantined samples cannot reveal model evidence"
+                )
+            if str(item_row[4]) == ITEM_STATUS_SKIPPED:
+                raise ReviewConflictError("skipped items cannot be base-locked")
+            current_revision = int(item_row[0] or 0)
+            if current_revision != expected_draft_revision:
+                raise ReviewConflictError(
+                    f"draft revision conflict: current revision is {current_revision}"
+                )
+            draft = json.loads(item_row[1]) if item_row[1] else None
+            if not _draft_matches_base_classification(
+                draft,
+                classification,
+                reviewer_name=session_row[2],
+            ):
+                raise ValueError(
+                    "persisted draft does not match the validated base classification"
+                )
+            locked_at = _utcnow()
+            cursor.execute(
+                f"UPDATE review_session_items SET base_classification = {self._ph}, "
+                f"base_classification_locked_at = {self._ph}, "
+                f"updated_at = {self._ph} "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND draft_revision = {self._ph} "
+                f"AND base_classification IS NULL",
+                (
+                    serialized,
+                    locked_at,
+                    locked_at,
+                    session_id,
+                    symbol,
+                    current_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ReviewConflictError("base classification lock lost a race")
+            conn.commit()
+        return self.get_session_item(
+            session_id, symbol, algorithm_version=algorithm_version
+        )
+
+    def capture_decision(
+        self,
+        session_id: int,
+        ticker: str,
+        *,
+        expected_draft_revision: int,
+        sample_id: str,
+        idempotency_key: str,
+        record: dict[str, Any],
+    ) -> Optional[dict[str, Any]]:
+        """Append one capture-only schema-v5 event and link it to its item.
+
+        This path intentionally never calls ``_upsert_state`` or
+        ``_upsert_override``.  The event is research feedback, not an
+        authoritative production rule.
+        """
+        symbol = ticker.strip().upper()
+        key = str(idempotency_key or "").strip()
+        if not key:
+            raise ValueError("idempotencyKey is required")
+        request_basis = {
+            "session_id": session_id,
+            "ticker": symbol,
+            "expected_draft_revision": expected_draft_revision,
+            "sample_id": sample_id,
+            "record": record,
+        }
+        request_hash = hashlib.sha256(
+            _canonical_json(request_basis).encode("utf-8")
+        ).hexdigest()
+
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT source, reviewer_name, require_fresh_review, finalized_at "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            cursor.execute(
+                f"SELECT draft_revision, completed_review_id, sample_id, bars_hash, "
+                f"reviewable, base_classification, base_classification_locked_at "
+                f"FROM review_session_items "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                (session_id, symbol),
+            )
+            item_row = cursor.fetchone()
+            if item_row is None:
+                return None
+
+            cursor.execute(
+                f"SELECT request_hash, response FROM review_capture_idempotency "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND idempotency_key = {self._ph}",
+                (session_id, symbol, key),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                if not hmac.compare_digest(str(existing[0]), request_hash):
+                    raise ReviewConflictError(
+                        "idempotencyKey was already used for a different request"
+                    )
+                return json.loads(existing[1])
+
+            if not bool(session_row[2]):
+                raise ValueError("capture finalization requires a fresh-review session")
+            if session_row[3] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            reviewer = str(session_row[1] or "")
+            capture_reviewer = str(
+                (record.get("learningCapture") or {}).get("reviewerName") or ""
+            )
+            if not reviewer or capture_reviewer != reviewer:
+                raise ValueError(
+                    "learningCapture.reviewerName must match the assigned reviewer"
+                )
+            if item_row[1] is not None:
+                raise ReviewConflictError("review item has already been finalized")
+            if not bool(item_row[4]):
+                raise ReviewConflictError(
+                    "quarantined data-quality samples cannot be finalized"
+                )
+            if item_row[5] is None or item_row[6] is None:
+                raise ReviewConflictError(
+                    "base classification must be locked before finalization"
+                )
+            classification = json.loads(item_row[5])
+            if not _draft_matches_base_classification(
+                record,
+                classification,
+                reviewer_name=session_row[1],
+            ):
+                raise ValueError(
+                    "final review cannot change the locked base classification"
+                )
+            current_revision = int(item_row[0] or 0)
+            if current_revision != expected_draft_revision:
+                raise ReviewConflictError(
+                    f"draft revision conflict: current revision is {current_revision}"
+                )
+            if not item_row[2] or not hmac.compare_digest(
+                str(item_row[2]), str(sample_id)
+            ):
+                raise ReviewConflictError(
+                    "sampleId does not match the session-owned frozen sample"
+                )
+
+            created_at = _utcnow()
+            event_id = str(uuid.uuid4())
+            stored_record = dict(record)
+            stored_record.update(
+                {
+                    "schemaVersion": 5,
+                    "captureOnly": True,
+                    "sessionId": session_id,
+                    "ticker": symbol,
+                    "sampleId": sample_id,
+                    "eventId": event_id,
+                    "serverCreatedAt": created_at,
+                    "frozenContext": {
+                        "source": str(session_row[0]),
+                        "barsHash": item_row[3],
+                        "sampleId": sample_id,
+                    },
+                }
+            )
+            review_id = self._insert_review_row(
+                cursor, symbol, AUTHORITATIVE_INTERVAL, created_at, stored_record
+            )
+            cursor.execute(
+                f"UPDATE review_session_items SET status = {self._ph}, "
+                f"completed_review_id = {self._ph}, completed_event_id = {self._ph}, "
+                f"completed_at = {self._ph}, updated_at = {self._ph}, "
+                f"skip_reason = NULL "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND draft_revision = {self._ph} AND completed_review_id IS NULL",
+                (
+                    ITEM_STATUS_REVIEWED,
+                    review_id,
+                    event_id,
+                    created_at,
+                    created_at,
+                    session_id,
+                    symbol,
+                    current_revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ReviewConflictError("review item finalization lost a race")
+            response = {
+                "review": {
+                    "id": review_id,
+                    "ticker": symbol,
+                    "interval": AUTHORITATIVE_INTERVAL,
+                    "decision": stored_record.get("decision"),
+                    "session_id": session_id,
+                    "as_of": stored_record.get("asOf"),
+                    "algorithm_version": stored_record.get("algorithmVersion"),
+                    "event_id": event_id,
+                    "coil_label": stored_record.get("coilLabel"),
+                    "human_grade": stored_record.get("humanGrade"),
+                    "confidence": stored_record.get("confidence"),
+                    "note": stored_record.get("note"),
+                    "created_at": created_at,
+                    "capture_only": True,
+                    "sample_id": sample_id,
+                }
+            }
+            cursor.execute(
+                f"INSERT INTO review_capture_idempotency "
+                f"(session_id, ticker, idempotency_key, request_hash, review_id, "
+                f"event_id, response, created_at) "
+                f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+                f"{self._ph}, {self._ph}, {self._ph}, {self._ph})",
+                (
+                    session_id,
+                    symbol,
+                    key,
+                    request_hash,
+                    review_id,
+                    event_id,
+                    _canonical_json(response),
+                    created_at,
+                ),
+            )
+            conn.commit()
+        return response
+
     def set_item_status(
         self,
         session_id: int,
         ticker: str,
         status: str,
         *,
+        reason: Optional[str] = None,
         algorithm_version: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
         """Session-specific deferral: only pending/skipped are storable.
@@ -1189,12 +2386,46 @@ class ReviewStore:
         if status not in (ITEM_STATUS_PENDING, ITEM_STATUS_SKIPPED):
             raise ValueError("item status must be 'pending' or 'skipped'")
         symbol = ticker.strip().upper()
+        normalized_reason = str(reason or "").strip() or None
         with self._connect() as conn:
+            self._begin_protected_write(conn)
             cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
             cursor.execute(
-                f"UPDATE review_session_items SET status = {self._ph}, updated_at = {self._ph} "
+                f"SELECT require_fresh_review, finalized_at FROM review_sessions "
+                f"WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            fresh = bool(session_row[0])
+            if fresh and session_row[1] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            if fresh and status == ITEM_STATUS_SKIPPED and normalized_reason is None:
+                raise ValueError("fresh-review skips require a nonempty reason")
+            if fresh:
+                cursor.execute(
+                    f"SELECT completed_review_id FROM review_session_items "
+                    f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                    (session_id, symbol),
+                )
+                item_row = cursor.fetchone()
+                if item_row is None:
+                    return None
+                if item_row[0] is not None:
+                    raise ReviewConflictError("reviewed items are immutable")
+            cursor.execute(
+                f"UPDATE review_session_items SET status = {self._ph}, "
+                f"skip_reason = {self._ph}, updated_at = {self._ph} "
                 f"WHERE session_id = {self._ph} AND ticker = {self._ph}",
-                (status, _utcnow(), session_id, symbol),
+                (
+                    status,
+                    normalized_reason if status == ITEM_STATUS_SKIPPED else None,
+                    _utcnow(),
+                    session_id,
+                    symbol,
+                ),
             )
             changed = cursor.rowcount
             conn.commit()

@@ -64,7 +64,10 @@ def _synthetic_monthly(rows: int = 130) -> pd.DataFrame:
 def test_health(client):
     resp = client.get("/api/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["capture_only"] is False
+    assert body["persistence"]["ready"] is True
 
 
 def test_default_tickers(client):
