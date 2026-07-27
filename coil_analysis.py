@@ -17,11 +17,27 @@ lid, before the breakout has played out:
    / ascending compression), so price is being squeezed into the lid.
 5. Loaded     - the last close sits near the lid, not mid-base.
 
-The module walks the monthly series, finds swing highs by pivot windows,
-ranks them by prominence, searches anchor pairs of major tops for the best
-resistance line (most touches, longest span, flattest, still relevant from
-the present looking back), then verifies the coil conditions and grades the
-slope. Everything is pure Python over the cached bar dicts
+How the lid is chosen (v2.2)
+----------------------------
+The lid is a **repeated historical ceiling**, never a line through the live
+price. The monthly series is aggregated into quarterly candles, a trailing
+partial quarter is dropped, and the confirmed quarterly mountains are
+clustered by price into *zones*. The clustering pool has its own prominence
+gate (``zone_candidate_prominence_pct``), looser than the chart overlay's,
+because a touch of a ceiling inside a coil falls away far less than a
+standalone mountain does. A zone qualifies when it holds at least two
+members within ``zone_similarity_pct`` of each other, separated by at least
+``zone_min_separation_quarters``. Zones whose level is unreachable from the
+last close are filtered out as a different price era, and the survivors are
+ranked **recency first** (most recent repeated ceiling wins), then by member
+count, span, and start index. The winning zone's earliest and latest members
+anchor the line; interior members are touches. If no zone qualifies there is
+no lid, which is the right answer for a chart that never built a ceiling.
+
+Where the last close is allowed to matter: proximity to the lid, the +/-20%
+band that decides ``metrics.current_price_position``, the breakout state
+machine, and the era-relevance filter. It may never decide *which points*
+define the lid. Everything is pure Python over the cached bar dicts
 (`{"date","open","high","low","close","volume"}`, monthly) so it runs
 identically from the API, the CLI, tests, and backtest truncations (`as_of`).
 
@@ -42,7 +58,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 SCHEMA_VERSION = 2
-ALGORITHM_VERSION = "2.0.0"
+ALGORITHM_VERSION = "2.2.0"
 ANALYSIS_INTERVAL = "3M"  # classification is quarterly-native regardless of view
 SOURCE = "timeseries"
 BARS_PER_YEAR = 12.0  # module operates on monthly bars
@@ -59,6 +75,11 @@ LIFECYCLE_FORMING = "forming"
 LIFECYCLE_PRE_BREAKOUT = "pre_breakout"
 LIFECYCLE_BREAKING_OUT = "breaking_out"
 LIFECYCLE_POST_BREAKOUT = "post_breakout"
+
+# Where the last close sits against the lid's +/-20% band (schema v2.2).
+PRICE_POSITION_BELOW = "below_lid_band"
+PRICE_POSITION_WITHIN = "within_lid_band"
+PRICE_POSITION_ABOVE = "above_lid_band"
 
 
 @dataclass(frozen=True)
@@ -112,22 +133,35 @@ class CoilConfig:
     display_intermediate_anchor_tolerance_pct: float = 7.2
     display_intermediate_anchor_min_separation: int = 18
     display_max_highs: int = 3
-    # The current right edge has no future bars with which to confirm a fall.
-    # Surface it provisionally when it is the high of the unconfirmed tail,
-    # has risen sharply from the valley after the last accepted mountain, and
-    # is at least as high as that mountain.
+    # The unconfirmed right edge is never structure (v2.2). This window only
+    # exempts the newest candles from the slower-comparable-retest suppression,
+    # which needs future candles to measure a rejection.
     display_right_edge_bars: int = 3
-    display_right_edge_min_rise_pct: float = 30.0
-    # Regime selection (v2). Candidate lids are generated from windows anchored
-    # at full-history mountains; the active regime is chosen by rule, not by a
-    # fixed lookback. ``regime_max_windows`` bounds the hypothesis count.
-    regime_max_windows: int = 12
-    regime_default_window_bars: int = 120  # legacy 10y window kept as one hypothesis
+    # Lid zone selection (v2.2). A lid is a *repeated historical ceiling*: two
+    # or more confirmed quarterly mountains standing at one price level, well
+    # separated in time. Candidates are clustered by price; the winning zone's
+    # earliest and latest members anchor the line.
+    zone_similarity_pct: float = 5.0  # member within this % of the zone seed
+    zone_min_separation_quarters: int = 4  # earliest -> latest member distance
+    # The zone pool has its own prominence gate, deliberately looser than
+    # ``display_major_prominence_pct``. That 28% figure was tuned for the old
+    # pair search, whose job was to find giant standalone two-sided mountains.
+    # A *touch of a ceiling inside a coil* pulls back only modestly, so a 28%
+    # gate keeps precisely the peaks that are never repeated at one level and
+    # discards the repetition the zone builder exists to find (33 of the 79
+    # cached tickers reported no_structure under it).
+    #
+    # Swept 0 -> 28 over the cached corpus. The reference names pin the gate
+    # from both sides: KN's 2021-06 top (prominence 17.68%) must stay out or
+    # it drags the 22.5 zone level down and KN loses its A grade at
+    # as_of=2025-09-30; CNR.TO's 2022-03 top (19.96%) must stay in or its
+    # 171.5 ceiling disappears. 18.5 is the middle of the resulting window and
+    # of the corpus's flat 18.0-19.0 plateau (64 with structure, 13 graded).
+    zone_candidate_prominence_pct: float = 18.5
+    # Era-relevance filter (never a ranker): a zone whose level is unreachable
+    # from today's price belongs to a different price era.
     regime_relevance_min_pct: float = 50.0  # last close must reach this % of lid value
     regime_relevance_max_pct: float = 400.0  # price far above an old lid = obsolete line
-    # A line spanning a confirmed interior mountain that sits this far below it
-    # is floating above a newer, lower ceiling regime rather than lidding it.
-    regime_interior_major_max_below_pct: float = 15.0
     # Quarterly breakout state machine (v2). The escape band adapts to recent
     # quarterly true range so volatile charts are not flagged by noise.
     breakout_band_min_pct: float = 2.5
@@ -156,6 +190,11 @@ class CoilConfig:
     # Falling lids are a different pattern; the search floor matches the
     # grading floor so a steeply descending line never wins over a flat one.
     min_slope_pct_per_year: float = -3.0
+    # Lid band (v2.2). ``proximity_pct`` outside this band means the chart is
+    # not being read against its lid: below it price is still basing, above it
+    # the move already happened. Both edges are inside the band.
+    lid_band_lower_pct: float = 80.0
+    lid_band_upper_pct: float = 120.0
     # Coil gates
     min_proximity_pct: float = 70.0
     max_last_depth_ratio: float = 0.65
@@ -558,11 +597,15 @@ def _select_window_role_points(
     This is intentionally stricter than ``select_major_highs``, whose wider
     candidate pool feeds resistance-line search. The selection contract follows
     human review: large two-sided mountains only (``major_top``), first bar of
-    a plateau, non-decreasing peak levels, plus a strong provisional high in
-    the unconfirmed right-edge tail (``provisional_top``). Secondary and
-    intermediate line anchors that are not strict mountains are tagged
-    ``structural_retest``. ``max_points`` of None keeps every qualifying point
-    (v2 uncapped fitting); an integer keeps only the latest N.
+    a plateau, non-decreasing peak levels. Secondary and intermediate line
+    anchors that are not strict mountains are tagged ``structural_retest``.
+    ``max_points`` of None keeps every qualifying point (v2 uncapped fitting);
+    an integer keeps only the latest N.
+
+    v2.2: every point here is a *confirmed* two-sided mountain or retest. The
+    unconfirmed right edge is no longer surfaced provisionally and is never
+    exempted from the prominence tests — a lid may not be defined by the live
+    price (see ``ROLE_PROVISIONAL_TOP``, kept only for stored reviews).
     """
     if len(bars) < 2:
         return []
@@ -570,7 +613,6 @@ def _select_window_role_points(
     highs = [float(bar["high"]) for bar in bars]
     lows = [float(bar["low"]) for bar in bars]
     closes = [float(bar["close"]) for bar in bars]
-    last_idx = len(bars) - 1
     window_start = max(0, min(window_start, len(bars) - 2))
     roles: dict[int, str] = {}
     evidence: dict[int, dict[str, Any]] = {}
@@ -631,38 +673,9 @@ def _select_window_role_points(
         if not progressive or candidate.price >= progressive[-1].price * (1.0 - level_tol):
             progressive.append(candidate)
 
-    # The final bars cannot have a confirmed fall yet. Include their maximum
-    # as a provisional mountain only when the rise from the intervening valley
-    # is already large and the peak extends (or matches) the established level.
-    edge_count = max(1, config.display_right_edge_bars)
-    edge_start = max(window_start, len(bars) - edge_count)
-    # Use the highest bar in the whole unconfirmed tail. On a quarterly chart
-    # this may be the candle immediately left of a new partial quarter, which
-    # is still the visually correct extreme-right mountain (and avoids moving
-    # the marker onto a lower partial candle).
-    edge_idx = max(range(edge_start, len(bars)), key=lambda idx: highs[idx])
-    far_enough = all(
-        abs(edge_idx - point.idx) >= config.display_major_min_separation
-        for point in progressive
-    )
-    level_ok = not progressive or highs[edge_idx] >= progressive[-1].price * (1.0 - level_tol)
-    valley_start = progressive[-1].idx + 1 if progressive else window_start
-    if valley_start <= edge_idx:
-        valley = min(lows[valley_start : edge_idx + 1])
-        rise_pct = (highs[edge_idx] - valley) / highs[edge_idx] * 100.0
-    else:
-        rise_pct = 0.0
-    if far_enough and level_ok and rise_pct >= config.display_right_edge_min_rise_pct:
-        progressive.append(
-            SwingPoint(
-                idx=edge_idx,
-                date=str(bars[edge_idx]["date"]),
-                price=highs[edge_idx],
-                prominence_pct=rise_pct,
-            )
-        )
-        roles[edge_idx] = ROLE_PROVISIONAL_TOP
-        evidence[edge_idx] = {"rise_pct": round(rise_pct, 2)}
+    # The newest candles are still exempt from the slower-comparable-retest
+    # suppression below, which needs future candles to measure a rejection.
+    edge_start = max(window_start, len(bars) - max(1, config.display_right_edge_bars))
 
     if max_points is not None and max_points <= 0:
         return []
@@ -670,8 +683,8 @@ def _select_window_role_points(
 
     # Validate candle-body separation only after choosing the latest peaks.
     # This prevents a rejected shoulder from backfilling the overlay with an
-    # obsolete older shelf. The provisional tail peak is exempt because it has
-    # no future candle bodies yet; its rise gate above is the evidence we have.
+    # obsolete older shelf. Every point must pass, including the newest: a
+    # peak with no confirming future candles is not structure yet.
     confirmed: list[SwingPoint] = []
     window_low = min(lows[window_start:])
     window_high = max(highs[window_start:])
@@ -681,10 +694,6 @@ def _select_window_role_points(
             (point.price - window_low) / window_span * 100.0 if window_span > 0 else 100.0
         )
         if range_position_pct < config.display_min_range_position_pct:
-            continue
-        if point.idx >= edge_start:
-            confirmed.append(point)
-            evidence.setdefault(point.idx, {})["range_position_pct"] = round(range_position_pct, 2)
             continue
         body_prominence = _mountain_prominence(
             highs,
@@ -719,7 +728,7 @@ def _select_window_role_points(
             max(0.0, config.display_secondary_anchor_min_level_pct) / 100.0
         )
         secondary: list[SwingPoint] = []
-        for idx in sorted(set(pivot_idxs + [edge_idx])):
+        for idx in pivot_idxs:
             if idx in existing_idxs or highs[idx] < min_level:
                 continue
             range_position_pct = (
@@ -730,21 +739,16 @@ def _select_window_role_points(
             if range_position_pct < config.display_min_range_position_pct:
                 continue
 
-            if idx == edge_idx and idx >= edge_start:
-                left = min(lows[window_start : idx + 1])
-                wick_prominence_pct = (highs[idx] - left) / highs[idx] * 100.0
-                body_prominence_pct = wick_prominence_pct
-            else:
-                wick_prominence_pct = (
-                    _mountain_prominence(highs, lows, idx, pivot_set, equal_tol)
-                    / highs[idx]
-                    * 100.0
-                )
-                body_prominence_pct = (
-                    _mountain_prominence(highs, closes, idx, pivot_set, equal_tol)
-                    / highs[idx]
-                    * 100.0
-                )
+            wick_prominence_pct = (
+                _mountain_prominence(highs, lows, idx, pivot_set, equal_tol)
+                / highs[idx]
+                * 100.0
+            )
+            body_prominence_pct = (
+                _mountain_prominence(highs, closes, idx, pivot_set, equal_tol)
+                / highs[idx]
+                * 100.0
+            )
             if wick_prominence_pct < config.display_secondary_anchor_min_prominence_pct:
                 continue
             if body_prominence_pct < config.display_secondary_anchor_body_prominence_pct:
@@ -908,6 +912,33 @@ def _quarter_is_complete(quarter: dict[str, Any]) -> bool:
     return int(quarter["_last_month"]) % 3 == 0
 
 
+def _completed_quarters(quarterly: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The structure series: quarterly bars minus a trailing partial quarter.
+
+    Invariant (v2.2): nothing inside the incomplete final quarter may become a
+    top, a marker, a touch, or a lid anchor. Indices are preserved because only
+    a trailing element is dropped, so a quarterly index is valid in both lists.
+    The full series is still used for the last close, the breakout state
+    machine's provisional escape, and chart rendering.
+    """
+    if quarterly and not _quarter_is_complete(quarterly[-1]):
+        return quarterly[:-1]
+    return list(quarterly)
+
+
+def _last_structural_month_idx(
+    quarterly: list[dict[str, Any]],
+    monthly_last_idx: int,
+) -> int:
+    """Last monthly index that belongs to a completed quarter."""
+    completed = _completed_quarters(quarterly)
+    if not completed:
+        return -1
+    if len(completed) == len(quarterly):
+        return monthly_last_idx
+    return int(completed[-1]["_close_source_idx"])
+
+
 def _quarterly_scaled_config(config: CoilConfig) -> CoilConfig:
     """Scale monthly-bar tunables into quarterly-bar coordinates."""
     return replace(
@@ -936,9 +967,8 @@ def _quarterly_scaled_config(config: CoilConfig) -> CoilConfig:
         stale_line_months=max(1, math.ceil(config.stale_line_months / 3)),
         broken_out_max_age=max(1, math.ceil(config.broken_out_max_age / 3)),
         touch_cluster_bars=max(1, math.ceil(config.touch_cluster_bars / 3)),
-        # Inspect the current and immediately preceding quarterly candle. This
-        # keeps the strongest unconfirmed right-edge mountain when the latest
-        # quarter is only partially formed.
+        # The two newest quarterly candles have too little future context for
+        # the slower-comparable-retest suppression to judge their rejection.
         display_right_edge_bars=2,
     )
 
@@ -968,6 +998,26 @@ def _remap_quarterly_role_point(
     )
 
 
+def _cap_major_highs(
+    role_points: list[RolePoint],
+    lid_member_idxs: set[int],
+    max_highs: int,
+) -> list[RolePoint]:
+    """Cap the overlay list without ever dropping a lid member.
+
+    ``display_max_highs`` caps the legacy overlay, but a zone can hold more
+    members than the cap and the overlay draws the lid between two of them.
+    Truncating to the latest N would silently hide an anchor, leaving a line
+    that starts at an unmarked candle. Keep every lid member, then backfill
+    with the most recent non-members up to the cap.
+    """
+    max_highs = max(0, max_highs)
+    members = [rp for rp in role_points if rp.point.idx in lid_member_idxs]
+    others = [rp for rp in role_points if rp.point.idx not in lid_member_idxs]
+    backfill = others[len(members) - max_highs :] if len(members) < max_highs else []
+    return sorted(members + backfill, key=lambda rp: rp.point.idx)
+
+
 def detect_display_major_highs(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
@@ -979,14 +1029,21 @@ def detect_display_major_highs(
     remapped to the source month that supplied the quarter's high so API dates
     remain precise while the frontend still lands on the correct 3M candle.
 
-    v2: the points come from the full-history active-regime selection, capped
-    to the latest ``display_max_highs`` for the legacy overlay contract.
+    v2.2: the points are the members of the selected lid zone, capped to the
+    latest ``display_max_highs`` for the legacy overlay contract. An empty
+    list means no zone qualified, i.e. the chart has no lid.
     """
     structure = _analyze_quarterly_structure(bars, config)
     if structure is None:
         return []
-    max_highs = max(0, config.display_max_highs)
-    return [rp.point for rp in structure.role_points_monthly][-max_highs:]
+    return [
+        rp.point
+        for rp in _cap_major_highs(
+            structure.role_points_monthly,
+            {point.idx for point in structure.lid_monthly.points},
+            config.display_max_highs,
+        )
+    ]
 
 
 def _cluster_touches(touches: list[SwingPoint], max_gap: int) -> list[SwingPoint]:
@@ -1354,7 +1411,7 @@ def _run_breakout_state_machine(
 
 
 # ---------------------------------------------------------------------------
-# Active-regime selection (v2)
+# Lid zone selection (v2.2)
 # ---------------------------------------------------------------------------
 
 
@@ -1379,11 +1436,61 @@ class LidHypothesis:
         return self.intercept + self.slope_per_bar * idx
 
 
-def _full_history_mountains(
+@dataclass(frozen=True)
+class LidZone:
+    """A repeated ceiling: mountains standing at one price level over time.
+
+    ``members`` are ordered oldest -> newest. ``level`` is the arithmetic mean
+    of the member prices, recomputed whenever a member joins.
+    ``immediate_idx`` marks the one member (if any) admitted by the
+    latest-completed-quarter rule rather than by confirmed two-sided fall.
+    """
+
+    level: float
+    members: tuple[SwingPoint, ...]
+    immediate_idx: Optional[int] = None
+    reject_reason: Optional[str] = None
+
+    @property
+    def member_count(self) -> int:
+        return len(self.members)
+
+    @property
+    def first_idx(self) -> int:
+        return self.members[0].idx
+
+    @property
+    def last_idx(self) -> int:
+        return self.members[-1].idx
+
+    @property
+    def span(self) -> int:
+        return self.last_idx - self.first_idx
+
+    def with_immediate_member(self, member: SwingPoint) -> "LidZone":
+        members = tuple(sorted(self.members + (member,), key=lambda p: p.idx))
+        return LidZone(
+            level=sum(point.price for point in members) / len(members),
+            members=members,
+            immediate_idx=member.idx,
+        )
+
+
+def _mountain_candidates(
     quarterly: list[dict[str, Any]],
     qconfig: CoilConfig,
-) -> tuple[list[int], list[int]]:
-    """(clustered pivot idxs, strict-mountain idxs) over the whole history."""
+) -> list[SwingPoint]:
+    """Confirmed quarterly mountain peaks: the lid-zone candidate pool.
+
+    Pivot highs -> plateau clustering -> two-sided prominence filter, gated by
+    ``zone_candidate_prominence_pct``. No right-edge exemptions of any kind: a
+    peak must have fallen away on both sides to be a candidate.
+
+    The gate is deliberately *not* ``display_major_prominence_pct``. The
+    overlay wants a handful of unmistakable mountains; the zone builder wants
+    every genuine touch of a level, and a touch of a ceiling inside a coil
+    falls away only modestly before the next attempt.
+    """
     highs = [float(bar["high"]) for bar in quarterly]
     lows = [float(bar["low"]) for bar in quarterly]
     equal_tol = max(0.0, qconfig.display_pivot_equal_tol_pct / 100.0)
@@ -1398,106 +1505,188 @@ def _full_history_mountains(
         max(0, qconfig.display_plateau_upgrade_gap),
     )
     pivot_set = frozenset(clustered)
-    mountains = [
-        idx
-        for idx in clustered
-        if _mountain_prominence(highs, lows, idx, pivot_set, equal_tol) / highs[idx] * 100.0
-        >= qconfig.display_major_prominence_pct
-    ]
-    return clustered, mountains
-
-
-def _regime_window_starts(
-    quarterly: list[dict[str, Any]],
-    qconfig: CoilConfig,
-    clustered_pivots: list[int],
-) -> list[int]:
-    """Candidate regime windows: full history, the legacy ten-year window, and
-    a window opening at each full-history mountain pivot (latest first)."""
-    n = len(quarterly)
-    starts = {0, max(0, n - max(1, qconfig.display_lookback_bars))}
-    for idx in clustered_pivots:
-        starts.add(max(0, idx - qconfig.pivot_left))
-    ordered = sorted(starts, reverse=True)
-    bounded = ordered[: max(2, qconfig.regime_max_windows)]
-    if 0 not in bounded:
-        bounded.append(0)
-    return sorted(bounded)
-
-
-def _eject_breakout_anchors(
-    role_points: list[RolePoint],
-    config: CoilConfig,
-) -> tuple[list[RolePoint], list[RolePoint]]:
-    """Remove trailing anchors that are themselves the breakout, not the lid.
-
-    A materially higher trailing point above a flat-or-falling prior lid is
-    the escape from that lid. Rotating it into the fit would erase the
-    breakout, so it is ejected and re-tagged ``breakout_peak``. A rising prior
-    lid may legitimately extend to a higher new anchor and is left alone.
-    """
-    kept = sorted(role_points, key=lambda rp: rp.point.idx)
-    ejected: list[RolePoint] = []
-    tolerance = 1.0 + config.break_tolerance_pct / 100.0
-    while len(kept) >= 3:
-        prefix = [rp.point for rp in kept[:-1]]
-        fit = _ls_fit(prefix)
-        if fit is None:
-            break
-        prior_slope, _ = fit
-        prior_ceiling = max(point.price for point in prefix)
-        last = kept[-1]
-        extension_tolerance = 1.0 + max(
-            config.break_tolerance_pct,
-            config.breakout_peak_extension_min_pct,
-        ) / 100.0
-        escaped_flat_lid = prior_slope <= 0 and last.point.price > prior_ceiling * tolerance
-        escaped_mildly_rising_lid = last.point.price > prior_ceiling * extension_tolerance
-        if escaped_flat_lid or escaped_mildly_rising_lid:
-            ejected.append(
-                RolePoint(point=last.point, role=ROLE_BREAKOUT_PEAK, evidence=last.evidence)
-            )
-            kept = kept[:-1]
+    out: list[SwingPoint] = []
+    for idx in clustered:
+        prominence_pct = (
+            _mountain_prominence(highs, lows, idx, pivot_set, equal_tol) / highs[idx] * 100.0
+        )
+        if prominence_pct < qconfig.zone_candidate_prominence_pct:
             continue
-        break
-    return kept, list(reversed(ejected))
+        out.append(
+            SwingPoint(
+                idx=idx,
+                date=str(quarterly[idx]["date"]),
+                price=highs[idx],
+                prominence_pct=prominence_pct,
+            )
+        )
+    return out
 
 
-def _build_lid_hypothesis(
-    quarterly: list[dict[str, Any]],
-    qconfig: CoilConfig,
-    config: CoilConfig,
-    window_start: int,
-) -> Optional[LidHypothesis]:
-    role_points = _select_window_role_points(quarterly, qconfig, window_start, max_points=None)
-    return _hypothesis_from_role_points(
-        quarterly, role_points, qconfig, config, window_start
+def _cluster_price_zones(
+    candidates: list[SwingPoint],
+    config: CoilConfig = DEFAULT_CONFIG,
+) -> list[LidZone]:
+    """Group candidates into price zones, highest seed first.
+
+    Deterministic: candidates sort by price descending then index ascending;
+    each unassigned candidate seeds a zone and absorbs every unassigned
+    candidate within ``zone_similarity_pct`` of the seed price (inclusive).
+    """
+    tolerance = max(0.0, config.zone_similarity_pct) / 100.0
+    ordered = sorted(candidates, key=lambda point: (-point.price, point.idx))
+    unassigned = list(ordered)
+    zones: list[LidZone] = []
+    while unassigned:
+        seed = unassigned.pop(0)
+        members = [seed]
+        remaining: list[SwingPoint] = []
+        for candidate in unassigned:
+            if seed.price > 0 and abs(candidate.price - seed.price) / seed.price <= tolerance:
+                members.append(candidate)
+            else:
+                remaining.append(candidate)
+        unassigned = remaining
+        members.sort(key=lambda point: point.idx)
+        zones.append(
+            LidZone(
+                level=sum(point.price for point in members) / len(members),
+                members=tuple(members),
+            )
+        )
+    return zones
+
+
+def _admit_latest_completed_quarter(
+    zones: list[LidZone],
+    quarterly_completed: list[dict[str, Any]],
+    config: CoilConfig = DEFAULT_CONFIG,
+) -> list[LidZone]:
+    """Let the latest completed quarter join a zone without a confirmed fall.
+
+    A fresh tag of a known ceiling should lift that zone's recency at once
+    rather than wait three quarters for the fall to confirm. Scoped to the
+    single latest completed quarter: applying it to *any* completed quarter
+    re-admits pass-through bars from a breakout leg (ENB's 2024-12 at 61.99
+    would drag the lid from 60.0 to 62.5).
+    """
+    if not quarterly_completed:
+        return list(zones)
+    tolerance = max(0.0, config.zone_similarity_pct) / 100.0
+    separation = max(0, config.zone_min_separation_quarters)
+    q_idx = len(quarterly_completed) - 1
+    bar = quarterly_completed[q_idx]
+    high = float(bar["high"])
+    out: list[LidZone] = []
+    for zone in zones:
+        joins = (
+            zone.level > 0
+            and abs(high - zone.level) / zone.level <= tolerance
+            and q_idx > zone.last_idx
+            and q_idx - zone.last_idx >= separation
+        )
+        if not joins:
+            out.append(zone)
+            continue
+        out.append(
+            zone.with_immediate_member(
+                SwingPoint(
+                    idx=q_idx,
+                    date=str(bar["date"]),
+                    price=high,
+                    prominence_pct=0.0,
+                )
+            )
+        )
+    return out
+
+
+def _zone_reject_reason(
+    zone: LidZone,
+    last_close: float,
+    config: CoilConfig = DEFAULT_CONFIG,
+) -> Optional[str]:
+    """Why this zone cannot be a lid, or None when it qualifies.
+
+    Qualification is repetition plus time separation. The era-relevance test is
+    a filter, never a ranker: a level today's price cannot reach belongs to a
+    different price era.
+    """
+    if zone.member_count < 2:
+        return "single touch: not a repeated ceiling"
+    if zone.span < max(0, config.zone_min_separation_quarters):
+        return (
+            f"members only {zone.span} quarters apart, "
+            f"needs {config.zone_min_separation_quarters}"
+        )
+    if zone.level <= 0:
+        return "non-positive zone level"
+    relevance_pct = last_close / zone.level * 100.0
+    if relevance_pct < config.regime_relevance_min_pct:
+        return f"price {relevance_pct:.0f}% of zone — different price era"
+    if relevance_pct > config.regime_relevance_max_pct:
+        return f"price {relevance_pct:.0f}% of zone — long since escaped"
+    return None
+
+
+def _rank_lid_zones(zones: list[LidZone]) -> list[LidZone]:
+    """Recency first, then repetition, then span, then determinism.
+
+    Recency is a property of the history (which quarter a member sits in), not
+    of the last close. Repetition-first was measured and is wrong: a long
+    history has far more repeated pivots at its ancient low prices than at
+    today's, so repetition-first always returns the oldest zone.
+    """
+    return sorted(
+        zones,
+        key=lambda zone: (-zone.last_idx, -zone.member_count, -zone.span, zone.first_idx),
     )
 
 
-def _hypothesis_from_role_points(
-    quarterly: list[dict[str, Any]],
-    role_points: list[RolePoint],
+def _select_lid_zone(
+    quarterly_completed: list[dict[str, Any]],
     qconfig: CoilConfig,
     config: CoilConfig,
-    window_start: int,
-    require_mountain: bool = True,
+    last_close: float,
+) -> tuple[Optional[LidZone], list[LidZone]]:
+    """(winning zone, rejected zones) over the completed quarterly series."""
+    candidates = _mountain_candidates(quarterly_completed, qconfig)
+    zones = _admit_latest_completed_quarter(
+        _cluster_price_zones(candidates, config),
+        quarterly_completed,
+        config,
+    )
+    eligible: list[LidZone] = []
+    rejected: list[LidZone] = []
+    for zone in zones:
+        reason = _zone_reject_reason(zone, last_close, config)
+        if reason is None:
+            eligible.append(zone)
+        else:
+            rejected.append(replace(zone, reject_reason=reason))
+    if not eligible:
+        return None, rejected
+    ranked = _rank_lid_zones(eligible)
+    runners_up = [
+        replace(zone, reject_reason="outranked: a more recent repeated ceiling exists")
+        for zone in ranked[1:]
+    ]
+    return ranked[0], rejected + runners_up
+
+
+def _hypothesis_from_zone(
+    quarterly: list[dict[str, Any]],
+    zone: LidZone,
+    config: CoilConfig,
 ) -> Optional[LidHypothesis]:
-    if len(role_points) < 2:
-        return None
-    kept, ejected = _eject_breakout_anchors(role_points, config)
-    anchors = [rp.point for rp in kept]
-    if len(anchors) < 2:
-        return None
-    # Secondary/intermediate retests only ever supplement a real mountain. A
-    # window whose anchors are all fallback retests is not a ceiling regime.
-    # (Pair-search-seeded hypotheses carry their own touch/span quality gates.)
-    if require_mountain and not any(
-        rp.role in (ROLE_MAJOR_TOP, ROLE_PROVISIONAL_TOP) for rp in kept
-    ) and not ejected:
-        return None
-    if anchors[-1].idx - anchors[0].idx < qconfig.min_anchor_span:
-        return None
+    """Fit the lid through a zone's earliest and latest member.
+
+    Interior members are structure (they are plotted and count as touches) but
+    never move the line. ``quarterly`` is the full series including a trailing
+    partial quarter so the breakout state machine can record a provisional
+    escape; the zone itself only ever contains completed quarters.
+    """
+    anchors = [zone.members[0], zone.members[-1]]
     fit = _ls_fit(anchors)
     if fit is None:
         return None
@@ -1506,153 +1695,46 @@ def _hypothesis_from_role_points(
     value_at_last = intercept + slope * last_idx
     if value_at_last <= 0:
         return None
-    slope_pct_per_year = slope * 4.0 / value_at_last * 100.0
 
     def value_at(idx: int) -> float:
         return intercept + slope * idx
 
-    breakout = _run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config)
-    ordered_points = sorted(kept + ejected, key=lambda rp: rp.point.idx)
+    anchor_idxs = {anchors[0].idx, anchors[-1].idx}
+    role_points = [
+        RolePoint(
+            point=member,
+            # The immediately-qualified member has not made a confirmed
+            # two-sided fall yet, so it is a retest, not a mountain.
+            role=(
+                ROLE_STRUCTURAL_RETEST
+                if member.idx == zone.immediate_idx
+                else ROLE_MAJOR_TOP
+            ),
+            evidence={
+                "zone_level": round(zone.level, 4),
+                "zone_member_count": zone.member_count,
+                "lid_anchor": member.idx in anchor_idxs,
+                **(
+                    {"immediate_qualification": True}
+                    if member.idx == zone.immediate_idx
+                    else {}
+                ),
+            },
+        )
+        for member in zone.members
+    ]
     return LidHypothesis(
-        window_start=window_start,
-        role_points=ordered_points,
+        window_start=anchors[0].idx,
+        role_points=role_points,
         anchors=anchors,
-        ejected=ejected,
+        ejected=[],
         slope_per_bar=slope,
         intercept=intercept,
         value_at_last_bar=value_at_last,
-        slope_pct_per_year=slope_pct_per_year,
+        slope_pct_per_year=slope * 4.0 / value_at_last * 100.0,
         fit_error_pct=_fit_error_pct(anchors, slope, intercept),
-        breakout=breakout,
+        breakout=_run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config),
     )
-
-
-def _score_lid_hypothesis(
-    hypothesis: LidHypothesis,
-    quarterly: list[dict[str, Any]],
-    qconfig: CoilConfig,
-    config: CoilConfig,
-    mountains: list[int],
-) -> LidHypothesis:
-    """Score by the regime-selection rules; a reject_reason marks obsolete fits."""
-    last_idx = len(quarterly) - 1
-    last_close = float(quarterly[last_idx]["close"])
-    slope_pct = hypothesis.slope_pct_per_year
-
-    if not (config.min_slope_pct_per_year <= slope_pct <= config.max_slope_pct_per_year):
-        hypothesis.reject_reason = f"slope {slope_pct:.1f}%/yr outside search band"
-        return hypothesis
-    # Two or more confirmed interior mountains at one level far below the line
-    # are their own ceiling regime: the "lid" floats above newer structure. A
-    # single deep interior top under a long lid is a normal base (SPG-style).
-    structural_idxs = {rp.point.idx for rp in hypothesis.role_points}
-    interior_floor = 1.0 - config.regime_interior_major_max_below_pct / 100.0
-    plateau_tol = max(0.0, config.display_plateau_tolerance_pct / 100.0)
-    interior_below: list[int] = []
-    # A provisional right-edge extension is itself the newest structural
-    # evidence. Lower interim mountains can be the base underneath that
-    # emerging lid (KN); they must not make the hypothesis look like a
-    # floating obsolete line before the extension has had a future quarter in
-    # which to confirm or fail. Confirmed endpoint fits still receive the
-    # interior-ceiling rejection below.
-    ends_provisionally = bool(hypothesis.role_points) and (
-        hypothesis.role_points[-1].role == ROLE_PROVISIONAL_TOP
-    )
-    for m_idx in mountains:
-        if ends_provisionally:
-            break
-        if not hypothesis.anchors[0].idx < m_idx < hypothesis.anchors[-1].idx:
-            continue
-        if m_idx in structural_idxs:
-            continue
-        line_value = hypothesis.value_at(m_idx)
-        if line_value > 0 and float(quarterly[m_idx]["high"]) < line_value * interior_floor:
-            interior_below.append(m_idx)
-    for i, first in enumerate(interior_below):
-        first_price = float(quarterly[first]["high"])
-        for second in interior_below[i + 1 :]:
-            second_price = float(quarterly[second]["high"])
-            scale = max(first_price, second_price)
-            if scale > 0 and abs(first_price - second_price) / scale <= plateau_tol:
-                hypothesis.reject_reason = (
-                    f"interior same-level ceiling at {quarterly[first]['date']} / "
-                    f"{quarterly[second]['date']} sits far below the line"
-                )
-                return hypothesis
-    # Mid-history escapes that failed long ago mean price did not respect this
-    # lid; a *recent* failed breakout keeps the lid in pre-breakout evaluation.
-    stale_cutoff = last_idx - qconfig.broken_out_max_age
-    for failure in hypothesis.breakout.failed_breakouts:
-        if int(failure["failed"]["q_idx"]) < stale_cutoff:
-            hypothesis.reject_reason = (
-                f"lid pierced mid-history: failed breakout at {failure['failed']['date']}"
-            )
-            return hypothesis
-    relevance_pct = last_close / hypothesis.value_at_last_bar * 100.0
-    # Structural analysis remains available after a sharp pullback from a
-    # newly confirmed top. UEC sits just below the normal 50% live-lid floor;
-    # 40% is still close enough to preserve the current regime as ``forming``
-    # while its steep slope remains ungradeable.
-    structural_relevance_floor = min(config.regime_relevance_min_pct, 40.0)
-    if relevance_pct < structural_relevance_floor:
-        hypothesis.reject_reason = (
-            f"price {relevance_pct:.0f}% of lid — line no longer relevant"
-        )
-        return hypothesis
-    if relevance_pct > config.regime_relevance_max_pct:
-        hypothesis.reject_reason = (
-            f"price {relevance_pct:.0f}% of lid — line long since escaped"
-        )
-        return hypothesis
-    # Touches and recency come from actual quarterly highs meeting the line,
-    # not just the fitted anchors — a three-touch flat lid whose latest touch
-    # is a minor pivot still reads as freshly relevant.
-    touch_tol = config.touch_tolerance_pct / 100.0
-    touch_qs: list[int] = []
-    for q in range(hypothesis.anchors[0].idx, last_idx + 1):
-        line_value = hypothesis.value_at(q)
-        if line_value <= 0:
-            continue
-        if abs(float(quarterly[q]["high"]) - line_value) / line_value <= touch_tol:
-            if touch_qs and q - touch_qs[-1] <= qconfig.touch_cluster_bars:
-                continue
-            touch_qs.append(q)
-    quarters_since_touch = last_idx - (touch_qs[-1] if touch_qs else hypothesis.anchors[-1].idx)
-    if (
-        quarters_since_touch > qconfig.stale_line_months
-        and last_close < 0.8 * hypothesis.value_at_last_bar
-    ):
-        hypothesis.reject_reason = "stale line: no recent touch and price far below"
-        return hypothesis
-    if hypothesis.fit_error_pct > config.touch_tolerance_pct * 2.0:
-        hypothesis.reject_reason = (
-            f"fit error {hypothesis.fit_error_pct:.1f}% too large for one straight lid"
-        )
-        return hypothesis
-
-    span_years = (hypothesis.anchors[-1].idx - hypothesis.anchors[0].idx) / 4.0
-    touch_score = min(max(len(touch_qs), len(hypothesis.anchors)), 5) / 5.0
-    span_score = _clamp01(span_years / 10.0)
-    flatness = _clamp01(1.0 - abs(slope_pct) / config.grade_c_max)
-    fit_score = _clamp01(1.0 - hypothesis.fit_error_pct / config.touch_tolerance_pct)
-    recency = _clamp01(1.0 - quarters_since_touch / 20.0)
-    relevance = _clamp01(1.0 - abs(1.0 - relevance_pct / 100.0))
-    score = (
-        0.25 * touch_score
-        + 0.20 * span_score
-        + 0.20 * flatness
-        + 0.15 * fit_score
-        + 0.10 * recency
-        + 0.10 * relevance
-    )
-    # A lid confirmed-broken far in the past is diagnostics material unless no
-    # newer structure exists; rank it below live regimes rather than reject.
-    if hypothesis.breakout.state == "broken_out" and hypothesis.breakout.confirmed:
-        age = last_idx - int(hypothesis.breakout.confirmed["q_idx"])
-        if age > qconfig.broken_out_max_age:
-            score *= 0.5
-    hypothesis.score = score
-    return hypothesis
 
 
 @dataclass
@@ -1666,162 +1748,70 @@ class QuarterlyStructure:
     rejected: list[dict[str, Any]]
 
 
-def _pair_seeded_role_points(
-    bars: list[dict[str, Any]],
-    quarterly: list[dict[str, Any]],
-    pair_fit: ResistanceFit,
-    mountains: list[int],
-) -> list[RolePoint]:
-    """Quarterly role points seeded from the pair-search touches.
+def _zone_slope_pct_per_year(zone: LidZone) -> Optional[float]:
+    """End-normalized slope of the line through a zone's outer members."""
+    if zone.member_count < 2 or zone.span <= 0:
+        return None
+    first, last = zone.members[0], zone.members[-1]
+    slope = (last.price - first.price) / zone.span
+    if last.price <= 0:
+        return None
+    return round(slope * 4.0 / last.price * 100.0, 2)
 
-    Level-based mountain gates assume a flat ceiling, so valid rising lids can
-    lose their early anchors. The pair search is slope-aware; its touch set
-    enters regime selection as one more hypothesis under the same gates.
-    """
-    month_to_q = _month_to_quarter_map(bars, quarterly)
-    mountain_set = set(mountains)
-    role_points: list[RolePoint] = []
-    seen: set[int] = set()
-    for touch in pair_fit.touches:
-        q_idx = month_to_q.get(touch.idx)
-        if q_idx is None or q_idx in seen:
-            continue
-        seen.add(q_idx)
-        role = ROLE_MAJOR_TOP if q_idx in mountain_set else ROLE_STRUCTURAL_RETEST
-        role_points.append(
-            RolePoint(
-                point=SwingPoint(
-                    idx=q_idx,
-                    date=str(quarterly[q_idx]["date"]),
-                    price=touch.price,
-                    prominence_pct=touch.prominence_pct,
-                ),
-                role=role,
-                evidence={"seed": "pair_search"},
-            )
-        )
-    return sorted(role_points, key=lambda rp: rp.point.idx)
+
+def _rejected_zone_diagnostics(zones: list[LidZone]) -> list[dict[str, Any]]:
+    """Rejected zones in the diagnostics shape the API already publishes."""
+    return [
+        {
+            "window_start": zone.first_idx,
+            "anchors": [_point_dict(point) for point in zone.members],
+            "slope_pct_per_year": _zone_slope_pct_per_year(zone),
+            "score": 0.0,
+            "reject_reason": zone.reject_reason,
+            "zone_level": round(zone.level, 4),
+            "member_count": zone.member_count,
+        }
+        for zone in zones
+    ]
 
 
 def _analyze_quarterly_structure(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
-    pair_fit: Optional[ResistanceFit] = None,
 ) -> Optional[QuarterlyStructure]:
-    """Full-history quarterly detection + active-regime lid selection."""
+    """Full-history quarterly detection + lid-zone selection (v2.2).
+
+    The lid is the most recent repeated ceiling: a price zone touched at least
+    twice by confirmed mountains, well separated in time. Nothing in the
+    incomplete final quarter contributes to that choice, and nothing about the
+    last close ranks it — only the era-relevance filter consults price at all.
+    When no zone qualifies there is no lid, which is the correct answer for a
+    trending chart that has never built a ceiling.
+    """
     if len(bars) < 2:
         return None
     quarterly = _aggregate_quarterly_display_bars(bars)
     if len(quarterly) < 3:
         return None
-    qconfig = _quarterly_scaled_config(config)
-
-    clustered_pivots, mountains = _full_history_mountains(quarterly, qconfig)
-    hypotheses: list[LidHypothesis] = []
-    seen_anchor_sets: set[tuple[int, ...]] = set()
-    for window_start in _regime_window_starts(quarterly, qconfig, clustered_pivots):
-        hypothesis = _build_lid_hypothesis(quarterly, qconfig, config, window_start)
-        if hypothesis is None:
-            continue
-        key = tuple(point.idx for point in hypothesis.anchors)
-        if key in seen_anchor_sets:
-            continue
-        seen_anchor_sets.add(key)
-        hypotheses.append(
-            _score_lid_hypothesis(hypothesis, quarterly, qconfig, config, mountains)
-        )
-    if pair_fit is None:
-        swings = detect_swing_highs(bars, config)
-        majors = select_major_highs(swings, config)
-        if len(majors) >= 2:
-            pair_fit = fit_resistance_line(bars, majors, swings, config)
-    if pair_fit is not None:
-        seeded = _pair_seeded_role_points(bars, quarterly, pair_fit, mountains)
-        hypothesis = _hypothesis_from_role_points(
-            quarterly,
-            seeded,
-            qconfig,
-            config,
-            window_start=seeded[0].point.idx if seeded else 0,
-            require_mountain=False,
-        )
-        if hypothesis is not None:
-            key = tuple(point.idx for point in hypothesis.anchors)
-            if key not in seen_anchor_sets:
-                seen_anchor_sets.add(key)
-                hypotheses.append(
-                    _score_lid_hypothesis(hypothesis, quarterly, qconfig, config, mountains)
-                )
-
-    # The active regime must account for the latest accepted structure. A lid
-    # whose structure ends before newer accepted points exist is a prior
-    # regime: keep it in diagnostics, never as the classification line.
-    alive = [h for h in hypotheses if h.reject_reason is None]
-    if alive:
-        latest_structure_idx = max(h.role_points[-1].point.idx for h in alive)
-        for h in alive:
-            if h.role_points[-1].point.idx < latest_structure_idx - 1:
-                h.reject_reason = "superseded: newer accepted structure exists"
-        alive = [h for h in alive if h.reject_reason is None]
-    # A valid wider regime that explains a strict superset of another
-    # hypothesis's structure subsumes it (same points, more history).
-    if len(alive) > 1:
-        point_sets = {id(h): {rp.point.idx for rp in h.role_points} for h in alive}
-        for h in alive:
-            for other in alive:
-                if other is h or other.reject_reason is not None:
-                    continue
-                if point_sets[id(other)] > point_sets[id(h)]:
-                    added = [
-                        rp.point
-                        for rp in other.role_points
-                        if rp.point.idx not in point_sets[id(h)]
-                    ]
-                    shared_ceiling = max(
-                        rp.point.price
-                        for rp in h.role_points
-                    )
-                    min_comparable_level = shared_ceiling * (
-                        config.display_secondary_anchor_min_level_pct / 100.0
-                    )
-                    # A wider regime only subsumes the newer one when its
-                    # additional history belongs to the same ceiling zone.
-                    # This keeps SPG/REG-style long lids, but prevents CF's
-                    # much lower 2015 shelf from erasing the active 2022+ lid.
-                    if any(point.price < min_comparable_level for point in added):
-                        continue
-                    h.reject_reason = "subsumed by a wider regime with the same structure"
-                    break
-        alive = [h for h in alive if h.reject_reason is None]
-    if not alive:
+    completed = _completed_quarters(quarterly)
+    if len(completed) < 2:
         return None
-    # The reviewed calibration set was graded on the recent display era, so
-    # hypotheses whose structure lies inside that horizon form the base pool;
-    # accepted structure count beats raw score within it. Full-history regimes
-    # win only by explaining strictly more of the same structure (handled by
-    # the superset pass above) or when the recent era has no valid structure.
-    legacy_start = max(0, len(quarterly) - max(1, qconfig.display_lookback_bars))
-    base_pool = [
-        h for h in alive if h.role_points[0].point.idx >= legacy_start - 2
-    ]
-    pool = base_pool if base_pool else alive
-    pool.sort(
-        key=lambda h: (len(h.role_points), h.score, h.window_start), reverse=True
-    )
-    active = pool[0]
+    qconfig = _quarterly_scaled_config(config)
+    last_close = float(quarterly[-1]["close"])
 
-    rejected = [
-        {
-            "window_start": h.window_start,
-            "anchors": [_point_dict(point) for point in h.anchors],
-            "slope_pct_per_year": round(h.slope_pct_per_year, 2),
-            "score": round(h.score, 3),
-            "reject_reason": h.reject_reason,
-        }
-        for h in hypotheses
-        if h is not active
-    ]
-    return _finalize_structure(bars, quarterly, active, rejected, config)
+    zone, rejected_zones = _select_lid_zone(completed, qconfig, config, last_close)
+    if zone is None:
+        return None
+    hypothesis = _hypothesis_from_zone(quarterly, zone, config)
+    if hypothesis is None:
+        return None
+    return _finalize_structure(
+        bars,
+        quarterly,
+        hypothesis,
+        _rejected_zone_diagnostics(rejected_zones),
+        config,
+    )
 
 
 def _finalize_structure(
@@ -1896,14 +1886,22 @@ def _structure_from_review_override(
 ) -> Optional[QuarterlyStructure]:
     """Effective structure from approved human-review points.
 
-    Reviewed points carry authority: no mountain gates, no regime scoring, no
-    anchor ejection. Points dated after the analysis window (``as_of`` replay)
-    are skipped, so derived slope and status recalculate as new bars arrive.
-    Points with role ``breakout_peak`` are plotted but excluded from the fit.
-    When any point carries an explicit ``lid_member`` flag (manual line
-    anchors from the review UI), only flagged points fit the lid; every
-    reviewed top is still plotted. Legacy corrections without membership keep
-    fitting all eligible points.
+    Reviewed points carry authority: no mountain gates, no zone eligibility,
+    no anchor ejection. A human override of the zone choice is the entire
+    point of the review workspace. Points dated after the analysis window
+    (``as_of`` replay) are skipped, so derived slope and status recalculate as
+    new bars arrive. Points with role ``breakout_peak`` are plotted but
+    excluded from the fit. When any point carries an explicit ``lid_member``
+    flag (manual line anchors from the review UI), only flagged points fit the
+    lid; every reviewed top is still plotted. Legacy corrections without
+    membership keep fitting all eligible points.
+
+    The one restriction reviewers share with the algorithm (v2.2): a point
+    inside the incomplete final quarter is not structure and is dropped here
+    too, so a stale review cannot reintroduce a live-price anchor.
+
+    Downstream, a reviewed lid gets exactly the same math as an algorithmic
+    one — band placement, slope, and grade all run in ``analyze_coil``.
     """
     if len(bars) < 2:
         return None
@@ -1912,6 +1910,7 @@ def _structure_from_review_override(
         return None
     month_by_prefix = {str(bar["date"])[:7]: idx for idx, bar in enumerate(bars)}
     month_to_q = _month_to_quarter_map(bars, quarterly)
+    last_structural_q = len(_completed_quarters(quarterly)) - 1
 
     explicit_membership = any(bool(point.get("lid_member")) for point in override_points)
     role_points: list[RolePoint] = []
@@ -1921,6 +1920,8 @@ def _structure_from_review_override(
         if m_idx is None:
             continue
         q_idx = month_to_q[m_idx]
+        if q_idx > last_structural_q:
+            continue
         price = point.get("price")
         role = point.get("role") or ROLE_MAJOR_TOP
         lid_member = bool(point.get("lid_member")) if explicit_membership else None
@@ -2035,6 +2036,18 @@ def _pullback_lows(
     return out
 
 
+def _price_position(
+    proximity_pct: float,
+    config: CoilConfig = DEFAULT_CONFIG,
+) -> str:
+    """Where the last close sits against the lid's band. Both edges are in."""
+    if proximity_pct < config.lid_band_lower_pct:
+        return PRICE_POSITION_BELOW
+    if proximity_pct > config.lid_band_upper_pct:
+        return PRICE_POSITION_ABOVE
+    return PRICE_POSITION_WITHIN
+
+
 def grade_for_slope(slope_pct_per_year: float, config: CoilConfig = DEFAULT_CONFIG) -> Optional[str]:
     if slope_pct_per_year < config.grade_min or slope_pct_per_year >= config.grade_c_max:
         return None
@@ -2083,13 +2096,17 @@ def analyze_coil(
     """Full analysis of one monthly bar series. JSON-ready dict, schema v2.
 
     Detection runs over the complete history in quarterly coordinates; the
-    active lid is regime-selected and everything downstream — grading,
-    compression, proximity, breakout lifecycle, score — derives from that one
-    line. ``lifecycle``: no_structure | forming | pre_breakout | breaking_out
-    | post_breakout. ``status`` keeps the legacy vocabulary. ``grade`` (A/B/C)
-    is set only when the lid is valid and every coil gate passes; ``notes``
-    explains gates that failed or the grade rationale. The obsolete pair
-    search is reported under ``diagnostics`` only.
+    active lid is the winning price zone (see the module docstring) and
+    everything downstream — grading, compression, proximity, breakout
+    lifecycle, score — derives from that one line. ``lifecycle``:
+    no_structure | forming | pre_breakout | breaking_out | post_breakout.
+    ``status`` keeps the legacy vocabulary. ``grade`` (A/B/C) is set only when
+    the lid is valid, the last close is inside the lid band, and every coil
+    gate passes; ``notes`` explains gates that failed or the grade rationale.
+    ``metrics.current_price_position`` (v2.2) reports which side of the
+    +/-20% band the last close sits on; outside the band the lid is still
+    returned for diagnosis but never graded. The obsolete pair search is
+    reported under ``diagnostics`` only.
     """
     clean = _clean_bars(bars, as_of)
     last_bar_date = clean[-1]["date"] if clean else as_of
@@ -2152,7 +2169,7 @@ def analyze_coil(
             "lid_grade": grade_for_slope(pair_fit.slope_pct_per_year, config),
         }
 
-    structure = _analyze_quarterly_structure(clean, config, pair_fit=pair_fit)
+    structure = _analyze_quarterly_structure(clean, config)
 
     # Approved human reviews override the algorithm's structure. The raw
     # algorithm result is retained for comparison and future calibration;
@@ -2197,12 +2214,22 @@ def analyze_coil(
     last_close = float(clean[last_idx]["close"])
     lid_member_idxs = {point.idx for point in lid.points}
 
-    # Every meaningful touch of the active lid: the fitted anchors plus minor
+    # Every meaningful touch of the active lid: the fitted anchors, the zone's
+    # interior members (structure that does not move the line), plus minor
     # swing highs inside the regime that land within the touch tolerance.
+    # Nothing inside the incomplete final quarter may be a touch.
+    structural_month_limit = _last_structural_month_idx(quarterly, last_idx)
     touch_tol = config.touch_tolerance_pct / 100.0
-    extra_touches: list[SwingPoint] = []
+    extra_touches: list[SwingPoint] = [
+        rp.point
+        for rp in structure.role_points_monthly
+        if rp.point.idx not in lid_member_idxs and rp.role != ROLE_BREAKOUT_PEAK
+    ]
+    extra_touch_idxs = {point.idx for point in extra_touches}
     for swing in swings:
-        if swing.idx in lid_member_idxs or swing.idx < lid.points[0].idx:
+        if swing.idx in lid_member_idxs or swing.idx in extra_touch_idxs:
+            continue
+        if swing.idx < lid.points[0].idx or swing.idx > structural_month_limit:
             continue
         if swing.prominence_pct < config.minor_prominence_pct:
             continue
@@ -2234,8 +2261,12 @@ def analyze_coil(
             )
         )
     result["points"] = sorted(points_out, key=lambda p: p["idx"])
-    max_highs = max(0, config.display_max_highs)
-    result["major_highs"] = [rp.point.to_dict() for rp in role_points][-max_highs:]
+    result["major_highs"] = [
+        rp.point.to_dict()
+        for rp in _cap_major_highs(
+            role_points, lid_member_idxs, config.display_max_highs
+        )
+    ]
 
     span_years = compat_fit.span_bars / BARS_PER_YEAR
     lid_grade = grade_for_slope(lid.slope_pct_per_year, config)
@@ -2287,6 +2318,7 @@ def analyze_coil(
     }
 
     proximity_pct = last_close / lid.value_at_last_bar * 100.0
+    price_position = _price_position(proximity_pct, config)
     pressed = proximity_pct >= config.pressing_proximity_pct
 
     pullbacks = _pullback_lows(clean, compat_fit, config)
@@ -2333,6 +2365,7 @@ def analyze_coil(
 
     result["metrics"] = {
         "proximity_pct": round(proximity_pct, 2),
+        "current_price_position": price_position,
         "base_years": round(base_years, 2),
         "pullback_depths_pct": depths,
         "pullback_lows": pullbacks,
@@ -2386,6 +2419,23 @@ def analyze_coil(
     else:
         lifecycle = LIFECYCLE_PRE_BREAKOUT
         result["grade"] = grade
+
+    # The lid is only a coil reference while price is actually reading against
+    # it. Outside the band the line is retained for diagnosis, never graded.
+    if price_position == PRICE_POSITION_BELOW:
+        lifecycle = LIFECYCLE_FORMING
+        result["grade"] = None
+        result["notes"].append(
+            f"last close {proximity_pct:.0f}% of lid, below the "
+            f"{config.lid_band_lower_pct:.0f}% lid band — still basing under the ceiling"
+        )
+    elif price_position == PRICE_POSITION_ABOVE:
+        lifecycle = LIFECYCLE_POST_BREAKOUT
+        result["grade"] = None
+        result["notes"].append(
+            f"last close {proximity_pct:.0f}% of lid, above the "
+            f"{config.lid_band_upper_pct:.0f}% lid band — the move already happened"
+        )
     result["lifecycle"] = lifecycle
     result["status"] = _lifecycle_to_status(lifecycle)
     if sm.provisional_escape is not None:

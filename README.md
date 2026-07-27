@@ -144,11 +144,57 @@ Run custom tickers:
 
 `python screen_monthly.py AER EWY STLD PTCT BDC`
 
+Build a fresh, cross-market feedback batch (Canada, Europe, Japan, Hong Kong,
+India, Australia, Brazil, South Korea, Taiwan, and South Africa):
+
+`python screen_monthly.py --universe international --force-refresh --csv international_review_results.csv`
+
+The generated CSV appears under Saved runs in the frontend. Load it and choose
+**Review results** to approve major tops or save corrected tops. A new
+detector `ALGORITHM_VERSION` automatically returns older decisions to pending.
+Use **Download feedback (.md)** at any point to export the complete session as
+a human-readable summary plus a canonical versioned JSON corpus. The raw API
+form is available at `GET /api/review-sessions/{session_id}/export`.
+
+The schema-v4 review form records two independent judgments:
+
+- the major-top verdict (`approved` or `corrected`); and
+- the chart classification (`coil`, `not_coil`, or `uncertain`) with an
+  independent human A/B/C grade, confidence, and rationale.
+
+Keeping these labels separate means a reviewer can say that the major tops are
+correct while the chart is not a coil. New events also carry a stable UUID,
+label-policy version, and reviewed-bar content hash for cross-export
+deduplication and reproducibility. Schema-v3 events remain readable.
+
+Review events are append-only. They are intentionally accumulated across
+sessions for batch analysis, calibration, and future training rather than
+triggering a one-off model update per click.
+
+Combine one or more `.md`/`.json` exports into a deduplicated candidate corpus:
+
+`python -m review_corpus build feedback-1.md feedback-2.md -o candidate-corpus.json`
+
+Print coverage, verdict, label, confidence, and grade-agreement counts:
+
+`python -m review_corpus report feedback-1.md feedback-2.md`
+
+The materializer preserves every revision and quarantines legacy,
+low-confidence, uncertain, or non-reproducible samples. It never edits
+`major_high_feedback.json` or promotes labels into detector goldens
+automatically; curator review and a frozen evaluation split remain separate
+offline steps.
+
 Run the review UI:
 
 `source .venv/bin/activate`
 
 `python -m uvicorn app:app --host 127.0.0.1 --port 8010`
+
+Locally, feedback is stored in `reviews.db`. In production, set `DATABASE_URL`
+for PostgreSQL or attach a Railway volume; when `RAILWAY_VOLUME_MOUNT_PATH` is
+present the SQLite database is stored at `<mount>/reviews.db`. An explicit
+`REVIEW_DB_PATH` takes precedence.
 
 ## Deterministic Structure Analysis
 

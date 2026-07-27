@@ -20,9 +20,17 @@ accepted record as an approved internal review:
   an ordered screener result. Sessions resume by snapshot fingerprint; skips
   are session-specific while decisions are shared across sessions.
 
-Storage backend is PostgreSQL when ``DATABASE_URL`` is set (production on
-Railway), SQLite otherwise (local dev and tests). Both run the same logical
-schema; records are stored as JSON text for backend parity.
+Reviewers keep full authority over which zone or level they anchor to. The
+one structural restriction they share with the algorithm (v2.2) is that a
+reviewed point may not sit in the incomplete final quarter; see
+``reject_incomplete_quarter_points``, which the review endpoints call before
+anything is persisted.
+
+Storage backend is PostgreSQL when ``DATABASE_URL`` is set. Otherwise it uses
+SQLite, preferring ``REVIEW_DB_PATH`` or Railway's mounted-volume path when
+available and falling back to the project directory for local development.
+Both run the same logical schema; records are stored as JSON text for backend
+parity.
 """
 from __future__ import annotations
 
@@ -31,14 +39,27 @@ import json
 import math
 import os
 import sqlite3
+import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_SQLITE_PATH = PROJECT_ROOT / "reviews.db"
+
+
+def _default_sqlite_path() -> Path:
+    explicit = os.environ.get("REVIEW_DB_PATH")
+    if explicit:
+        return Path(explicit).expanduser()
+    volume_mount = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
+    if volume_mount:
+        return Path(volume_mount) / "reviews.db"
+    return PROJECT_ROOT / "reviews.db"
+
+
+DEFAULT_SQLITE_PATH = _default_sqlite_path()
 AUTHORITATIVE_INTERVAL = "3M"
 SUPPORTED_ROLES = frozenset(
     {"major_top", "structural_retest", "provisional_top", "breakout_peak"}
@@ -133,13 +154,24 @@ class ReviewDecisionRecord(BaseModel):
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    schema_version: int = Field(default=3, alias="schemaVersion")
+    schema_version: Literal[3, 4] = Field(default=3, alias="schemaVersion")
+    label_policy_version: Optional[Literal[1]] = Field(
+        default=None, alias="labelPolicyVersion"
+    )
     session_id: Optional[int] = Field(default=None, alias="sessionId")
     ticker: str
     interval: Literal["3M"] = AUTHORITATIVE_INTERVAL
     as_of: Optional[str] = Field(default=None, alias="asOf")
     algorithm_version: Optional[str] = Field(default=None, alias="algorithmVersion")
     decision: Literal["approved", "corrected"]
+    coil_label: Optional[Literal["coil", "not_coil", "uncertain"]] = Field(
+        default=None, alias="coilLabel"
+    )
+    human_grade: Optional[Literal["A", "B", "C"]] = Field(
+        default=None, alias="humanGrade"
+    )
+    confidence: Optional[Literal["high", "low"]] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
     algorithm: Optional[dict[str, Any]] = None
     reviewed_highs: list[ReviewedPoint] = Field(default_factory=list, alias="reviewedHighs")
     created_at: Optional[str] = Field(default=None, alias="createdAt")
@@ -170,9 +202,35 @@ class ReviewDecisionRecord(BaseModel):
     def valid_created_at(cls, value: Optional[str]) -> Optional[str]:
         return _valid_iso_timestamp(value)
 
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     @model_validator(mode="after")
     def valid_correction_anchors(self) -> "ReviewDecisionRecord":
+        if self.schema_version == 4:
+            if self.label_policy_version != 1:
+                raise ValueError("schema-4 reviews require labelPolicyVersion 1")
+            if self.coil_label is None:
+                raise ValueError("schema-4 reviews require a coilLabel")
+            if self.coil_label == "coil" and self.human_grade is None:
+                raise ValueError("coil labels require a humanGrade")
+            if self.coil_label != "coil" and self.human_grade is not None:
+                raise ValueError("humanGrade only applies when coilLabel is 'coil'")
+            if (
+                self.decision == DECISION_CORRECTED
+                or self.coil_label == "not_coil"
+            ) and self.note is None:
+                raise ValueError(
+                    "corrected tops and not-coil labels require a rationale note"
+                )
         if self.decision != DECISION_CORRECTED:
+            if self.reviewed_highs:
+                raise ValueError("approved reviews cannot include reviewed highs")
             return self
         seen: set[str] = set()
         for point in self.reviewed_highs:
@@ -215,6 +273,65 @@ def _authoritative_interval(interval: str) -> str:
     if value != AUTHORITATIVE_INTERVAL:
         raise ValueError("only authoritative 3M reviews are supported")
     return value
+
+
+def _parse_iso_month(value: Any) -> Optional[date]:
+    """Lenient ISO-date parse: shape is enforced by the point validators."""
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def _calendar_quarter(moment: date) -> tuple[int, int]:
+    """(year, quarter), matching the analyzer's quarterly aggregation key."""
+    return moment.year, (moment.month - 1) // 3 + 1
+
+
+def incomplete_final_quarter(last_bar_date: Optional[str]) -> Optional[tuple[int, int]]:
+    """Calendar (year, quarter) of a trailing incomplete quarter, else ``None``.
+
+    Mirrors ``coil_analysis._quarter_is_complete``: the last quarter of a
+    monthly series is complete only once the series reaches that quarter's
+    calendar-final month (``month % 3 == 0``). An unknown or unparseable data
+    date yields ``None`` — there is nothing to measure against.
+    """
+    parsed = _parse_iso_month(last_bar_date)
+    if parsed is None or parsed.month % 3 == 0:
+        return None
+    return _calendar_quarter(parsed)
+
+
+def reject_incomplete_quarter_points(
+    dates: Iterable[Any], *, last_bar_date: Optional[str]
+) -> None:
+    """Reviewers may not anchor inside the incomplete final quarter (v2.2).
+
+    Human reviews stay authoritative over *which* zone or level they anchor
+    to — no zone eligibility is applied here, because overriding the zone
+    choice is the point of the review workspace. The one restriction
+    reviewers share with the algorithm is the structure invariant: nothing in
+    the unfinished quarter is structure, because its high still moves with
+    live price. ``coil_analysis._structure_from_review_override`` drops such
+    points silently, so the request is refused here instead and the reviewer
+    is told which date is not reviewable yet.
+    """
+    quarter = incomplete_final_quarter(last_bar_date)
+    if quarter is None:
+        return
+    offending = [
+        str(raw)
+        for raw in dates
+        if (parsed := _parse_iso_month(raw)) is not None
+        and _calendar_quarter(parsed) == quarter
+    ]
+    if offending:
+        year, index = quarter
+        raise ValueError(
+            f"reviewed points cannot fall in the incomplete final quarter "
+            f"{year}Q{index} (data through {last_bar_date}): "
+            f"{', '.join(offending)}"
+        )
 
 _DDL = [
     """
@@ -277,11 +394,39 @@ _DDL = [
 # Pre-session deployments created high_overrides without decision provenance.
 _MIGRATION_COLUMNS = {
     "high_overrides": [("as_of", "TEXT"), ("algorithm_version", "TEXT")],
+    "review_state": [
+        ("coil_label", "TEXT"),
+        ("human_grade", "TEXT"),
+        ("confidence", "TEXT"),
+        ("note", "TEXT"),
+        ("label_policy_version", "INTEGER"),
+        ("event_id", "TEXT"),
+    ],
 }
 
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _legacy_event_id(
+    ticker: str,
+    interval: str,
+    created_at: str,
+    record: dict[str, Any],
+) -> str:
+    """Content-derived identity for events created before server UUIDs existed."""
+    basis = json.dumps(
+        {
+            "ticker": ticker,
+            "interval": interval,
+            "created_at": created_at,
+            "record": record,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"legacy-sha256:{hashlib.sha256(basis.encode('utf-8')).hexdigest()}"
 
 
 def _point_payload(point: ReviewedPoint) -> dict[str, Any]:
@@ -304,14 +449,22 @@ def _points_from_record(record: dict[str, Any]) -> list[dict[str, Any]]:
     return [_point_payload(high) for high in validated.manual_highs]
 
 
-def session_fingerprint(source: str, items: list[dict[str, Any]]) -> str:
-    """Stable identity of one screener snapshot: source + ordered tickers + data dates."""
+def session_fingerprint(
+    source: str,
+    items: list[dict[str, Any]],
+    *,
+    snapshot: Optional[dict[str, Any]] = None,
+    algorithm_version: Optional[str] = None,
+) -> str:
+    """Stable identity of one screened cohort and its model/config snapshot."""
     basis = {
         "source": source,
+        "algorithm_version": algorithm_version,
+        "snapshot": snapshot or {},
         "items": [
             [
                 str(item.get("ticker", "")).strip().upper(),
-                (item.get("snapshot") or {}).get("data_date"),
+                item.get("snapshot") or {},
             ]
             for item in items
         ],
@@ -370,6 +523,12 @@ def annotate_review(
             "review_id": state["review_id"],
             "review_as_of": state["as_of"],
             "review_algorithm_version": state["algorithm_version"],
+            "coil_label": state.get("coil_label"),
+            "human_grade": state.get("human_grade"),
+            "confidence": state.get("confidence"),
+            "note": state.get("note"),
+            "label_policy_version": state.get("label_policy_version"),
+            "event_id": state.get("event_id"),
             "stale": stale,
         }
     )
@@ -471,6 +630,12 @@ class ReviewStore:
         *,
         as_of: Optional[str],
         algorithm_version: Optional[str],
+        coil_label: Optional[str] = None,
+        human_grade: Optional[str] = None,
+        confidence: Optional[str] = None,
+        note: Optional[str] = None,
+        label_policy_version: Optional[int] = None,
+        event_id: Optional[str] = None,
     ) -> str:
         updated_at = _utcnow()
         cursor.execute(
@@ -479,9 +644,27 @@ class ReviewStore:
         )
         cursor.execute(
             f"INSERT INTO review_state "
-            f"(ticker, interval, review_id, decision, as_of, algorithm_version, updated_at) "
-            f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph})",
-            (ticker, interval, review_id, decision, as_of, algorithm_version, updated_at),
+            f"(ticker, interval, review_id, decision, as_of, algorithm_version, "
+            f"coil_label, human_grade, confidence, note, label_policy_version, "
+            f"event_id, updated_at) "
+            f"VALUES ({self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+            f"{self._ph}, {self._ph}, {self._ph}, {self._ph}, {self._ph}, "
+            f"{self._ph}, {self._ph}, {self._ph})",
+            (
+                ticker,
+                interval,
+                review_id,
+                decision,
+                as_of,
+                algorithm_version,
+                coil_label,
+                human_grade,
+                confidence,
+                note,
+                label_policy_version,
+                event_id,
+                updated_at,
+            ),
         )
         return updated_at
 
@@ -531,13 +714,34 @@ class ReviewStore:
         interval = _authoritative_interval(validated.interval)
         created_at = str(validated.created_at or _utcnow())
         override: Optional[dict[str, Any]] = None
+        event_id = str(uuid.uuid4())
+        stored_record = dict(record)
+        stored_record["eventId"] = event_id
 
         with self._connect() as conn:
             cursor = conn.cursor()
-            review_id = self._insert_review_row(cursor, ticker, interval, created_at, record)
+            if validated.session_id is not None:
+                cursor.execute(
+                    f"SELECT 1 FROM review_session_items "
+                    f"WHERE session_id = {self._ph} AND ticker = {self._ph}",
+                    (validated.session_id, ticker),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError(
+                        "sessionId must reference a session containing this ticker"
+                    )
+            review_id = self._insert_review_row(
+                cursor, ticker, interval, created_at, stored_record
+            )
             self._upsert_state(
                 cursor, ticker, interval, review_id, validated.decision,
                 as_of=validated.as_of, algorithm_version=validated.algorithm_version,
+                coil_label=validated.coil_label,
+                human_grade=validated.human_grade,
+                confidence=validated.confidence,
+                note=validated.note,
+                label_policy_version=validated.label_policy_version,
+                event_id=event_id,
             )
             if validated.decision == DECISION_CORRECTED:
                 points = [_point_payload(p) for p in validated.reviewed_highs]
@@ -568,6 +772,11 @@ class ReviewStore:
                 "session_id": validated.session_id,
                 "as_of": validated.as_of,
                 "algorithm_version": validated.algorithm_version,
+                "event_id": event_id,
+                "coil_label": validated.coil_label,
+                "human_grade": validated.human_grade,
+                "confidence": validated.confidence,
+                "note": validated.note,
                 "created_at": created_at,
             },
             "override": override,
@@ -659,7 +868,8 @@ class ReviewStore:
         with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                f"SELECT review_id, decision, as_of, algorithm_version, updated_at "
+                f"SELECT review_id, decision, as_of, algorithm_version, updated_at, "
+                f"coil_label, human_grade, confidence, note, label_policy_version, event_id "
                 f"FROM review_state "
                 f"WHERE ticker = {self._ph} AND interval = {self._ph}",
                 (symbol, interval),
@@ -673,6 +883,12 @@ class ReviewStore:
             "as_of": row[2],
             "algorithm_version": row[3],
             "updated_at": str(row[4]),
+            "coil_label": row[5],
+            "human_grade": row[6],
+            "confidence": row[7],
+            "note": row[8],
+            "label_policy_version": row[9],
+            "event_id": row[10],
         }
 
     def list_reviews(self, ticker: str, interval: str = "3M") -> list[dict[str, Any]]:
@@ -723,7 +939,12 @@ class ReviewStore:
         if not normalized:
             raise ValueError("Review sessions require at least one ticker.")
 
-        fingerprint = session_fingerprint(name, normalized)
+        fingerprint = session_fingerprint(
+            name,
+            normalized,
+            snapshot=snapshot,
+            algorithm_version=algorithm_version,
+        )
         with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -804,7 +1025,9 @@ class ReviewStore:
             if tickers:
                 marks = ", ".join([self._ph] * len(tickers))
                 cursor.execute(
-                    f"SELECT ticker, review_id, decision, as_of, algorithm_version, updated_at "
+                    f"SELECT ticker, review_id, decision, as_of, algorithm_version, "
+                    f"updated_at, coil_label, human_grade, confidence, note, "
+                    f"label_policy_version, event_id "
                     f"FROM review_state WHERE interval = {self._ph} AND ticker IN ({marks})",
                     (AUTHORITATIVE_INTERVAL, *tickers),
                 )
@@ -815,6 +1038,12 @@ class ReviewStore:
                         "as_of": row[3],
                         "algorithm_version": row[4],
                         "updated_at": str(row[5]),
+                        "coil_label": row[6],
+                        "human_grade": row[7],
+                        "confidence": row[8],
+                        "note": row[9],
+                        "label_policy_version": row[10],
+                        "event_id": row[11],
                     }
                 cursor.execute(
                     f"SELECT ticker FROM high_overrides "
@@ -848,6 +1077,14 @@ class ReviewStore:
                 "review_decision": state["decision"] if state else None,
                 "review_as_of": state["as_of"] if state else None,
                 "review_algorithm_version": state["algorithm_version"] if state else None,
+                "review_coil_label": state["coil_label"] if state else None,
+                "review_human_grade": state["human_grade"] if state else None,
+                "review_confidence": state["confidence"] if state else None,
+                "review_note": state["note"] if state else None,
+                "review_label_policy_version": (
+                    state["label_policy_version"] if state else None
+                ),
+                "review_event_id": state["event_id"] if state else None,
                 "effective": "human" if str(ticker) in overrides else "algorithm",
                 "snapshot": snapshot_data,
                 "updated_at": str(updated_at),
@@ -866,6 +1103,74 @@ class ReviewStore:
             "items": items,
             "counts": {**counts, "total": len(items)},
             "next_pending_ticker": next_pending,
+        }
+
+    def export_session(
+        self, session_id: int, *, algorithm_version: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
+        """Versioned, portable feedback corpus for one review session.
+
+        The session queue is exported together with:
+
+        - every append-only review event submitted from this session, including
+          superseded revisions; and
+        - the current review event referenced by each item, even when that
+          decision originated in another session and is shared globally.
+
+        This keeps exports self-contained without treating an individual click
+        as a model-update unit. Consumers can combine exports, deduplicate by
+        session fingerprint + review id, and train/evaluate on the full corpus.
+        """
+        session = self.get_session(session_id, algorithm_version=algorithm_version)
+        if session is None:
+            return None
+
+        current_review_ids = {
+            int(item["review_id"])
+            for item in session["items"]
+            if item.get("review_id") is not None
+        }
+        records: list[dict[str, Any]] = []
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, ticker, interval, created_at, record "
+                "FROM high_reviews ORDER BY id"
+            )
+            rows = cursor.fetchall()
+
+        for review_id, ticker, interval, created_at, raw_record in rows:
+            record = json.loads(raw_record)
+            record_session_id = record.get("sessionId", record.get("session_id"))
+            belongs_to_session = False
+            if record_session_id is not None:
+                try:
+                    belongs_to_session = int(record_session_id) == int(session_id)
+                except (TypeError, ValueError):
+                    belongs_to_session = False
+            if int(review_id) not in current_review_ids and not belongs_to_session:
+                continue
+            records.append(
+                {
+                    "id": int(review_id),
+                    "event_id": record.get("eventId")
+                    or _legacy_event_id(
+                        str(ticker), str(interval), str(created_at), record
+                    ),
+                    "ticker": str(ticker),
+                    "interval": str(interval),
+                    "created_at": str(created_at),
+                    "record": record,
+                }
+            )
+
+        return {
+            "schema_version": 2,
+            "kind": "coilingview.review-session-feedback",
+            "exported_at": _utcnow(),
+            "algorithm_version": algorithm_version,
+            "session": session,
+            "records": records,
         }
 
     def set_item_status(

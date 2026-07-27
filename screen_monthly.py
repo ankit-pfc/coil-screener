@@ -31,6 +31,42 @@ DEFAULT_TICKERS = [
 ]
 
 
+# A deliberately cross-market review set for detector calibration. These are
+# liquid Yahoo Finance listings spanning multiple market structures, currencies,
+# price scales, listing ages, and sector mixes. Keeping the symbols in-repo makes
+# a review pass reproducible instead of depending on a changing web index.
+INTERNATIONAL_REVIEW_TICKERS = [
+    # Canada
+    "SHOP.TO", "RY.TO", "TD.TO", "CNR.TO", "ENB.TO",
+    # United Kingdom
+    "AZN.L", "SHEL.L", "ULVR.L", "HSBA.L", "REL.L",
+    # Germany
+    "SAP.DE", "SIE.DE", "ALV.DE", "BAS.DE", "DTE.DE",
+    # France
+    "MC.PA", "OR.PA", "SAN.PA", "SU.PA", "AIR.PA",
+    # Netherlands
+    "ASML.AS", "ADYEN.AS", "PHIA.AS",
+    # Switzerland
+    "NESN.SW", "NOVN.SW", "GIVN.SW", "UBSG.SW",
+    # Japan
+    "7203.T", "6758.T", "9984.T", "8306.T", "8035.T",
+    # Hong Kong
+    "0700.HK", "9988.HK", "1299.HK", "0005.HK", "3690.HK",
+    # India
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS",
+    # Australia
+    "BHP.AX", "CBA.AX", "CSL.AX", "WES.AX", "MQG.AX",
+    # Brazil
+    "VALE3.SA", "PETR4.SA", "ITUB4.SA", "WEGE3.SA",
+    # South Korea
+    "005930.KS", "000660.KS", "035420.KS", "051910.KS",
+    # Taiwan
+    "2330.TW", "2317.TW", "2454.TW",
+    # South Africa
+    "NPN.JO", "SOL.JO", "SBK.JO",
+]
+
+
 @dataclass
 class ScreenResult:
     ticker: str
@@ -355,6 +391,9 @@ def _lifecycle_row(
         "coil_score": analysis.get("coil_score", 0.0),
         "lid_slope_pct_per_year": active_lid.get("slope_pct_per_year"),
         "proximity_pct": metrics.get("proximity_pct"),
+        # Raw ratio and the v2.2 band enum both ship: the number drives sorting
+        # and diagnostics, the enum is the classification consumers act on.
+        "current_price_position": metrics.get("current_price_position"),
         "span_years": active_lid.get("span_years"),
         "touches": active_lid.get("touch_count"),
         # Alias retained for consumers that used the analysis object naming.
@@ -493,6 +532,12 @@ def build_ticker_list(
             universe_tickers = universe_tickers[:limit]
         return normalize_tickers(universe_tickers + normalized_explicit)
 
+    if universe == "international":
+        universe_tickers = INTERNATIONAL_REVIEW_TICKERS
+        if limit:
+            universe_tickers = universe_tickers[:limit]
+        return normalize_tickers(universe_tickers + normalized_explicit)
+
     if normalized_explicit:
         return normalized_explicit
 
@@ -512,13 +557,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--universe",
-        choices=["sp500"],
+        choices=["sp500", "international"],
         help="Load a predefined ticker universe.",
     )
     parser.add_argument(
         "--limit",
         type=int,
         help="Optional cap on the number of universe tickers loaded before adding explicit ticker arguments.",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="Refresh every symbol from yfinance before screening.",
     )
     return parser
 
@@ -533,7 +583,7 @@ def main() -> None:
         limit=args.limit,
     )
 
-    df = run_screen(tickers)
+    df = run_screen(tickers, force_refresh=args.force_refresh)
     if df.empty:
         print("No results.")
         return

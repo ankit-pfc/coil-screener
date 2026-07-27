@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from coil_analysis import ALGORITHM_VERSION, analyze_coil
-from history_cache import get_history_payload
-from reviews import annotate_review, get_review_store
+from history_cache import get_history_payload, read_cache
+from reviews import annotate_review, get_review_store, reject_incomplete_quarter_points
 from screen_monthly import (
     DEFAULT_TICKERS,
     build_ticker_list,
@@ -39,7 +39,7 @@ app = FastAPI(title="Coil Screening")
 
 class ScreenRequest(BaseModel):
     tickers: list[str] = []
-    universe: Literal["sp500"] | None = None
+    universe: Literal["sp500", "international"] | None = None
     limit: int | None = None
     force_refresh: bool = False
 
@@ -104,14 +104,26 @@ class ReviewedHighPoint(CorrectionPoint):
 class ReviewDecisionRequest(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    schema_version: int = Field(default=3, alias="schemaVersion")
+    schema_version: Literal[3, 4] = Field(default=3, alias="schemaVersion")
+    label_policy_version: Literal[1] | None = Field(
+        default=None, alias="labelPolicyVersion"
+    )
     session_id: int | None = Field(default=None, alias="sessionId")
     ticker: str
     interval: Literal["3M"] = "3M"
     as_of: str | None = Field(default=None, alias="asOf")
     algorithm_version: str | None = Field(default=None, alias="algorithmVersion")
     decision: Literal["approved", "corrected"]
+    coil_label: Literal["coil", "not_coil", "uncertain"] | None = Field(
+        default=None, alias="coilLabel"
+    )
+    human_grade: Literal["A", "B", "C"] | None = Field(
+        default=None, alias="humanGrade"
+    )
+    confidence: Literal["high", "low"] | None = None
+    note: str | None = Field(default=None, max_length=2000)
     algorithm: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
     reviewed_highs: list[ReviewedHighPoint] = Field(
         default_factory=list, alias="reviewedHighs"
     )
@@ -209,6 +221,10 @@ def normalize_saved_results(records: list[dict[str, Any]]) -> list[dict[str, Any
         )
         row.setdefault("lid_slope_pct_per_year", None)
         row.setdefault("proximity_pct", None)
+        # v2.2 lid band. A legacy CSV predates the enum, so the field is
+        # present-and-null rather than missing: consumers can tell "not
+        # measured" apart from a real band placement.
+        row.setdefault("current_price_position", None)
         row.setdefault("span_years", None)
         row.setdefault("touches", None)
         row.setdefault("touch_count", row.get("touches"))
@@ -358,15 +374,38 @@ def coil(
     }
 
 
+def cached_last_bar_date(symbol: str) -> str | None:
+    """Data date of the series a reviewer was shown, without a live refresh.
+
+    The review UI loads ``/api/coil`` first, which refreshes and rewrites this
+    cache, so the cached tail is the chart the reviewer actually annotated.
+    Reading it here keeps anchor validation free of provider I/O. ``None``
+    (no cached history) leaves the anchor rule unenforceable, and the
+    analyzer's own guard remains the backstop.
+    """
+    payload = read_cache(symbol.strip().upper()) or {}
+    bars = payload.get("bars") or []
+    if not bars or not isinstance(bars[-1], dict):
+        return None
+    last = bars[-1].get("date")
+    return str(last) if last else None
+
+
 @app.post("/api/highs/corrections")
 def submit_highs_correction(record: CorrectionRecordRequest) -> dict[str, Any]:
     """Approved internal review: append-only persistence + immediate override.
 
     Body is the frontend ``CorrectionRecord`` (schemaVersion 1). The user's
     ``manualHighs`` become the effective structure for the ticker; the full
-    record is retained verbatim for calibration.
+    record is retained verbatim for calibration. Points inside the incomplete
+    final quarter are refused (v2.2): the analyzer would drop them, so the
+    reviewer is told instead of losing an anchor silently.
     """
     try:
+        reject_incomplete_quarter_points(
+            [point.date for point in record.manual_highs],
+            last_bar_date=cached_last_bar_date(record.ticker),
+        )
         review = get_review_store().append_review(
             record.model_dump(mode="json", by_alias=True)
         )
@@ -411,9 +450,18 @@ def submit_review_decision(request: ReviewDecisionRequest) -> dict[str, Any]:
     (with optional ``lidMember`` line anchors) the live analysis immediately.
     The response returns the append-only review event, the effective
     override, the recomputed coil analysis, and the updated session item.
+
+    Reviewers keep full authority over which zone they anchor to; the only
+    structural restriction (v2.2) is that a reviewed point may not sit in the
+    incomplete final quarter, which is refused here rather than dropped
+    silently downstream.
     """
     store = get_review_store()
     try:
+        reject_incomplete_quarter_points(
+            [point.date for point in request.reviewed_highs],
+            last_bar_date=cached_last_bar_date(request.ticker),
+        )
         outcome = store.record_decision(request.model_dump(mode="json", by_alias=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -471,6 +519,23 @@ def review_session(session_id: int) -> dict[str, Any]:
     if session is None:
         raise HTTPException(status_code=404, detail="Review session not found.")
     return {"session": session}
+
+
+@app.get("/api/review-sessions/{session_id}/export")
+def review_session_export(session_id: int) -> dict[str, Any]:
+    """Portable, versioned corpus for analysis and offline handoff.
+
+    The response contains the complete queue snapshot, current item states, and
+    the append-only structured review records linked to the session. The
+    frontend wraps this JSON in a readable Markdown file without weakening the
+    machine-readable contract.
+    """
+    export = get_review_store().export_session(
+        session_id, algorithm_version=ALGORITHM_VERSION
+    )
+    if export is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return export
 
 
 @app.patch("/api/review-sessions/{session_id}/items/{ticker}")

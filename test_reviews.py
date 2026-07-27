@@ -65,9 +65,47 @@ def _seed_cache(tmp_cache, ticker: str, bars: list[dict]) -> None:
     (tmp_cache / f"{ticker}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _open_quarter_bars() -> list[dict]:
+    """A coil whose series runs two months into an unfinished quarter.
+
+    ``make_coil_bars`` ends on 2019-12 (Q4 closed). Appending 2020-01 and
+    2020-02 leaves Q1 2020 open, so those two months are live-price territory
+    and not reviewable structure.
+    """
+    from test_coil_analysis import month_dates
+
+    bars = make_coil_bars()
+    dates = month_dates(122)
+    for k in range(2):
+        bars.append(
+            {
+                "date": dates[120 + k],
+                "open": 96.0,
+                "high": 97.0,
+                "low": 95.0,
+                "close": 96.0,
+                "volume": 1e6,
+            }
+        )
+    return bars
+
+
 # --------------------------------------------------------------------------- #
 # Store behavior
 # --------------------------------------------------------------------------- #
+def test_default_sqlite_path_prefers_explicit_then_railway_volume(
+    tmp_path, monkeypatch
+):
+    explicit = tmp_path / "explicit" / "feedback.db"
+    volume = tmp_path / "volume"
+    monkeypatch.setenv("REVIEW_DB_PATH", str(explicit))
+    monkeypatch.setenv("RAILWAY_VOLUME_MOUNT_PATH", str(volume))
+    assert reviews_module._default_sqlite_path() == explicit
+
+    monkeypatch.delenv("REVIEW_DB_PATH")
+    assert reviews_module._default_sqlite_path() == volume / "reviews.db"
+
+
 def test_reviews_are_append_only_and_override_is_latest(tmp_review_store):
     first = tmp_review_store.append_review(
         _correction("KN", _anchors())
@@ -211,6 +249,133 @@ def test_delete_correction_revokes_effective_override_and_keeps_history(client):
 
 
 # --------------------------------------------------------------------------- #
+# Incomplete-final-quarter anchor rule (v2.2 §7)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("last_bar_date", "expected"),
+    [
+        ("2019-12-01", None),  # December closes Q4
+        ("2020-03-31", None),  # March closes Q1; the day of month is irrelevant
+        ("2020-06-01", None),
+        ("2020-01-01", (2020, 1)),
+        ("2020-02-01", (2020, 1)),
+        ("2026-07-01", (2026, 3)),
+        ("2026-11-01", (2026, 4)),
+        (None, None),  # unknown data date: nothing to measure against
+        ("", None),
+        ("07/2026", None),
+    ],
+)
+def test_incomplete_final_quarter_follows_the_analyzer_rule(last_bar_date, expected):
+    assert reviews_module.incomplete_final_quarter(last_bar_date) == expected
+
+
+def test_points_in_completed_quarters_are_accepted():
+    # Series runs into an open Q1 2020; everything through Q4 2019 is structure.
+    reviews_module.reject_incomplete_quarter_points(
+        ["2011-09-01", "2019-10-01", "2019-12-01"], last_bar_date="2020-02-01"
+    )
+
+
+def test_points_in_the_open_quarter_are_named_in_the_rejection():
+    with pytest.raises(ValueError) as exc:
+        reviews_module.reject_incomplete_quarter_points(
+            ["2019-12-01", "2020-01-01", "2020-02-01"], last_bar_date="2020-02-01"
+        )
+
+    message = str(exc.value)
+    assert "incomplete final quarter" in message
+    assert "2020Q1" in message
+    # Every offending date is named, and only the offending ones.
+    assert "2020-01-01" in message
+    assert "2020-02-01" in message
+    assert "2019-12-01" not in message
+
+
+def test_anchor_rule_is_inert_when_the_quarter_closed_or_data_is_unknown():
+    # A closed final quarter constrains nothing, including its own last month.
+    reviews_module.reject_incomplete_quarter_points(
+        ["2019-12-01"], last_bar_date="2019-12-01"
+    )
+    # Without a data date the rule is unenforceable rather than guessed at.
+    reviews_module.reject_incomplete_quarter_points(
+        ["2020-02-01"], last_bar_date=None
+    )
+
+
+def test_correction_anchored_to_the_open_quarter_is_rejected(
+    client, tmp_cache, tmp_review_store
+):
+    _seed_cache(tmp_cache, "OPENQ", _open_quarter_bars())
+
+    resp = client.post(
+        "/api/highs/corrections",
+        json=_correction(
+            "OPENQ",
+            [
+                {"idx": 20, "date": "2011-09-01", "price": 100.0},
+                {"idx": 121, "date": "2020-02-01", "price": 97.0},
+            ],
+        ),
+    )
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "2020-02-01" in detail
+    assert "incomplete final quarter" in detail
+    # A rejected patch persists nothing: no override, no append-only entry.
+    assert tmp_review_store.get_override("OPENQ") is None
+    assert tmp_review_store.list_reviews("OPENQ") == []
+
+
+def test_correction_anchored_to_the_last_closed_quarter_is_accepted(
+    client, tmp_cache, tmp_review_store, monkeypatch
+):
+    monkeypatch.setattr(app_module, "fetch_monthly_history", lambda symbol: None)
+    _seed_cache(tmp_cache, "DONEQ", _open_quarter_bars())
+
+    resp = client.post(
+        "/api/highs/corrections",
+        json=_correction(
+            "DONEQ",
+            [
+                {"idx": 20, "date": "2011-09-01", "price": 100.0},
+                {"idx": 119, "date": "2019-12-01", "price": 100.0},
+            ],
+        ),
+    )
+
+    assert resp.status_code == 200
+    assert [p["date"] for p in tmp_review_store.get_override("DONEQ")["points"]] == [
+        "2011-09-01",
+        "2019-12-01",
+    ]
+    # The last completed quarter is legal structure and really drives the lid.
+    analysis = client.get("/api/coil/DONEQ").json()
+    assert [a["date"] for a in analysis["active_lid"]["anchors"]] == [
+        "2011-09-01",
+        "2019-12-01",
+    ]
+
+
+def test_anchor_rule_is_skipped_when_no_history_is_cached(client, tmp_review_store):
+    """No cached series means no measurable quarter; the analyzer stays the backstop."""
+    resp = client.post(
+        "/api/highs/corrections",
+        json=_correction(
+            "NOCACHE",
+            [
+                {"idx": 20, "date": "2011-09-01", "price": 100.0},
+                {"idx": 121, "date": "2020-02-01", "price": 97.0},
+            ],
+        ),
+    )
+
+    assert resp.status_code == 200
+    assert tmp_review_store.get_override("NOCACHE") is not None
+
+
+# --------------------------------------------------------------------------- #
 # Review precedence in /api/coil
 # --------------------------------------------------------------------------- #
 def test_reviewed_points_override_algorithm_structure(client, tmp_cache):
@@ -239,7 +404,9 @@ def test_reviewed_points_override_algorithm_structure(client, tmp_cache):
     assert reviewed["review"]["review_id"] is not None
     # The algorithm's own structure is retained for comparison.
     assert reviewed["review"]["algorithm"] is not None
-    assert len(reviewed["review"]["algorithm"]["major_highs"]) == 3
+    # Three constructed lid touches plus the immediately-qualified latest
+    # completed quarter, which lands on the same zone level.
+    assert len(reviewed["review"]["algorithm"]["major_highs"]) == 4
     # The effective lid is fit through the reviewed anchors.
     anchors = reviewed["active_lid"]["anchors"]
     assert [a["date"] for a in anchors] == ["2011-09-01", "2018-05-01"]

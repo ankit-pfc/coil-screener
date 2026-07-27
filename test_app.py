@@ -76,6 +76,32 @@ def test_default_tickers(client):
     assert all(isinstance(t, str) for t in body["tickers"])
 
 
+def test_international_universe_is_accepted_by_screen_api(client, monkeypatch):
+    seen = {}
+
+    def fake_run(tickers, **kwargs):
+        seen["tickers"] = list(tickers)
+        seen["force_refresh"] = kwargs["force_refresh"]
+        return {
+            "results": [],
+            "bucket_counts": {},
+            "failures": [],
+            "algorithm_version": "test-v2.1",
+            "screened_at": "2026-07-14T00:00:00.000Z",
+        }
+
+    monkeypatch.setattr(app_module, "run_lifecycle_screen", fake_run)
+    response = client.post(
+        "/api/screen",
+        json={"universe": "international", "limit": 7, "force_refresh": True},
+    )
+
+    assert response.status_code == 200
+    assert len(seen["tickers"]) == 7
+    assert all("." in ticker for ticker in seen["tickers"])
+    assert seen["force_refresh"] is True
+
+
 def test_saved_runs_lists_csvs_demo_first(client):
     resp = client.get("/api/saved-runs")
     assert resp.status_code == 200
@@ -147,6 +173,28 @@ def test_curated_saved_run_is_materially_enriched_with_v2_fields(client):
         "forming",
         "post_breakout",
     }
+
+
+def test_normalize_saved_results_declares_the_band_without_inventing_one():
+    """Legacy CSVs predate the v2.2 band: null, present, and never overwritten."""
+    legacy, current = app_module.normalize_saved_results(
+        [
+            {"ticker": "OLD", "score_total": 0.5},
+            {
+                "ticker": "NEW",
+                "proximity_pct": 143.2,
+                "current_price_position": "above_lid_band",
+            },
+        ]
+    )
+
+    assert "current_price_position" in legacy
+    assert legacy["current_price_position"] is None
+    assert legacy["proximity_pct"] is None
+    # A run saved under v2.2 already carries the enum; normalization must not
+    # blank it back out.
+    assert current["current_price_position"] == "above_lid_band"
+    assert current["proximity_pct"] == 143.2
 
 
 def test_saved_run_missing_returns_404(client):
@@ -322,16 +370,23 @@ def test_coil_endpoint_analyzes_cached_bars(client, monkeypatch, tmp_cache):
     assert body["ticker"] == "COIL"
     assert body["status"] == "coiling"
     assert body["grade"] == "A"
-    assert body["resistance"]["touch_count"] == 3
+    assert body["resistance"]["touch_count"] == 4
     assert body["resistance"]["from"].keys() == {"idx", "date", "price"}
-    # v2 fits against every meaningful touch in the regime: all three exact
-    # lid touches are structure points, not just the strict displayed majors.
+    # touch_count counts every member of the winning price zone, including the
+    # latest completed quarter admitted by immediate qualification. major_highs
+    # stays capped at display_max_highs for the legacy overlay, but the cap now
+    # protects lid members, so both anchors are always marked.
     assert len(body["major_highs"]) == 3
+    anchor_idxs = {body["resistance"]["from"]["idx"], body["resistance"]["to"]["idx"]}
+    assert anchor_idxs <= {point["idx"] for point in body["major_highs"]}
+    # The cap keeps both anchors and the latest member; the interior 2015-01
+    # touch is the one dropped, and it is still present in body["points"].
     assert [high["date"] for high in body["major_highs"]] == [
         "2011-09-01",
-        "2015-01-01",
         "2018-05-01",
+        "2019-12-01",
     ]
+    assert "2015-01-01" in [point["date"] for point in body["points"]]
     assert body["schema_version"] == 2
     assert body["lifecycle"] == "pre_breakout"
     assert body["active_lid"]["grade"] == "A"
@@ -401,3 +456,25 @@ def test_screen_contract(client, monkeypatch):
     assert body["results"][0]["ticker"] == "TEST"
     assert body["bucket_counts"] == {"pre_breakout": 1}
     assert body["failures"] == []
+
+
+def test_screen_rows_expose_the_lid_band_position_end_to_end(
+    client, monkeypatch, tmp_cache
+):
+    """Real analysis -> row -> /api/screen: the band enum survives untouched.
+
+    ``/api/screen`` forwards rows verbatim, so this also pins that the enum
+    and the ratio it is derived from stay consistent for a coil pressing its
+    lid from below.
+    """
+    from test_coil_analysis import make_coil_bars
+
+    _seed_coil_cache(tmp_cache, "BAND", make_coil_bars())
+    monkeypatch.setattr(app_module, "fetch_monthly_history", lambda s: None)
+
+    body = client.post("/api/screen", json={"tickers": ["BAND"]}).json()
+
+    row = body["results"][0]
+    assert row["ticker"] == "BAND"
+    assert row["current_price_position"] == "within_lid_band"
+    assert 80.0 <= row["proximity_pct"] <= 120.0
