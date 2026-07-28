@@ -7,6 +7,7 @@ import re
 import secrets
 import tempfile
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -75,6 +76,17 @@ _CAPTURE_API_ROUTES = (
             r"^/api/review-sessions/[0-9]+/items/[^/]+/context$"
         ),
     ),
+    (
+        "GET",
+        re.compile(r"^/api/review-sessions/[0-9]+/stock-universe$"),
+    ),
+    (
+        "GET",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/stock-universe/"
+            r"(sp500|international)/[^/]+/context$"
+        ),
+    ),
     ("POST", re.compile(r"^/api/review-sessions$")),
     (
         "PUT",
@@ -97,6 +109,18 @@ _CAPTURE_API_ROUTES = (
     (
         "PATCH",
         re.compile(r"^/api/review-sessions/[0-9]+/items/[^/]+$"),
+    ),
+    (
+        "PUT",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/candidate-nominations/[^/]+$"
+        ),
+    ),
+    (
+        "DELETE",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/candidate-nominations/[^/]+$"
+        ),
     ),
     ("POST", re.compile(r"^/api/review-sessions/[0-9]+/finalize$")),
     (
@@ -412,6 +436,16 @@ class ReviewSessionCreateRequest(BaseModel):
 class ReviewSessionItemPatch(BaseModel):
     status: Literal["pending", "skipped"]
     reason: str | None = Field(default=None, max_length=5000)
+
+
+class CandidateNominationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    universe: Literal["sp500", "international"]
+    rationale: str = Field(default="", max_length=2000)
+    expected_revision: int = Field(
+        default=0, ge=0, alias="expectedRevision"
+    )
 
 
 class VisionRunRequest(BaseModel):
@@ -980,6 +1014,162 @@ def review_session(
     if session is None:
         raise HTTPException(status_code=404, detail="Review session not found.")
     return {"session": session}
+
+
+@lru_cache(maxsize=2)
+def _review_stock_universe(
+    source: Literal["sp500", "international"],
+) -> tuple[str, ...]:
+    """Reuse the screener's existing deterministic universe connectors."""
+    return tuple(build_ticker_list(universe=source))
+
+
+def _universe_history_context(
+    source: Literal["sp500", "international"],
+    ticker: str,
+) -> dict[str, Any]:
+    symbol = ticker.strip().upper()
+    try:
+        universe = _review_stock_universe(source)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The stock universe could not be loaded. Try again.",
+        ) from exc
+    if symbol not in universe:
+        raise HTTPException(
+            status_code=404,
+            detail="Ticker is not part of the selected stock universe.",
+        )
+    payload = get_history_payload(
+        symbol,
+        fetch_monthly_history,
+        compute_features,
+        force_refresh=False,
+    )
+    if payload is None or not payload.get("bars"):
+        raise HTTPException(
+            status_code=404,
+            detail="No monthly history found for this stock.",
+        )
+    bars = payload["bars"]
+    bars_hash = hashlib.sha256(
+        canonical_json({"ticker": symbol, "bars": bars}).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": 1,
+        "kind": "coilingview.review-candidate-context",
+        "ticker": symbol,
+        "universe": source,
+        "monthly_bars": bars,
+        "history_as_of": bars[-1].get("date"),
+        "bars_hash": bars_hash,
+        "freshness": payload.get("freshness"),
+    }
+
+
+@app.get("/api/review-sessions/{session_id}/stock-universe")
+def review_stock_universe(
+    session_id: int,
+    source: Literal["sp500", "international"] = "sp500",
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    try:
+        tickers = list(_review_stock_universe(source))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="The stock universe could not be loaded. Try again.",
+        ) from exc
+    session = get_review_store().get_session(
+        session_id, algorithm_version=ALGORITHM_VERSION
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    screened = {item["ticker"] for item in session["items"]}
+    return {
+        "source": source,
+        "label": (
+            "S&P 500"
+            if source == "sp500"
+            else "International review universe"
+        ),
+        "tickers": tickers,
+        "available_count": sum(ticker not in screened for ticker in tickers),
+        "screened_tickers": [
+            ticker for ticker in tickers if ticker in screened
+        ],
+    }
+
+
+@app.get(
+    "/api/review-sessions/{session_id}/stock-universe/"
+    "{source}/{ticker}/context"
+)
+def review_stock_universe_context(
+    session_id: int,
+    source: Literal["sp500", "international"],
+    ticker: str,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    return {"context": _universe_history_context(source, ticker)}
+
+
+@app.put(
+    "/api/review-sessions/{session_id}/candidate-nominations/{ticker}"
+)
+def put_review_candidate_nomination(
+    session_id: int,
+    ticker: str,
+    request: CandidateNominationRequest,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    context = _universe_history_context(request.universe, ticker)
+    try:
+        nomination = get_review_store().save_candidate_nomination(
+            session_id,
+            ticker,
+            universe=request.universe,
+            rationale=request.rationale,
+            history_as_of=context["history_as_of"],
+            bars_hash=context["bars_hash"],
+            expected_revision=request.expected_revision,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if nomination is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    return {"nomination": nomination}
+
+
+@app.delete(
+    "/api/review-sessions/{session_id}/candidate-nominations/{ticker}"
+)
+def delete_review_candidate_nomination(
+    session_id: int,
+    ticker: str,
+    expected_revision: int,
+    _security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    try:
+        removed = get_review_store().delete_candidate_nomination(
+            session_id,
+            ticker,
+            expected_revision=expected_revision,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if removed is None:
+        raise HTTPException(status_code=404, detail="Review session not found.")
+    if not removed:
+        raise HTTPException(
+            status_code=404, detail="Candidate nomination not found."
+        )
+    return {"removed": True, "ticker": ticker.strip().upper()}
 
 
 @app.post("/api/review-sessions/{session_id}/access-token/rotate")

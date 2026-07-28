@@ -505,6 +505,20 @@ _DDL = [
         PRIMARY KEY (session_id, ticker, idempotency_key)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS review_candidate_nominations (
+        session_id INTEGER NOT NULL,
+        ticker TEXT NOT NULL,
+        universe TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        history_as_of TEXT,
+        bars_hash TEXT,
+        revision INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (session_id, ticker)
+    )
+    """,
 ]
 
 # Pre-session deployments created high_overrides without decision provenance.
@@ -1331,6 +1345,210 @@ class ReviewStore:
             "token_revoked_at": row[7],
         }
 
+    def list_candidate_nominations(
+        self, session_id: int
+    ) -> list[dict[str, Any]]:
+        """Return the broader-universe stocks nominated outside the frozen queue."""
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT ticker, universe, rationale, history_as_of, bars_hash, "
+                f"revision, created_at, updated_at "
+                f"FROM review_candidate_nominations "
+                f"WHERE session_id = {self._ph} ORDER BY created_at, ticker",
+                (session_id,),
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "ticker": str(row[0]),
+                "universe": str(row[1]),
+                "rationale": str(row[2]),
+                "history_as_of": row[3],
+                "bars_hash": row[4],
+                "revision": int(row[5]),
+                "created_at": str(row[6]),
+                "updated_at": str(row[7]),
+            }
+            for row in rows
+        ]
+
+    def save_candidate_nomination(
+        self,
+        session_id: int,
+        ticker: str,
+        *,
+        universe: str,
+        rationale: str,
+        history_as_of: Optional[str],
+        bars_hash: Optional[str],
+        expected_revision: int,
+    ) -> Optional[dict[str, Any]]:
+        """Create or revise a missed-candidate nomination without changing the queue."""
+        symbol = ticker.strip().upper()
+        if not symbol:
+            raise ValueError("candidate ticker is required")
+        if universe not in {"sp500", "international"}:
+            raise ValueError("candidate universe is not supported")
+        note = rationale.strip()
+        if len(note) > 2000:
+            raise ValueError("candidate rationale exceeds 2000 characters")
+        if expected_revision < 0:
+            raise ValueError("expected revision must be non-negative")
+
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, finalized_at "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            if not bool(session_row[0]):
+                raise ValueError(
+                    "candidate nominations require a fresh-review session"
+                )
+            if session_row[1] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            cursor.execute(
+                f"SELECT 1 FROM review_session_items "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}",
+                (session_id, symbol),
+            )
+            if cursor.fetchone() is not None:
+                raise ValueError(
+                    "screened stocks must stay in the frozen review queue"
+                )
+            cursor.execute(
+                f"SELECT revision, created_at "
+                f"FROM review_candidate_nominations "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                (session_id, symbol),
+            )
+            existing = cursor.fetchone()
+            now = _utcnow()
+            if existing is None:
+                if expected_revision != 0:
+                    raise ReviewConflictError(
+                        "candidate revision conflict: current revision is 0"
+                    )
+                revision = 1
+                cursor.execute(
+                    f"INSERT INTO review_candidate_nominations "
+                    f"(session_id, ticker, universe, rationale, history_as_of, "
+                    f"bars_hash, revision, created_at, updated_at) "
+                    f"VALUES ({', '.join([self._ph] * 9)})",
+                    (
+                        session_id,
+                        symbol,
+                        universe,
+                        note,
+                        history_as_of,
+                        bars_hash,
+                        revision,
+                        now,
+                        now,
+                    ),
+                )
+            else:
+                current_revision = int(existing[0])
+                if current_revision != expected_revision:
+                    raise ReviewConflictError(
+                        "candidate revision conflict: "
+                        f"current revision is {current_revision}"
+                    )
+                revision = current_revision + 1
+                cursor.execute(
+                    f"UPDATE review_candidate_nominations SET "
+                    f"universe = {self._ph}, rationale = {self._ph}, "
+                    f"history_as_of = {self._ph}, bars_hash = {self._ph}, "
+                    f"revision = {self._ph}, updated_at = {self._ph} "
+                    f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                    f"AND revision = {self._ph}",
+                    (
+                        universe,
+                        note,
+                        history_as_of,
+                        bars_hash,
+                        revision,
+                        now,
+                        session_id,
+                        symbol,
+                        current_revision,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise ReviewConflictError(
+                        "candidate nomination lost a revision race"
+                    )
+            conn.commit()
+        return next(
+            (
+                entry
+                for entry in self.list_candidate_nominations(session_id)
+                if entry["ticker"] == symbol
+            ),
+            None,
+        )
+
+    def delete_candidate_nomination(
+        self,
+        session_id: int,
+        ticker: str,
+        *,
+        expected_revision: int,
+    ) -> Optional[bool]:
+        """Remove a nomination before finalization with optimistic concurrency."""
+        symbol = ticker.strip().upper()
+        with self._connect() as conn:
+            self._begin_protected_write(conn)
+            cursor = conn.cursor()
+            suffix = " FOR UPDATE" if self._is_postgres else ""
+            cursor.execute(
+                f"SELECT require_fresh_review, finalized_at "
+                f"FROM review_sessions WHERE id = {self._ph}{suffix}",
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                return None
+            if not bool(session_row[0]):
+                raise ValueError(
+                    "candidate nominations require a fresh-review session"
+                )
+            if session_row[1] is not None:
+                raise ReviewConflictError("finalized sessions are immutable")
+            cursor.execute(
+                f"SELECT revision FROM review_candidate_nominations "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph}{suffix}",
+                (session_id, symbol),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+            current_revision = int(row[0])
+            if current_revision != expected_revision:
+                raise ReviewConflictError(
+                    "candidate revision conflict: "
+                    f"current revision is {current_revision}"
+                )
+            cursor.execute(
+                f"DELETE FROM review_candidate_nominations "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND revision = {self._ph}",
+                (session_id, symbol, current_revision),
+            )
+            if cursor.rowcount != 1:
+                raise ReviewConflictError(
+                    "candidate nomination lost a revision race"
+                )
+            conn.commit()
+        return True
+
     def rotate_session_token(
         self, session_id: int, token_hash: str
     ) -> Optional[dict[str, Any]]:
@@ -1437,6 +1655,14 @@ class ReviewStore:
                 records = {
                     int(row[0]): json.loads(row[1]) for row in cursor.fetchall()
                 }
+            cursor.execute(
+                f"SELECT ticker, universe, rationale, history_as_of, bars_hash, "
+                f"revision, created_at, updated_at "
+                f"FROM review_candidate_nominations "
+                f"WHERE session_id = {self._ph} ORDER BY created_at, ticker",
+                (session_id,),
+            )
+            candidate_rows = cursor.fetchall()
 
         items: list[dict[str, Any]] = []
         counts = {
@@ -1582,6 +1808,19 @@ class ReviewStore:
             "token_revision": int(session_row[9] or 1),
             "token_rotated_at": session_row[10],
             "items": items,
+            "candidate_nominations": [
+                {
+                    "ticker": str(row[0]),
+                    "universe": str(row[1]),
+                    "rationale": str(row[2]),
+                    "history_as_of": row[3],
+                    "bars_hash": row[4],
+                    "revision": int(row[5]),
+                    "created_at": str(row[6]),
+                    "updated_at": str(row[7]),
+                }
+                for row in candidate_rows
+            ],
             "counts": {**counts, "total": len(items)},
             "next_pending_ticker": next_pending,
         }
@@ -1812,9 +2051,29 @@ class ReviewStore:
                     }
                 )
 
+        cursor.execute(
+            f"SELECT ticker, universe, rationale, history_as_of, bars_hash, "
+            f"revision, created_at, updated_at "
+            f"FROM review_candidate_nominations "
+            f"WHERE session_id = {self._ph} ORDER BY created_at, ticker",
+            (session_id,),
+        )
+        candidate_nominations = [
+            {
+                "ticker": str(row[0]),
+                "universe": str(row[1]),
+                "rationale": str(row[2]),
+                "history_as_of": row[3],
+                "bars_hash": row[4],
+                "revision": int(row[5]),
+                "created_at": str(row[6]),
+                "updated_at": str(row[7]),
+            }
+            for row in cursor.fetchall()
+        ]
         session_snapshot = json.loads(session_row[4]) if session_row[4] else {}
         return {
-            "schema_version": 3,
+            "schema_version": 4,
             "kind": "coilingview.fresh-review-session-feedback",
             "exported_at": exported_at,
             "algorithm_version": algorithm_version,
@@ -1832,6 +2091,7 @@ class ReviewStore:
                 "next_pending_ticker": next_pending,
             },
             "records": records,
+            "candidate_nominations": candidate_nominations,
         }
 
     def export_session(

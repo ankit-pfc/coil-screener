@@ -483,6 +483,152 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
     )
 
 
+def test_protected_stock_universe_records_candidates_outside_frozen_queue(
+    fresh_client, monkeypatch
+):
+    client, _, root = fresh_client
+    source = "candidate-discovery.csv"
+    _make_corpus(root, source, ["AAA"])
+    session = _create(client, source, ["AAA"])["session"]
+    bars = make_coil_bars()
+    monkeypatch.setattr(
+        app_module,
+        "_review_stock_universe",
+        lambda universe: ("AAA", "ZZZ", "SHOP.TO"),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "get_history_payload",
+        lambda ticker, *_args, **_kwargs: {
+            "ticker": ticker,
+            "bars": bars,
+            "features": {},
+            "freshness": {"source": "test"},
+        },
+    )
+
+    universe_path = (
+        f"/api/review-sessions/{session['id']}/stock-universe"
+        "?source=sp500"
+    )
+    assert client.get(universe_path).status_code == 403
+    universe = client.get(universe_path, headers=_headers())
+    assert universe.status_code == 200
+    assert universe.json() == {
+        "source": "sp500",
+        "label": "S&P 500",
+        "tickers": ["AAA", "ZZZ", "SHOP.TO"],
+        "available_count": 2,
+        "screened_tickers": ["AAA"],
+    }
+
+    context_path = (
+        f"/api/review-sessions/{session['id']}/stock-universe"
+        "/sp500/ZZZ/context"
+    )
+    context = client.get(context_path, headers=_headers())
+    assert context.status_code == 200
+    body = context.json()["context"]
+    assert body["ticker"] == "ZZZ"
+    assert body["universe"] == "sp500"
+    assert body["monthly_bars"] == bars
+    assert len(body["bars_hash"]) == 64
+    assert "analysis" not in body
+
+    screened_path = (
+        f"/api/review-sessions/{session['id']}"
+        "/candidate-nominations/AAA"
+    )
+    assert (
+        client.put(
+            screened_path,
+            headers=_headers(),
+            json={
+                "universe": "sp500",
+                "rationale": "Already screened.",
+                "expectedRevision": 0,
+            },
+        ).status_code
+        == 400
+    )
+
+    candidate_path = (
+        f"/api/review-sessions/{session['id']}"
+        "/candidate-nominations/ZZZ"
+    )
+    first = client.put(
+        candidate_path,
+        headers=_headers(),
+        json={
+            "universe": "sp500",
+            "rationale": "A known repeated-ceiling structure worth review.",
+            "expectedRevision": 0,
+        },
+    )
+    assert first.status_code == 200
+    nomination = first.json()["nomination"]
+    assert nomination["ticker"] == "ZZZ"
+    assert nomination["revision"] == 1
+    assert nomination["history_as_of"] == bars[-1]["date"]
+    assert nomination["bars_hash"] == body["bars_hash"]
+
+    refreshed = client.get(
+        f"/api/review-sessions/{session['id']}",
+        headers=_headers(),
+    ).json()["session"]
+    assert refreshed["candidate_nominations"] == [nomination]
+    assert refreshed["items"][0]["ticker"] == "AAA"
+    assert refreshed["counts"]["total"] == 1
+
+    stale = client.put(
+        candidate_path,
+        headers=_headers(),
+        json={
+            "universe": "sp500",
+            "rationale": "Stale tab should not overwrite.",
+            "expectedRevision": 0,
+        },
+    )
+    assert stale.status_code == 409
+    updated = client.put(
+        candidate_path,
+        headers=_headers(),
+        json={
+            "universe": "sp500",
+            "rationale": "Known coil that appears absent from the screen.",
+            "expectedRevision": 1,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["nomination"]["revision"] == 2
+
+    item_path = f"/api/review-sessions/{session['id']}/items/AAA/finalize"
+    finalized_item = client.post(
+        item_path,
+        headers=_headers(),
+        json=_base_finalize(client, session, "AAA"),
+    )
+    assert finalized_item.status_code == 200
+    frozen = client.post(
+        f"/api/review-sessions/{session['id']}/finalize",
+        headers=_headers(),
+    )
+    assert frozen.status_code == 200
+    export = frozen.json()["export"]
+    assert export["schema_version"] == 4
+    assert export["candidate_nominations"][0] == (
+        updated.json()["nomination"]
+    )
+    assert (
+        client.delete(
+            candidate_path,
+            headers=_headers(),
+            params={"expected_revision": 2},
+        ).status_code
+        == 409
+    )
+
+
 def test_fresh_create_requires_complete_exact_manifest_order(fresh_client):
     client, _, root = fresh_client
     source = "ordered.csv"
