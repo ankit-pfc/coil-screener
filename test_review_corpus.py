@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from review_corpus import build_corpus, load_export
+from review_corpus import build_corpus, evaluate_promotion_gate, load_export
 
 
 def _record(
@@ -86,6 +86,16 @@ def test_build_deduplicates_cross_session_event_and_reports_labels():
         "confidence_counts": {"high": 1},
         "human_grade_counts": {"B": 1},
         "human_vs_model_grade": {"B": {"A": 1}},
+        "accuracy": {
+            "top_exact_matches": 1,
+            "top_decisions": 1,
+            "top_exact_match_rate": 1.0,
+            "top_point_precision": None,
+            "top_point_recall": None,
+            "coil_candidates": 1,
+            "definite_coil_labels": 1,
+            "coil_candidate_precision": 1.0,
+        },
     }
 
 
@@ -121,6 +131,7 @@ def test_build_quarantines_ambiguous_or_non_reproducible_labels(entry, reason):
     sample = corpus["samples"][0]
     assert sample["status"] == "quarantine"
     assert reason in sample["quarantine_reasons"]
+    assert corpus["report"]["accuracy"]["top_decisions"] == 0
 
 
 def test_conflicting_payload_for_same_event_id_is_rejected():
@@ -129,3 +140,84 @@ def test_conflicting_payload_for_same_event_id_is_rejected():
     second["record"]["note"] = "Different payload."
     with pytest.raises(ValueError, match="conflicting payloads"):
         build_corpus([_export(first), _export(second, session_id=2)])
+
+
+def test_capture_v5_fresh_export_is_a_candidate_and_reports_accuracy():
+    corrected = _record(decision="corrected", coil_label="not_coil")
+    corrected["record"].update(
+        {
+            "schemaVersion": 5,
+            "labelPolicyVersion": 2,
+            "learningCapture": {"basePath": "exception_territory"},
+            "algorithm": {
+                "major_highs": [
+                    {"date": "2020-03-01", "price": 100.0},
+                    {"date": "2024-03-01", "price": 110.0},
+                ]
+            },
+            "reviewedHighs": [
+                {"date": "2020-03-01", "price": 100.0},
+                {"date": "2025-03-01", "price": 115.0},
+            ],
+            "provenance": {"barsHash": "sha256:capture-v5"},
+        }
+    )
+    payload = {
+        **_export(corrected),
+        "schema_version": 3,
+        "kind": "coilingview.fresh-review-session-feedback",
+    }
+
+    corpus = build_corpus([payload])
+
+    assert corpus["samples"][0]["status"] == "candidate"
+    assert corpus["report"]["accuracy"] == {
+        "top_exact_matches": 0,
+        "top_decisions": 1,
+        "top_exact_match_rate": 0.0,
+        "top_point_precision": 0.5,
+        "top_point_recall": 0.5,
+        "coil_candidates": 0,
+        "definite_coil_labels": 1,
+        "coil_candidate_precision": 0.0,
+    }
+
+
+def test_promotion_gate_fails_closed_on_low_accuracy_or_small_sample():
+    report = {
+        "accuracy": {
+            "top_decisions": 7,
+            "top_exact_match_rate": 0.1429,
+            "coil_candidate_precision": 0.1429,
+        }
+    }
+
+    result = evaluate_promotion_gate(
+        report,
+        min_labeled_samples=20,
+        min_top_exact_match_rate=0.8,
+        min_coil_candidate_precision=0.8,
+    )
+
+    assert result["passed"] is False
+    assert len(result["failures"]) == 3
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"min_labeled_samples": 0},
+        {"min_top_exact_match_rate": 1.01},
+        {"min_coil_candidate_precision": -0.01},
+    ],
+)
+def test_promotion_gate_rejects_invalid_thresholds(overrides):
+    kwargs = {
+        "min_labeled_samples": 1,
+        "min_top_exact_match_rate": 0.8,
+        "min_coil_candidate_precision": 0.8,
+        **overrides,
+    }
+
+    with pytest.raises(ValueError):
+        evaluate_promotion_gate({"accuracy": {}}, **kwargs)

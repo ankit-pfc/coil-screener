@@ -349,6 +349,13 @@ def test_verifier_matches_real_capture_only_backend_contract(
             ],
         },
     )
+    if manifest["source_run"]["algorithm_version"] != app_module.ALGORITHM_VERSION:
+        # Immutable review packages are analyzer-version scoped. A newer
+        # detector must not silently replay the old v2.2 package with changed
+        # model evidence; the isolated v2.2 deployment remains its verifier.
+        assert created.status_code == 400
+        assert "algorithm version" in created.text
+        return
     assert created.status_code == 200, created.text
     session_id = created.json()["session"]["id"]
     config = VerificationConfig(
