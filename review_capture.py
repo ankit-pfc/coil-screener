@@ -89,9 +89,9 @@ class CaptureExceptionRule(BaseModel):
         "other",
     ] = Field(alias="patternKind")
     applicability: str = Field(min_length=20, max_length=5000)
-    exclusions: str = Field(min_length=20, max_length=5000)
-    detection_logic: str = Field(min_length=20, max_length=10000, alias="detectionLogic")
-    confirmation: str = Field(min_length=20, max_length=5000)
+    exclusions: str = Field(default="", max_length=5000)
+    detection_logic: str = Field(default="", max_length=10000, alias="detectionLogic")
+    confirmation: str = Field(default="", max_length=5000)
     proposed_action: Literal[
         "include_candidate",
         "exclude_candidate",
@@ -101,17 +101,13 @@ class CaptureExceptionRule(BaseModel):
     ] = Field(alias="proposedAction")
     impacted_stages: list[
         Literal["screening", "top_detection", "lid_slope", "lifecycle", "grading"]
-    ] = Field(min_length=1, max_length=5, alias="impactedStages")
-    validation_plan: str = Field(min_length=20, max_length=5000, alias="validationPlan")
+    ] = Field(default_factory=list, max_length=5, alias="impactedStages")
+    validation_plan: str = Field(default="", max_length=5000, alias="validationPlan")
     evidence: list[CaptureEvidencePoint] = Field(min_length=2, max_length=100)
 
     @field_validator(
         "name",
         "applicability",
-        "exclusions",
-        "detection_logic",
-        "confirmation",
-        "validation_plan",
     )
     @classmethod
     def nonblank(cls, value: str) -> str:
