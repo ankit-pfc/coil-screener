@@ -59,10 +59,10 @@ VISION_RUNS_DIR = PROJECT_ROOT / "vision_runs"
 
 # The frontend auto-loads runs[0] from /api/saved-runs as the default view. On a
 # fresh deploy (e.g. Railway) every file gets the same checkout mtime, so an
-# mtime sort is non-deterministic and may surface a large non-curated run whose
-# tickers aren't in seed_cache. Pin the curated demo run first so the demo always
-# boots into the seeded coil universe; everything else stays mtime-sorted below.
-DEMO_DEFAULT_RUN = "demo_curated_coils_results.csv"
+# mtime sort is non-deterministic and may surface an obsolete algorithm run.
+# Pin the current versioned candidate cohort first; everything else remains
+# available as historical evidence below it.
+DEMO_DEFAULT_RUN = "screen_2026-08-05_v2.3.0.csv"
 
 app = FastAPI(title="Coil Screening")
 
