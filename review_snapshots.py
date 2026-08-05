@@ -3,8 +3,8 @@
 Fresh review sessions never read the mutable history cache.  A saved CSV run
 maps to ``review_snapshots/<run-stem>/<TICKER>.json`` and each file contains
 the exact monthly bars and screener row used for that run.  This module
-validates those files, derives content identities, and runs the v2.2 analyzer
-without consulting human overrides.
+validates those files, derives content identities, and serves the algorithm
+snapshot captured with that run without consulting human overrides.
 """
 from __future__ import annotations
 
@@ -251,6 +251,7 @@ def _identity_payload(
     screen_snapshot: dict[str, Any],
     bars: list[dict[str, Any]],
     snapshot_sha256: str,
+    algorithm_version: str,
 ) -> tuple[str, str]:
     bars_hash = sha256_json(
         {
@@ -265,7 +266,7 @@ def _identity_payload(
             "schema_version": SNAPSHOT_SCHEMA_VERSION,
             "source": source,
             "ticker": ticker,
-            "algorithm_version": ALGORITHM_VERSION,
+            "algorithm_version": algorithm_version,
             "run": run,
             "screen_snapshot": screen_snapshot,
             "bars_hash": bars_hash,
@@ -305,10 +306,9 @@ def load_review_snapshot(source: str, ticker: str) -> dict[str, Any]:
     screen_snapshot = raw.get("screen_snapshot")
     if not isinstance(run, dict) or not isinstance(screen_snapshot, dict):
         raise ReviewSnapshotError("snapshot run and screen metadata are required")
-    if str(run.get("algorithm_version", "")) != ALGORITHM_VERSION:
-        raise ReviewSnapshotError(
-            "snapshot algorithm version does not match the running analyzer"
-        )
+    run_algorithm_version = str(run.get("algorithm_version", "")).strip()
+    if not run_algorithm_version:
+        raise ReviewSnapshotError("snapshot run algorithm version is required")
     if str(screen_snapshot.get("ticker", "")).strip().upper() != symbol:
         raise ReviewSnapshotError("screen snapshot ticker does not match")
     bars, analysis_bars, server_quality = _inspect_bars(raw.get("monthly_bars"))
@@ -333,8 +333,10 @@ def load_review_snapshot(source: str, ticker: str) -> dict[str, Any]:
         raise ReviewSnapshotError("frozen algorithm analysis must be a JSON object")
     if frozen_analysis is not None and str(
         frozen_analysis.get("algorithm_version", "")
-    ) != ALGORITHM_VERSION:
-        raise ReviewSnapshotError("frozen analysis algorithm version is unexpected")
+    ) != run_algorithm_version:
+        raise ReviewSnapshotError(
+            "frozen analysis algorithm version does not match its run"
+        )
     snapshot_sha256 = hashlib.sha256(snapshot_bytes).hexdigest()
     bars_hash, sample_id = _identity_payload(
         source=source,
@@ -343,6 +345,7 @@ def load_review_snapshot(source: str, ticker: str) -> dict[str, Any]:
         screen_snapshot=screen_snapshot,
         bars=bars,
         snapshot_sha256=snapshot_sha256,
+        algorithm_version=run_algorithm_version,
     )
     return {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
@@ -453,19 +456,26 @@ def load_blind_review_context(source: str, ticker: str) -> dict[str, Any]:
 
 
 def load_review_context(source: str, ticker: str) -> dict[str, Any]:
-    """Frozen inputs plus algorithm-only v2.2 analysis for one review item."""
+    """Frozen inputs plus the algorithm-only analysis captured for the run."""
     snapshot = load_review_snapshot(source, ticker)
     analysis = snapshot.get("_frozen_analysis")
+    run_algorithm_version = str(snapshot["run"]["algorithm_version"])
     quarterly_bars: list[dict[str, Any]] = []
+    analysis_status = "quarantined_unavailable"
     if snapshot["reviewable"]:
         if analysis is None:
-            analysis = analyze_coil(
-                snapshot["_analysis_bars"], review_override=None
-            )
-        if str(analysis.get("algorithm_version", "")) != ALGORITHM_VERSION:
-            raise ReviewSnapshotError(
-                "analyzer returned an unexpected algorithm version"
-            )
+            if run_algorithm_version == ALGORITHM_VERSION:
+                analysis = analyze_coil(
+                    snapshot["_analysis_bars"], review_override=None
+                )
+                analysis_status = "frozen_algorithm_only"
+            else:
+                # The price evidence remains valid across releases. If an
+                # older corpus did not persist its model output, do not
+                # silently reinterpret it with the current analyzer.
+                analysis_status = "frozen_model_unavailable"
+        else:
+            analysis_status = "frozen_algorithm_only"
         quarterly_bars = [
             {key: value for key, value in bar.items() if not key.startswith("_")}
             for bar in _aggregate_quarterly_display_bars(
@@ -479,15 +489,11 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
         "interval": "3M",
         "quarterly_bars": quarterly_bars,
         "analysis": analysis,
-        "analysis_status": (
-            "frozen_algorithm_only"
-            if snapshot["reviewable"]
-            else "quarantined_unavailable"
-        ),
+        "analysis_status": analysis_status,
         "model_snapshot": {
             "screen_snapshot": snapshot["screen_snapshot"],
             "analysis": analysis,
-            "algorithm_version": ALGORITHM_VERSION,
+            "algorithm_version": run_algorithm_version,
             "review_override_applied": False,
             "frozen": True,
         },

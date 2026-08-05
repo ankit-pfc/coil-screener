@@ -36,12 +36,12 @@ from urllib.request import (
 DEFAULT_MANIFEST = (
     Path(__file__).resolve().parents[1]
     / "review_snapshots"
-    / "screen_2026-07-27_v2.2.0"
+    / "screen_2026-08-05_v2.3.0"
     / "manifest.json"
 )
-EXPECTED_ITEM_COUNT = 79
-EXPECTED_REVIEWABLE_COUNT = 67
-EXPECTED_QUARANTINE_COUNT = 12
+EXPECTED_ITEM_COUNT = 4
+EXPECTED_REVIEWABLE_COUNT = 4
+EXPECTED_QUARANTINE_COUNT = 0
 INVALID_TOKEN = "release-verifier-invalid-capability-token"
 MUTATION_CONFIRMATION = "I_UNDERSTAND_THIS_WRITES_TWO_DRAFT_REVISIONS"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -610,7 +610,8 @@ class ReleaseVerifier:
         # local manifest/hash check above proves that expected binding.
         if frozen_manifest.get("item_count") != self.config.expected_item_count:
             raise VerificationFailure(
-                "Deployed manifest item count is not the expected 79."
+                "Deployed manifest item count does not match the expected "
+                f"{self.config.expected_item_count}."
             )
 
         expected_tree = self.config.expected_corpus_tree_sha256

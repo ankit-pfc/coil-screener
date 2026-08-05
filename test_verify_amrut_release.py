@@ -108,6 +108,7 @@ def _fixture() -> tuple[
     manifest_path = Path(DEFAULT_MANIFEST)
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
+    item_count = len(manifest["items"])
     items = []
     for index, expected in enumerate(manifest["items"]):
         items.append(
@@ -140,15 +141,15 @@ def _fixture() -> tuple[
         "finalized_at": None,
         "items": items,
         "counts": {
-            "pending": 79,
+            "pending": item_count,
             "reviewed": 0,
             "skipped": 0,
-            "total": 79,
+            "total": item_count,
         },
         "snapshot": {
             "frozen_manifest": {
                 "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-                "item_count": 79,
+                "item_count": item_count,
                 "source_run": manifest["source_run"],
             }
         },

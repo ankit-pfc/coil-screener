@@ -105,42 +105,55 @@ def test_international_universe_is_accepted_by_screen_api(client, monkeypatch):
     assert seen["force_refresh"] is True
 
 
-def test_saved_runs_lists_csvs_demo_first(client):
+def test_saved_runs_lists_current_algorithm_run_first(client):
     resp = client.get("/api/saved-runs")
     assert resp.status_code == 200
     runs = resp.json()["runs"]
     assert isinstance(runs, list)
     assert len(runs) > 0
-    # contract: each run has a name + size, and the curated demo run is present
+    # contract: each run has a name + size, and history remains available
     names = [r["name"] for r in runs]
     assert all(n.endswith(".csv") for n in names)
     assert all(isinstance(r["size_bytes"], int) for r in runs)
     assert "demo_curated_coils_results.csv" in names
-    # the curated demo run is the deterministic default (frontend loads runs[0])
-    assert names[0] == "demo_curated_coils_results.csv"
+    # The frontend loads runs[0], which must match the running algorithm.
+    assert names[0] == "screen_2026-08-05_v2.3.0.csv"
 
 
-def test_saved_runs_demo_pinned_above_newer_csv(monkeypatch, tmp_path):
-    """The curated run stays first even when another CSV has a newer mtime —
+def test_saved_runs_current_release_pinned_above_newer_csv(monkeypatch, tmp_path):
+    """The current run stays first even when another CSV has a newer mtime —
     guards the Railway cold-start case where checkout flattens all mtimes."""
     import os
     import time
 
     root = tmp_path / "runs"
     root.mkdir()
-    demo = root / "demo_curated_coils_results.csv"
+    current = root / app_module.DEMO_DEFAULT_RUN
     other = root / "sp500_plus_amrut_results.csv"
-    demo.write_text("ticker\nMSCI\n", encoding="utf-8")
+    current.write_text("ticker\nREG\n", encoding="utf-8")
     other.write_text("ticker\nAAPL\n", encoding="utf-8")
-    # Make the non-demo CSV strictly newer than the demo run.
+    # Make the historical CSV strictly newer than the current run.
     now = time.time()
-    os.utime(demo, (now - 100, now - 100))
+    os.utime(current, (now - 100, now - 100))
     os.utime(other, (now, now))
     monkeypatch.setattr(app_module, "PROJECT_ROOT", root)
 
     runs = app_module.saved_runs()["runs"]
-    assert runs[0]["name"] == "demo_curated_coils_results.csv"
+    assert runs[0]["name"] == app_module.DEMO_DEFAULT_RUN
     assert runs[1]["name"] == "sp500_plus_amrut_results.csv"
+
+
+def test_v23_saved_run_contains_only_graded_candidates(client):
+    body = client.get("/api/saved-runs/screen_2026-08-05_v2.3.0.csv").json()
+    assert body["count"] == 4
+    assert [row["ticker"] for row in body["results"]] == [
+        "REG",
+        "BG",
+        "1299.HK",
+        "AZN.L",
+    ]
+    assert {row["algorithm_version"] for row in body["results"]} == {"2.3.0"}
+    assert all(row["grade"] for row in body["results"])
 
 
 # --------------------------------------------------------------------------- #

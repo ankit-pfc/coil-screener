@@ -1,0 +1,104 @@
+{
+  "corpus_id": "screen_2026-08-05_v2.3.0",
+  "generator": {
+    "file": "scripts/build_major_top_release.py",
+    "sha256": "7fadbf6d090eaa4069ed23a4a2453648aa3553c199950fb37bf3eba0233c11f9"
+  },
+  "items": [
+    {
+      "backend_bars_identity_sha256": "62736e9cd8f97db55758afb6e6ba23fc729b0475ca703a447fb83d79097fdcbf",
+      "bar_count": 394,
+      "data_quality": {
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "first_data_date": "1993-10-01",
+      "last_data_date": "2026-07-01",
+      "screen_snapshot_sha256": "f7ac88f2110265e67a0c6d925c2cdf31aca998f331ddcfbe3fa5dbb81a3e0992",
+      "snapshot_file": "REG.json",
+      "snapshot_sha256": "5159e8201b57aac3841e7196bb09d188fa0e5028ba13f8a8614ff23c2dc0c719",
+      "ticker": "REG",
+      "universe_position": 1
+    },
+    {
+      "backend_bars_identity_sha256": "9ec2c30cc9b9b9f7e4a92a21b75727d732bf9af9108c22b17ce1b8495278a49a",
+      "bar_count": 300,
+      "data_quality": {
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "first_data_date": "2001-08-01",
+      "last_data_date": "2026-07-01",
+      "screen_snapshot_sha256": "9459f6a33e7671eb38f15b07c1203dd091227567a54ae7879638841b96354c46",
+      "snapshot_file": "BG.json",
+      "snapshot_sha256": "57dc11b0badff55ec317831dbb8fbccebc774cb5136730f4447b5ebeaed34041",
+      "ticker": "BG",
+      "universe_position": 2
+    },
+    {
+      "backend_bars_identity_sha256": "21421aba76c6732bde2140b774d9cc067d8180196825cfcc245f0dbf757e84da",
+      "bar_count": 190,
+      "data_quality": {
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "first_data_date": "2010-10-01",
+      "last_data_date": "2026-07-01",
+      "screen_snapshot_sha256": "fa713dcfe43ec4db6d90085aff72b74c06ce8e7bb7bfa228b562f76584d298fb",
+      "snapshot_file": "1299.HK.json",
+      "snapshot_sha256": "f4bcf27dd4a6d29ff9418ec70ed4c5154599de2c4bc3c2784d3519ac7e558138",
+      "ticker": "1299.HK",
+      "universe_position": 3
+    },
+    {
+      "backend_bars_identity_sha256": "1fd31ba86123fdbe9e0612a6e57989689b7534297fd8b7072b639c6a77d06a2d",
+      "bar_count": 399,
+      "data_quality": {
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "first_data_date": "1993-05-01",
+      "last_data_date": "2026-07-01",
+      "screen_snapshot_sha256": "399159fef6b669a7a906329430b1c5132632dace9fef7a3649d50694f4485d1d",
+      "snapshot_file": "AZN.L.json",
+      "snapshot_sha256": "40d2f22d4c958e8a457d9cc27d54f83d6b8024c4cac0be56290ca15c5e07338a",
+      "ticker": "AZN.L",
+      "universe_position": 4
+    }
+  ],
+  "kind": "coilingview.saved-run-review-corpus-manifest",
+  "ordered_universe": [
+    "REG",
+    "BG",
+    "1299.HK",
+    "AZN.L"
+  ],
+  "purpose": "Immutable blind-review evidence for the v2.3 graded major-top candidates.",
+  "schema_version": 1,
+  "source": "screen_2026-08-05_v2.3.0.csv",
+  "source_run": {
+    "algorithm_version": "2.3.0",
+    "byte_count": 2499,
+    "code_sha": "f69f38570f4214e7b12250488c5484139bb529c0",
+    "embedded_exact_copy": "source_run.csv",
+    "filename": "screen_2026-08-05_v2.3.0.csv",
+    "input_corpus": "screen_2026-07-27_v2.2.0",
+    "input_manifest_sha256": "cee6fe3042c6765d5dd873e7f93418a3e9f7ee73ebb95aa11dabd6e9b0fd31e5",
+    "row_count": 4,
+    "screened_at": "2026-08-05T13:14:44.000Z",
+    "selection_policy": "grade_is_not_null",
+    "sha256": "f2041aead51ed85c8835637d65f7aff98c83fe84937c99e7e706848a1ef746a2"
+  },
+  "summary": {
+    "grade_counts": {
+      "A": 4
+    },
+    "lifecycle_counts": {
+      "breaking_out": 1,
+      "pre_breakout": 3
+    },
+    "monthly_bar_count": 1283,
+    "ticker_count": 4
+  },
+  "trust_status": "review_evidence_not_validated_training_truth"
+}
