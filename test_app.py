@@ -370,23 +370,20 @@ def test_coil_endpoint_analyzes_cached_bars(client, monkeypatch, tmp_cache):
     assert body["ticker"] == "COIL"
     assert body["status"] == "coiling"
     assert body["grade"] == "A"
-    assert body["resistance"]["touch_count"] == 4
+    assert body["resistance"]["touch_count"] == 3
     assert body["resistance"]["from"].keys() == {"idx", "date", "price"}
-    # touch_count counts every member of the winning price zone, including the
-    # latest completed quarter admitted by immediate qualification. major_highs
-    # stays capped at display_max_highs for the legacy overlay, but the cap now
-    # protects lid members, so both anchors are always marked.
+    # touch_count includes only confirmed members of the winning price zone.
+    # major_highs stays capped at display_max_highs for the legacy overlay, and
+    # the cap protects both lid anchors.
     assert len(body["major_highs"]) == 3
     anchor_idxs = {body["resistance"]["from"]["idx"], body["resistance"]["to"]["idx"]}
     assert anchor_idxs <= {point["idx"] for point in body["major_highs"]}
-    # The cap keeps both anchors and the latest member; the interior 2015-01
-    # touch is the one dropped, and it is still present in body["points"].
     assert [high["date"] for high in body["major_highs"]] == [
         "2011-09-01",
+        "2015-01-01",
         "2018-05-01",
-        "2019-12-01",
     ]
-    assert "2015-01-01" in [point["date"] for point in body["points"]]
+    assert "2019-12-01" not in [point["date"] for point in body["points"]]
     assert body["schema_version"] == 2
     assert body["lifecycle"] == "pre_breakout"
     assert body["active_lid"]["grade"] == "A"

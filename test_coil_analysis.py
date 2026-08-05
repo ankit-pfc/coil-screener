@@ -22,7 +22,6 @@ from coil_analysis import (
     ROLE_PROVISIONAL_TOP,
     LidZone,
     SwingPoint,
-    _admit_latest_completed_quarter,
     _aggregate_quarterly_display_bars,
     _cluster_mountain_plateaus,
     _cluster_price_zones,
@@ -477,6 +476,11 @@ def test_corpus_structure_never_comes_from_the_live_right_edge(ticker):
     roles = [point["role"] for point in result["points"]]
     assert ROLE_PROVISIONAL_TOP not in roles
     assert all(point["confirmed"] for point in result["points"])
+    assert all(point["prominence_pct"] > 0 for point in result["points"])
+    assert all(
+        "immediate_qualification" not in point["evidence"]
+        for point in result["points"]
+    )
     for point in result["points"]:
         assert point["date"] <= last_structural_month, (
             f"{ticker}: {point['date']} is inside the incomplete final quarter"
@@ -597,15 +601,15 @@ def test_trending_megacap_without_a_repeated_ceiling_has_no_lid(ticker):
 
 def test_bg_lifetime_ceiling_is_the_repeated_135_level():
     # Ankit's explicit read: BG's ceiling is the 2008 high at 135 — the same
-    # level price trades at today. Under v2.2 that reads as one price zone
-    # retested 18 years later, which is exactly what a lid is.
+    # level as the confirmed 2022 mountain. The current quarter may be near the
+    # same level, but it cannot replace the confirmed anchor before rejecting.
     payload = json.loads(_review_fixture("BG").read_text(encoding="utf-8"))
     result = analyze_coil(payload["bars"])
 
     lid = result["resistance"]["classification_lid"]
     assert [(point["date"], point["price"]) for point in lid["points"]] == [
         ("2008-01-01", pytest.approx(135.0, abs=0.02)),
-        ("2026-03-01", pytest.approx(131.5, abs=0.02)),
+        ("2022-04-01", pytest.approx(128.4, abs=0.02)),
     ]
     assert result["status"] == "coiling"
     assert result["grade"] == "A"
@@ -615,7 +619,7 @@ def test_bg_lifetime_ceiling_is_the_repeated_135_level():
 def test_algorithm_version_is_reported():
     result = analyze_coil(make_coil_bars())
 
-    assert ALGORITHM_VERSION == "2.2.0"
+    assert ALGORITHM_VERSION == "2.3.0"
     assert result["algorithm_version"] == ALGORITHM_VERSION
     assert result["analysis_metadata"]["algorithm_version"] == ALGORITHM_VERSION
 
@@ -640,9 +644,9 @@ def test_flat_coil_grades_A():
     assert result["grade"] == "A"
     res = result["resistance"]
     assert res["slope_pct_per_year"] == pytest.approx(0.0, abs=0.1)
-    # Three constructed tops at 100 plus the final quarter's tag of the same
-    # level: one price zone, anchored by its earliest and latest member.
-    assert res["touch_count"] == 4
+    # Only the three confirmed constructed tops count. The latest quarter's
+    # tag of the same level still lacks a later-quarter rejection.
+    assert res["touch_count"] == 3
     assert res["value_at_last_bar"] == pytest.approx(100.0, rel=1e-6)
     assert [point["price"] for point in res["classification_lid"]["points"]] == [
         pytest.approx(100.0, abs=1e-6),
@@ -670,7 +674,7 @@ def test_near_equal_tops_still_detected_as_majors():
 
     result = analyze_coil(bars)
     assert result["grade"] == "A"
-    assert result["resistance"]["touch_count"] == 4
+    assert result["resistance"]["touch_count"] == 3
 
 
 def test_rising_lid_spanning_price_eras_is_not_one_zone():
@@ -707,7 +711,7 @@ def test_wider_zone_tolerance_admits_the_same_rising_tops():
         for point in result["resistance"]["classification_lid"]["points"]
     ] == [
         ("2015-01-01", pytest.approx(119.9, abs=0.01)),
-        ("2019-12-01", pytest.approx(149.25, abs=0.01)),
+        ("2018-05-01", pytest.approx(139.801, abs=0.01)),
     ]
 
 
@@ -957,13 +961,14 @@ def test_lh_above_the_band_keeps_the_lid_and_drops_the_grade():
     assert any("above the" in note for note in result["notes"])
 
 
-def test_msci_tops_just_outside_the_tolerance_are_not_one_zone():
+def test_msci_unconfirmed_retest_cannot_manufacture_a_zone():
     """MSCI's 679.85 and 626.28 tops are 5.5% apart — a real boundary case.
 
-    At the 5% default they are two levels, so the lid falls back to the tighter
-    642.45/626.28 pair (2.5% apart). Widening only ``zone_similarity_pct`` to 8%
-    merges the wider pair and promotes 679.85 to the earlier anchor, which pins
-    the tolerance as the sole reason the two tops are not one ceiling.
+    At the 5% default they are two levels, and the apparent recent retest has no
+    confirmed two-sided fall, so there is no repeated ceiling. Widening only
+    ``zone_similarity_pct`` to 8% merges the two confirmed mountains and
+    produces a lid, pinning the tolerance as the sole reason for the default
+    no-structure result.
     """
     payload = json.loads(_review_fixture("MSCI").read_text(encoding="utf-8"))
     bars = payload["bars"]
@@ -971,13 +976,8 @@ def test_msci_tops_just_outside_the_tolerance_are_not_one_zone():
     assert abs(679.85 - 626.28) / 679.85 > DEFAULT_CONFIG.zone_similarity_pct / 100.0
 
     default = analyze_coil(bars)
-    assert [
-        (point["date"], point["price"])
-        for point in default["resistance"]["classification_lid"]["points"]
-    ] == [
-        ("2024-12-01", pytest.approx(642.45, abs=0.02)),
-        ("2026-02-01", pytest.approx(626.28, abs=0.02)),
-    ]
+    assert default["status"] == "no_structure"
+    assert default["resistance"] is None
 
     widened = analyze_coil(bars, config=replace(DEFAULT_CONFIG, zone_similarity_pct=8.0))
     assert [
@@ -985,7 +985,7 @@ def test_msci_tops_just_outside_the_tolerance_are_not_one_zone():
         for point in widened["resistance"]["classification_lid"]["points"]
     ] == [
         ("2021-11-01", pytest.approx(679.85, abs=0.02)),
-        ("2026-02-01", pytest.approx(626.28, abs=0.02)),
+        ("2024-12-01", pytest.approx(642.45, abs=0.02)),
     ]
 
 
@@ -1106,61 +1106,22 @@ def test_ranking_tiebreaks_on_member_count_then_span_then_first_index():
     assert _rank_lid_zones([same, early])[0].first_idx == 10
 
 
-def test_immediate_qualification_admits_the_latest_completed_quarter():
-    quarters = quarterly_bars([100.0] * 9 + [98.0])
-    zone = zone_from({0: 100.0, 2: 100.0})
-
-    admitted = _admit_latest_completed_quarter([zone], quarters, DEFAULT_CONFIG)[0]
-
-    assert [member.idx for member in admitted.members] == [0, 2, 9]
-    assert admitted.last_idx == 9
-    assert admitted.immediate_idx == 9
-    assert admitted.level == pytest.approx((100.0 + 100.0 + 98.0) / 3)
-
-
-def test_immediate_qualification_ignores_an_earlier_completed_quarter():
-    """The ENB 2024-12 regression: only the LATEST completed quarter may join.
-
-    Quarter 5 sits exactly on the zone level and is well separated, but it is
-    a pass-through bar on a breakout leg, not a fresh tag of the lid. Only the
-    final quarter is eligible, and here it is far above the level.
-    """
-    highs = [60.0, 50.0, 50.0, 50.0, 50.0, 60.0, 70.0, 75.0, 78.0, 80.0]
-    quarters = quarterly_bars(highs)
-    zone = zone_from({0: 60.0})
-
-    admitted = _admit_latest_completed_quarter([zone], quarters, DEFAULT_CONFIG)[0]
-
-    assert [member.idx for member in admitted.members] == [0]
-    assert admitted.immediate_idx is None
-    assert _zone_reject_reason(admitted, last_close=72.0) == (
-        "single touch: not a repeated ceiling"
+def test_latest_completed_quarter_cannot_join_a_zone_without_confirmation():
+    """Being near an old ceiling is not enough to make the latest bar a top."""
+    quarters = quarterly_bars(
+        [80.0, 100.0, 70.0, 70.0, 70.0, 70.0, 100.0, 70.0, 70.0, 70.0, 70.0, 98.0]
     )
 
+    zone, _ = _select_lid_zone(
+        quarters,
+        _quarterly_scaled_config(DEFAULT_CONFIG),
+        DEFAULT_CONFIG,
+        last_close=98.0,
+    )
 
-def test_immediate_qualification_needs_both_separation_and_price_tolerance():
-    near_in_time = quarterly_bars([100.0] * 6)
-    far_in_price = quarterly_bars([100.0] * 9 + [80.0])
-    zone = zone_from({0: 100.0, 3: 100.0})
-
-    # Latest completed quarter is idx 5, only 2 quarters past the last member.
-    assert _admit_latest_completed_quarter([zone], near_in_time, DEFAULT_CONFIG)[
-        0
-    ].member_count == 2
-    # Latest completed quarter is 20% below the level.
-    assert _admit_latest_completed_quarter([zone], far_in_price, DEFAULT_CONFIG)[
-        0
-    ].member_count == 2
-    # Loosening only the separation lets the near-in-time case through.
-    loose = replace(DEFAULT_CONFIG, zone_min_separation_quarters=2)
-    assert _admit_latest_completed_quarter([zone], near_in_time, loose)[0].member_count == 3
-
-
-def test_immediate_qualification_is_a_no_op_without_quarters():
-    zone = zone_from({0: 100.0, 8: 100.0})
-
-    assert _admit_latest_completed_quarter([zone], [], DEFAULT_CONFIG) == [zone]
-    assert _admit_latest_completed_quarter([], quarterly_bars([1.0, 2.0]), DEFAULT_CONFIG) == []
+    assert zone is not None
+    assert [member.idx for member in zone.members] == [1, 6]
+    assert zone.last_idx != len(quarters) - 1
 
 
 def test_select_lid_zone_returns_nothing_when_no_zone_qualifies():
@@ -1364,23 +1325,14 @@ def test_detect_display_major_highs_is_empty_without_structure():
     assert detect_display_major_highs([]) == []
 
 
-def test_immediately_qualified_anchor_is_tagged_as_an_unconfirmed_retest():
-    """It tags the lid, but it has not fallen away yet — so it is not a top."""
+def test_every_algorithmic_lid_member_is_a_confirmed_mountain():
     result = analyze_coil(make_coil_bars())
 
-    by_date = {point["date"]: point for point in result["points"]}
-    latest = by_date["2019-12-01"]
-    assert latest["role"] == "structural_retest"
-    assert latest["lid_member"] is True
-    assert latest["evidence"]["immediate_qualification"] is True
-    assert latest["confirmed"] is True
-    # The three confirmed mountains keep the major_top role.
-    assert [by_date[d]["role"] for d in ("2011-09-01", "2015-01-01", "2018-05-01")] == [
-        "major_top",
-        "major_top",
-        "major_top",
-    ]
+    assert result["points"]
+    assert all(point["role"] == "major_top" for point in result["points"])
+    assert all(point["confirmed"] for point in result["points"])
+    assert all(point["prominence_pct"] > 0 for point in result["points"])
     assert all(
-        "immediate_qualification" not in by_date[d]["evidence"]
-        for d in ("2011-09-01", "2015-01-01", "2018-05-01")
+        "immediate_qualification" not in point["evidence"]
+        for point in result["points"]
     )

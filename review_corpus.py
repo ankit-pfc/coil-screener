@@ -9,6 +9,8 @@ Usage:
 
     python -m review_corpus build export-1.md export-2.json -o candidate.json
     python -m review_corpus report export-1.md export-2.json
+    python -m review_corpus gate export.json --min-labeled-samples 20 \
+        --min-top-exact-match-rate 0.8 --min-coil-candidate-precision 0.8
 """
 from __future__ import annotations
 
@@ -21,7 +23,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-EXPORT_KIND = "coilingview.review-session-feedback"
+LEGACY_EXPORT_KIND = "coilingview.review-session-feedback"
+FRESH_EXPORT_KIND = "coilingview.fresh-review-session-feedback"
+EXPORT_KINDS = {LEGACY_EXPORT_KIND, FRESH_EXPORT_KIND}
 CORPUS_KIND = "coilingview.review-corpus-candidate"
 JSON_FENCE = re.compile(r"````json\s*\n(.*?)\n````", re.DOTALL)
 
@@ -45,9 +49,9 @@ def load_export(path: Path | str) -> dict[str, Any]:
         if match is None:
             raise ValueError(f"{export_path}: canonical JSON block not found")
         payload = json.loads(match.group(1))
-    if payload.get("kind") != EXPORT_KIND:
+    if payload.get("kind") not in EXPORT_KINDS:
         raise ValueError(f"{export_path}: unsupported export kind")
-    if payload.get("schema_version") not in (1, 2):
+    if payload.get("schema_version") not in (1, 2, 3):
         raise ValueError(f"{export_path}: unsupported export schema version")
     if not isinstance(payload.get("records"), list):
         raise ValueError(f"{export_path}: records must be a list")
@@ -84,21 +88,28 @@ def _sample_id(entry: dict[str, Any]) -> str:
         "algorithm_version": _field(
             record, "algorithmVersion", "algorithm_version"
         ),
-        "bar_data_hash": _field(
-            provenance, "bar_data_hash", "barDataHash"
-        ),
+        "bar_data_hash": _bar_data_hash(provenance),
     }
     return f"sample-sha256:{_sha256(identity)}"
+
+
+def _bar_data_hash(provenance: dict[str, Any]) -> Any:
+    """Read the immutable bars identity across legacy and capture-v5 names."""
+    for key in ("barsHash", "bars_hash", "barDataHash", "bar_data_hash"):
+        value = provenance.get(key)
+        if value:
+            return value
+    return None
 
 
 def _quarantine_reasons(entry: dict[str, Any]) -> list[str]:
     record = entry.get("record") or {}
     provenance = record.get("provenance") or {}
     reasons: list[str] = []
-    if _field(record, "schemaVersion", "schema_version") != 4:
-        reasons.append("legacy_label_schema")
-    if _field(record, "labelPolicyVersion", "label_policy_version") != 1:
-        reasons.append("missing_label_policy")
+    schema = _field(record, "schemaVersion", "schema_version")
+    label_policy = _field(record, "labelPolicyVersion", "label_policy_version")
+    if (schema, label_policy) not in {(4, 1), (5, 2)}:
+        reasons.append("unsupported_label_contract")
     coil_label = _field(record, "coilLabel", "coil_label")
     if coil_label not in {"coil", "not_coil", "uncertain"}:
         reasons.append("missing_coil_label")
@@ -116,7 +127,7 @@ def _quarantine_reasons(entry: dict[str, Any]) -> list[str]:
         reasons.append("missing_as_of")
     if not _field(record, "algorithmVersion", "algorithm_version"):
         reasons.append("missing_algorithm_version")
-    if not _field(provenance, "bar_data_hash", "barDataHash"):
+    if not _bar_data_hash(provenance):
         reasons.append("missing_bar_data_hash")
     if (
         _field(record, "decision", "decision") == "corrected"
@@ -126,16 +137,41 @@ def _quarantine_reasons(entry: dict[str, Any]) -> list[str]:
     return reasons
 
 
-def _report(samples: list[dict[str, Any]], events_by_id: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _point_dates(points: Any) -> set[str]:
+    if not isinstance(points, list):
+        return set()
+    return {
+        str(point["date"])
+        for point in points
+        if isinstance(point, dict) and point.get("date")
+    }
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 4) if denominator else None
+
+
+def _report(
+    samples: list[dict[str, Any]],
+    events_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     top_verdicts: Counter[str] = Counter()
     coil_labels: Counter[str] = Counter()
     confidence: Counter[str] = Counter()
     grades: Counter[str] = Counter()
     confusion: dict[str, Counter[str]] = defaultdict(Counter)
     statuses: Counter[str] = Counter()
+    top_exact_matches = 0
+    top_decisions = 0
+    point_true_positives = 0
+    algorithm_point_count = 0
+    human_point_count = 0
+    coil_candidates = 0
+    definite_coil_labels = 0
 
     for sample in samples:
         statuses[sample["status"]] += 1
+        trusted = sample["status"] == "candidate"
         entry = events_by_id[sample["current_event_id"]]
         record = entry["record"]
         decision = _field(record, "decision", "decision")
@@ -144,8 +180,16 @@ def _report(samples: list[dict[str, Any]], events_by_id: dict[str, dict[str, Any
         certainty = _field(record, "confidence", "confidence")
         if decision:
             top_verdicts[str(decision)] += 1
+        if trusted and decision in {"approved", "corrected"}:
+            top_decisions += 1
+            if decision == "approved":
+                top_exact_matches += 1
         if coil_label:
             coil_labels[str(coil_label)] += 1
+        if trusted and coil_label in {"coil", "not_coil"}:
+            definite_coil_labels += 1
+            if coil_label == "coil":
+                coil_candidates += 1
         if certainty:
             confidence[str(certainty)] += 1
         if human_grade:
@@ -154,6 +198,19 @@ def _report(samples: list[dict[str, Any]], events_by_id: dict[str, dict[str, Any
         model_grade = _field(algorithm, "grade", "grade")
         if human_grade and model_grade:
             confusion[str(human_grade)][str(model_grade)] += 1
+
+        algorithm_dates = _point_dates(
+            _field(algorithm, "majorHighs", "major_highs")
+        )
+        human_dates = (
+            algorithm_dates
+            if decision == "approved"
+            else _point_dates(_field(record, "reviewedHighs", "reviewed_highs"))
+        )
+        if trusted and decision in {"approved", "corrected"}:
+            point_true_positives += len(algorithm_dates & human_dates)
+            algorithm_point_count += len(algorithm_dates)
+            human_point_count += len(human_dates)
 
     return {
         "sample_count": len(samples),
@@ -167,6 +224,68 @@ def _report(samples: list[dict[str, Any]], events_by_id: dict[str, dict[str, Any
             human: dict(sorted(models.items()))
             for human, models in sorted(confusion.items())
         },
+        "accuracy": {
+            "top_exact_matches": top_exact_matches,
+            "top_decisions": top_decisions,
+            "top_exact_match_rate": _ratio(top_exact_matches, top_decisions),
+            "top_point_precision": _ratio(
+                point_true_positives, algorithm_point_count
+            ),
+            "top_point_recall": _ratio(point_true_positives, human_point_count),
+            "coil_candidates": coil_candidates,
+            "definite_coil_labels": definite_coil_labels,
+            "coil_candidate_precision": _ratio(
+                coil_candidates, definite_coil_labels
+            ),
+        },
+    }
+
+
+def evaluate_promotion_gate(
+    report: dict[str, Any],
+    *,
+    min_labeled_samples: int,
+    min_top_exact_match_rate: float,
+    min_coil_candidate_precision: float,
+) -> dict[str, Any]:
+    """Evaluate explicit release thresholds against human-review evidence."""
+    if min_labeled_samples < 1:
+        raise ValueError("min_labeled_samples must be at least 1")
+    for name, value in (
+        ("min_top_exact_match_rate", min_top_exact_match_rate),
+        ("min_coil_candidate_precision", min_coil_candidate_precision),
+    ):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} must be between 0 and 1")
+    accuracy = report.get("accuracy") or {}
+    labeled = int(accuracy.get("top_decisions") or 0)
+    top_rate = accuracy.get("top_exact_match_rate")
+    coil_precision = accuracy.get("coil_candidate_precision")
+    failures: list[str] = []
+    if labeled < min_labeled_samples:
+        failures.append(
+            f"only {labeled} labeled samples; requires {min_labeled_samples}"
+        )
+    if top_rate is None or float(top_rate) < min_top_exact_match_rate:
+        failures.append(
+            f"top exact-match rate {top_rate!r} is below {min_top_exact_match_rate:.3f}"
+        )
+    if (
+        coil_precision is None
+        or float(coil_precision) < min_coil_candidate_precision
+    ):
+        failures.append(
+            "coil candidate precision "
+            f"{coil_precision!r} is below {min_coil_candidate_precision:.3f}"
+        )
+    return {
+        "passed": not failures,
+        "thresholds": {
+            "min_labeled_samples": min_labeled_samples,
+            "min_top_exact_match_rate": min_top_exact_match_rate,
+            "min_coil_candidate_precision": min_coil_candidate_precision,
+        },
+        "failures": failures,
     }
 
 
@@ -257,6 +376,7 @@ def _render_report(report: dict[str, Any]) -> str:
         f"Coil labels: {json.dumps(report['coil_label_counts'], sort_keys=True)}",
         f"Confidence: {json.dumps(report['confidence_counts'], sort_keys=True)}",
         f"Human grades: {json.dumps(report['human_grade_counts'], sort_keys=True)}",
+        f"Accuracy: {json.dumps(report['accuracy'], sort_keys=True)}",
         "Human vs model grade:",
         json.dumps(report["human_vs_model_grade"], indent=2, sort_keys=True),
     ]
@@ -266,17 +386,34 @@ def _render_report(report: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("build", "report"):
+    for command in ("build", "report", "gate"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("exports", nargs="+", type=Path)
         if command == "build":
             subparser.add_argument("-o", "--output", type=Path, required=True)
+        if command == "gate":
+            subparser.add_argument("--min-labeled-samples", type=int, required=True)
+            subparser.add_argument(
+                "--min-top-exact-match-rate", type=float, required=True
+            )
+            subparser.add_argument(
+                "--min-coil-candidate-precision", type=float, required=True
+            )
     args = parser.parse_args(argv)
 
     corpus = build_corpus(load_export(path) for path in args.exports)
     if args.command == "report":
         print(_render_report(corpus["report"]))
         return 0
+    if args.command == "gate":
+        result = evaluate_promotion_gate(
+            corpus["report"],
+            min_labeled_samples=args.min_labeled_samples,
+            min_top_exact_match_rate=args.min_top_exact_match_rate,
+            min_coil_candidate_precision=args.min_coil_candidate_precision,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["passed"] else 1
     args.output.write_text(
         json.dumps(corpus, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

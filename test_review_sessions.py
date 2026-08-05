@@ -627,7 +627,7 @@ def test_algorithm_version_change_flags_stale(client, tmp_cache):
 def test_algorithm_bump_reopens_every_stored_review_without_touching_it(
     client, tmp_cache, tmp_review_store, monkeypatch
 ):
-    """The v2.2.0 bump re-opens the whole stored corpus, non-destructively.
+    """An algorithm bump re-opens the whole stored corpus, non-destructively.
 
     Mirrors the production ``reviews.db``: one approval recorded under 2.0.0
     and three corrections under 2.0.0/2.1.0, every row carrying provenance.
