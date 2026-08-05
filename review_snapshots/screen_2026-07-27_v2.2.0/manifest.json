@@ -1,0 +1,3689 @@
+{
+  "canonicalization": {
+    "backend_bars_identity_hash": "SHA-256 of canonical JSON containing schema_version=1, interval=1M, ticker, and bars",
+    "canonical_monthly_bars_hash": "SHA-256 of the canonical JSON monthly_bars array",
+    "encoding": "UTF-8",
+    "json_identity": "json.dumps(sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)",
+    "snapshot_storage": "sorted keys, two-space indentation, LF newline",
+    "source_cache_hash": "SHA-256 of exact source cache file bytes"
+  },
+  "cohorts": {
+    "control_reference": {
+      "count": 18,
+      "definition": "The 18 non-international names deliberately appended as calibration/control references.",
+      "tickers": [
+        "REG",
+        "SPG",
+        "BG",
+        "VTR",
+        "UNP",
+        "LH",
+        "MSCI",
+        "FCX",
+        "NUE",
+        "CF",
+        "KN",
+        "EAT",
+        "MSFT",
+        "COF",
+        "CSX",
+        "AAPL",
+        "NSC",
+        "UEC"
+      ]
+    },
+    "prospective_international": {
+      "count": 61,
+      "definition": "Cross-market review universe; prior-review and tuning-anchor flags must still be consulted per item.",
+      "tickers": [
+        "PETR4.SA",
+        "ULVR.L",
+        "0005.HK",
+        "1299.HK",
+        "CNR.TO",
+        "051910.KS",
+        "RELIANCE.NS",
+        "7203.T",
+        "CBA.AX",
+        "INFY.NS",
+        "9988.HK",
+        "GIVN.SW",
+        "MC.PA",
+        "035420.KS",
+        "AZN.L",
+        "SHEL.L",
+        "PHIA.AS",
+        "BAS.DE",
+        "VALE3.SA",
+        "UBSG.SW",
+        "DTE.DE",
+        "SAN.PA",
+        "SOL.JO",
+        "SIE.DE",
+        "2317.TW",
+        "REL.L",
+        "HSBA.L",
+        "NOVN.SW",
+        "BHP.AX",
+        "ENB.TO",
+        "TCS.NS",
+        "NESN.SW",
+        "ALV.DE",
+        "ICICIBANK.NS",
+        "WEGE3.SA",
+        "SBK.JO",
+        "OR.PA",
+        "9984.T",
+        "SU.PA",
+        "6758.T",
+        "2454.TW",
+        "ITUB4.SA",
+        "SAP.DE",
+        "NPN.JO",
+        "WES.AX",
+        "HDFCBANK.NS",
+        "SHOP.TO",
+        "0700.HK",
+        "000660.KS",
+        "005930.KS",
+        "2330.TW",
+        "3690.HK",
+        "8035.T",
+        "8306.T",
+        "ADYEN.AS",
+        "AIR.PA",
+        "ASML.AS",
+        "CSL.AX",
+        "MQG.AX",
+        "RY.TO",
+        "TD.TO"
+      ]
+    }
+  },
+  "corpus_id": "screen_2026-07-27_v2.2.0",
+  "generator": {
+    "file": "build_corpus.py",
+    "sha256": "409e2b40ac073ba1f7c308a5fcf4f946877a81d5044e96349c3b3b792a8f76f4"
+  },
+  "items": [
+    {
+      "backend_bars_identity_sha256": "62736e9cd8f97db55758afb6e6ba23fc729b0475ca703a447fb83d79097fdcbf",
+      "bar_count": 394,
+      "canonical_monthly_bars_sha256": "6cccab71b802573887c0c17bd23ae4e45f8b8ee3afa2e2b041896c040d11500c",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:50.686Z",
+      "first_data_date": "1993-10-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "B",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "9690614623b1a8170b890c40006fe8825458736a59759b4b464eb1e85b79c999",
+      "snapshot_file": "REG.json",
+      "snapshot_sha256": "1a02f9f4b378216d87874244d3368edb3de08653a671644f42f893b17c89eb51",
+      "source_cache_file": "cache/REG.json",
+      "source_cache_sha256": "f42b19fa78fb060226d7a3360e6adba34be06b66245f5682a08b68b985454c75",
+      "ticker": "REG",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              210,
+              214
+            ],
+            "purpose": "pins the A-grade slope side of calibration"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 1
+    },
+    {
+      "backend_bars_identity_sha256": "bb00dfc9e758472091859bb7043f1d23088eea39388020152f431db4cdceedc8",
+      "bar_count": 392,
+      "canonical_monthly_bars_sha256": "14ee5632cf01828d6e30dd99c95a7cc84db76d2a863f6ff0fca1ac01441b8dc7",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:53.797Z",
+      "first_data_date": "1993-12-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": null,
+        "model_status_at_review": "broken_out",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "8609c703c87a8d5bb0e7eceecd07268a73ad5bdf8a4d517e4b40f6675f25a09c",
+      "snapshot_file": "SPG.json",
+      "snapshot_sha256": "14be7f13e353a2edd17809c91ed3fe19ed2db039ea251e17ade3874b43a19194",
+      "source_cache_file": "cache/SPG.json",
+      "source_cache_sha256": "f1d0dc2b2a158bd3fca7cc9987647e5e9b1e674cf1b3eee1790c5989fce49637",
+      "ticker": "SPG",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              210,
+              214
+            ],
+            "purpose": "pins the A-grade slope side of calibration"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 2
+    },
+    {
+      "backend_bars_identity_sha256": "ee1fdc3509f61d00c25f46de443f13c95ade6e4ed68f217b371f899fe8aaf287",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "134e023d640a303167b7b16f00c0ec7122268ae8caaea0a06a86c60dbce58efe",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 2,
+          "nonpositive_price_fields": 1,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 2,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:50.119Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "604ddc11c0ec10d663cc6b848d489e5f2e68cab1286ca93d05e46199e8d5a8b8",
+      "snapshot_file": "PETR4.SA.json",
+      "snapshot_sha256": "40c9e8a35a68a40cbb63154d23519107869d5439d75d2c7fcbd1da613faccdfd",
+      "source_cache_file": "cache/PETR4.SA.json",
+      "source_cache_sha256": "e643dfe3056ca1b1f6009d4c1f18d9ab0c5dc8de81c09b46e953348988bc46cb",
+      "ticker": "PETR4.SA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 3
+    },
+    {
+      "backend_bars_identity_sha256": "b8afd0e8066b09306e059c3de6e48f4a3ff0721de161d4ad3358fa9e3525af8f",
+      "bar_count": 457,
+      "canonical_monthly_bars_sha256": "1397d13b16efddbeead610719319f66bd32a158b3e1d5ade76ca04af2e4ed44c",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 16,
+          "extreme_wicks": 26,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 42,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.998Z",
+      "first_data_date": "1988-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": "2.1.0",
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "A",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "8b9a4b40fc80e2d325e4dbb21daa428ddd0121f514acf335b162270c972843ae",
+      "snapshot_file": "ULVR.L.json",
+      "snapshot_sha256": "e939703f251f9feeae103361a8b41eb0a5f0018ee9a2e19a6b26e7c72dd9a6e5",
+      "source_cache_file": "cache/ULVR.L.json",
+      "source_cache_sha256": "552f10f9937a3bc1045180a98fe51b4b3b08b10f1d039e5b4fef40e02e8f1f31",
+      "ticker": "ULVR.L",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 4
+    },
+    {
+      "backend_bars_identity_sha256": "9ec2c30cc9b9b9f7e4a92a21b75727d732bf9af9108c22b17ce1b8495278a49a",
+      "bar_count": 300,
+      "canonical_monthly_bars_sha256": "bb8da5c722f434e4c30a1e1367cde7e48786810738007366604599c8d59cf4ee",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:41.420Z",
+      "first_data_date": "2001-08-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "8b49080bfff75d574742283a9c9bf456d56a9dd337c37fc4869af8db6b487b85",
+      "snapshot_file": "BG.json",
+      "snapshot_sha256": "1e16b49c519310dd8a4a641f44ffc8167bf0eb791a998cb3be0950508704e8f8",
+      "source_cache_file": "cache/BG.json",
+      "source_cache_sha256": "7b15677787f5dbc7852b9a6df66ea9a14628207e141d9b37b30641c03e57f515",
+      "ticker": "BG",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 5
+    },
+    {
+      "backend_bars_identity_sha256": "6e182a1d512773b72426f43a0b601d3c5d084e40698e845ee3ee0d0529da7101",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "1062aa53cb405742b3b744a1d88ff677fdc3d22594f8bf6d4118cf3648a50db2",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 1,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:33.083Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": "2.1.0",
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "A",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "3ca912a294b3c3d2d85404aaa02295bbe51f945009ba5e06240057c38c9994d0",
+      "snapshot_file": "0005.HK.json",
+      "snapshot_sha256": "d2898081f8930986fd649cd9087a46d60b980fe3fddd0b31c37d1ddcacbdbf68",
+      "source_cache_file": "cache/0005.HK.json",
+      "source_cache_sha256": "c945c423ebf45895d51c5afc9118c05cc870cee21cc932e5c8dd530634e910d8",
+      "ticker": "0005.HK",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 6
+    },
+    {
+      "backend_bars_identity_sha256": "9ff516f442643c31de9b9d6319e18791c644840faa596d10f724eaee460896a1",
+      "bar_count": 351,
+      "canonical_monthly_bars_sha256": "d4bca3d745196750b7a7c30b353d63b26b991c5c658a24a283262b92939fcab9",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:55.973Z",
+      "first_data_date": "1997-05-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": "no_structure",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "351f685b3992e72004c680844ae0ea49f7f3508f1ae626884402698f0118c3f6",
+      "snapshot_file": "VTR.json",
+      "snapshot_sha256": "5a99532dbeb276fd89a5b74e84ad1d24bb078056da514c9bafe0a5b4fad2275b",
+      "source_cache_file": "cache/VTR.json",
+      "source_cache_sha256": "27cea3348c61dc62df835c3229635c2f0af4b9a6f5e8bba472eb45bf12c4cfb3",
+      "ticker": "VTR",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 7
+    },
+    {
+      "backend_bars_identity_sha256": "21421aba76c6732bde2140b774d9cc067d8180196825cfcc245f0dbf757e84da",
+      "bar_count": 190,
+      "canonical_monthly_bars_sha256": "821e6078a57f7503c2f45979df0de7dfb762c226780e431d73b7a7dbcbbf3d29",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:35.396Z",
+      "first_data_date": "2010-10-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "636e1aa0d2318df1d96dd73fb9e770187f8bcb54807bf6b250ec61e016a16f5c",
+      "snapshot_file": "1299.HK.json",
+      "snapshot_sha256": "236b5a76246b31cf367ff2eae284f9275d022f82b909139a9d259ae3b5776e63",
+      "source_cache_file": "cache/1299.HK.json",
+      "source_cache_sha256": "d37fcfab2f59d3ccaa6bcd2f8a5f30f99496fc48b3a7a00122a7765d555e85cf",
+      "ticker": "1299.HK",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 8
+    },
+    {
+      "backend_bars_identity_sha256": "8195d88cb0dc9873e14d6342f342b47b22bf7f623bfc677932bb7ae35a5ec3c5",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "d35237bfa60f2c33365bbb4be3d9585f52cb483cf92cc1633a74735c157bf893",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:55.392Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": "basing",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "4bba5b4c85eeca5da40c834ca9dbce905fa7bd0ace6da0c3a6becb12abc91edb",
+      "snapshot_file": "UNP.json",
+      "snapshot_sha256": "38242270f8739765fba7c690df3289693b3553f7cbd4da8f1f24a82cdcdc1a04",
+      "source_cache_file": "cache/UNP.json",
+      "source_cache_sha256": "7686bd601303c665b7a30f4543f584b10575c8c3cfbe37f666960c2829186627",
+      "ticker": "UNP",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 9
+    },
+    {
+      "backend_bars_identity_sha256": "3c30111ef630f630c23eab8f138fe4252ce605afe51e48ecb97dfefed85c9665",
+      "bar_count": 437,
+      "canonical_monthly_bars_sha256": "08cb75df71f74ea91d560b763e4653ec076954b9779ba7f931ee7fe16932d660",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:46.944Z",
+      "first_data_date": "1990-03-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "B",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "63d8283a238aa941824e41fd83609f6fc1b22a2e6bedec55d45309571cd27324",
+      "snapshot_file": "LH.json",
+      "snapshot_sha256": "c4d2388392bf016d19ddc98a11a018a22f6002016876c84a1aef9c6285d7f11b",
+      "source_cache_file": "cache/LH.json",
+      "source_cache_sha256": "a62ea80b2ed28e745fb20dc0866aca64612c61d14da7f9c728c83b44ca246f16",
+      "ticker": "LH",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              210,
+              214
+            ],
+            "purpose": "pins the A-grade slope side of calibration"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 10
+    },
+    {
+      "backend_bars_identity_sha256": "2d6a8ab7e34bf47c30375453b52365a0b25a21aa64cb7a3f935ea42310f3094a",
+      "bar_count": 357,
+      "canonical_monthly_bars_sha256": "bd6b661a9b725f72bf88e0cb8036000da7f11182cb9d7d246af81181c2ea1d7c",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:42.579Z",
+      "first_data_date": "1996-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "4c378579ef1c29866f4e185eaebb4861a87dfeb6116272637a1c64130300019c",
+      "snapshot_file": "CNR.TO.json",
+      "snapshot_sha256": "9b66bc947d214252751607ee65dffa9f4353f491e649f8db499fd77294cbd6d7",
+      "source_cache_file": "cache/CNR.TO.json",
+      "source_cache_sha256": "f3a374299efb85131ec4033ab989ebc42eaa27d5822920825835d35d575b640e",
+      "ticker": "CNR.TO",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              154,
+              159
+            ],
+            "purpose": "pins the inclusion side of the zone prominence gate"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 11
+    },
+    {
+      "backend_bars_identity_sha256": "1eb1418add2bc0901ec01b6baaacf08a81968e63d5e153937b1b0a6033f0f7f2",
+      "bar_count": 225,
+      "canonical_monthly_bars_sha256": "5c999eb901fc8be4c79c9109b34497c8dec0fffcaaf8adba70bd9fc162987a9b",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:47.679Z",
+      "first_data_date": "2007-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "da1bf0e21a3c6a94e02a3b360a6423f3aa69d8d815d925a5393fe610e73bb7ee",
+      "snapshot_file": "MSCI.json",
+      "snapshot_sha256": "5c80729033549542f24606a60dc7eb498c6dbac9cc77758960719e52238516fa",
+      "source_cache_file": "cache/MSCI.json",
+      "source_cache_sha256": "84feb628a608e1d0ffae2f4de8eff61ed15696eee3bbe54c1b7016fd2449693b",
+      "ticker": "MSCI",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 12
+    },
+    {
+      "backend_bars_identity_sha256": "2da92f77c11046510d3b7dc8ebbfc09467b0d2bb4ae9f4a3508701b69c09e46f",
+      "bar_count": 304,
+      "canonical_monthly_bars_sha256": "9ce38e04de92f0fc7a873f5a867a5274113c4558717c6e23a30e3afda5e0339e",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:34.917Z",
+      "first_data_date": "2001-04-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "a6e16557db90bc9cbdde02edee17e059a916beb659d27a1001caaac5ce81ddb8",
+      "snapshot_file": "051910.KS.json",
+      "snapshot_sha256": "27e399627b4fb81d497ae0d419ba443871fe3e791c918e5c658d212d38a98c2c",
+      "source_cache_file": "cache/051910.KS.json",
+      "source_cache_sha256": "5c6cbea80c058af839edfc2d0e02dfea715c1accc757ed08e9af630c99606b9d",
+      "ticker": "051910.KS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 13
+    },
+    {
+      "backend_bars_identity_sha256": "4cab6ae3aca2b8d73539c76f251f1993d2cf9b4cd34b5bb3bb12a68c05c96747",
+      "bar_count": 367,
+      "canonical_monthly_bars_sha256": "98bc785b3c51e93cd974a3069234522975b0b495d164920f2346374d99b46c26",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 1,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:51.283Z",
+      "first_data_date": "1996-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "6bcd880325500bc72c65b6f33482070bb3f5d2b220dd46146a5ebe0d1ee94536",
+      "snapshot_file": "RELIANCE.NS.json",
+      "snapshot_sha256": "bfff28ddfe9eecc78764fa1ed958dff30df40f0778e46f220d5b66fee457198e",
+      "source_cache_file": "cache/RELIANCE.NS.json",
+      "source_cache_sha256": "2f96420d5deacffea30876c1187c32d1c1489ff1c6355e946e97f30425fe5eaa",
+      "ticker": "RELIANCE.NS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 14
+    },
+    {
+      "backend_bars_identity_sha256": "819cd9c7a7988af2dbad61e4edf362ed3f1329aec4023518eccb957b89f160b8",
+      "bar_count": 327,
+      "canonical_monthly_bars_sha256": "a2ccf6dd760b6477d9169c41baf24b3cb2444eb76efa5e99fb3f2d302bf4522d",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:37.069Z",
+      "first_data_date": "1999-05-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "fb65b0944a5b87c3b9b5886642473c8dd885d3ad8036f5a563078b4023b69f43",
+      "snapshot_file": "7203.T.json",
+      "snapshot_sha256": "891accdb56efb462f81e3a0a40e54b33fdc8adec63b38f2c99490aad2afd2aed",
+      "source_cache_file": "cache/7203.T.json",
+      "source_cache_sha256": "9d2bc45136df8efad23fda8057820725e41b00f2b70a0bd57dbf8ae9b453b42b",
+      "ticker": "7203.T",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 15
+    },
+    {
+      "backend_bars_identity_sha256": "94b7625971147ca1660cf0f1bba93329c5b74c833f7aa4ff3a8412dab4dab506",
+      "bar_count": 419,
+      "canonical_monthly_bars_sha256": "44a325e3cb4b8dcf675a36b036425eca6925aef986783e3678bb85a9eda3d6a0",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 1,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:41.966Z",
+      "first_data_date": "1991-09-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "1c2cd9ee1d00f2c527a2c92ac680c37ff06f828b8316180c7b0cd5b903acbb6c",
+      "snapshot_file": "CBA.AX.json",
+      "snapshot_sha256": "a46ddb85ef2d837f74a088b9e564251a4f6f0b87dac8bdd149a6c46af830ddcd",
+      "source_cache_file": "cache/CBA.AX.json",
+      "source_cache_sha256": "bc6e7fc7fc69458cf9e340859607f6168894bcdff43c1670fad930f3490d42e7",
+      "ticker": "CBA.AX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 16
+    },
+    {
+      "backend_bars_identity_sha256": "032e8378a56f6fea07409065ca4501cbaf5b135839bca3c31df84a9ac737656d",
+      "bar_count": 367,
+      "canonical_monthly_bars_sha256": "906d138e7725da5cfb6ccda5a4c16ec6c3a6d37261489ea8efef331ab69bca8e",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 1
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 1,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:46.282Z",
+      "first_data_date": "1996-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "b71755a97a363a1763aa26d53026aac43d8d32acb42b73877aa1e3e068ef443b",
+      "snapshot_file": "INFY.NS.json",
+      "snapshot_sha256": "96e083d438d99d2b3a2c790b86466d8ce7a69966c81505b4b24531c55658c606",
+      "source_cache_file": "cache/INFY.NS.json",
+      "source_cache_sha256": "11a776689a665bde956896a8ecd237a247948faf9bead57366eb5ab701aea990",
+      "ticker": "INFY.NS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 17
+    },
+    {
+      "backend_bars_identity_sha256": "a9151d8a82af9fa3954e1e8e52755de797e83481cc495bf570fea86b47175132",
+      "bar_count": 81,
+      "canonical_monthly_bars_sha256": "80d85795029d54fa6a3e5e427148a4bf1d626bda947006c89f675c41b03401e3",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:38.899Z",
+      "first_data_date": "2019-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "80348d50bfecc6535633a10762bfddaaa3524bde28bb159760577a70e54a264b",
+      "snapshot_file": "9988.HK.json",
+      "snapshot_sha256": "0837f04700152ff57edb1ec6b1e9d6aadc1d120e0e08faa5315a40d2727066fd",
+      "source_cache_file": "cache/9988.HK.json",
+      "source_cache_sha256": "85ac23a43334ff6beae23f56678d075bb015919f93dec224a35eaf5e76c349de",
+      "ticker": "9988.HK",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 18
+    },
+    {
+      "backend_bars_identity_sha256": "aa3e238b22869527359016b03a864c16177837c17fb58abcee2b4884facda198",
+      "bar_count": 321,
+      "canonical_monthly_bars_sha256": "b9495126632dc0cee005429289b0ad4907444dc11f430a79ed4f187d59fab759",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:45.209Z",
+      "first_data_date": "1999-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "9dee2a3199acb6b4f895fd8cb641635ba722d54369dd507b2f925da7de647ecd",
+      "snapshot_file": "GIVN.SW.json",
+      "snapshot_sha256": "91cce2d8e826cd4934917c11e0553418f641093c526b831936965eeaf0184202",
+      "source_cache_file": "cache/GIVN.SW.json",
+      "source_cache_sha256": "a5cd61e28d4b7f9199e56eec9e0655d7b1129bd6dd8aea65572c25dd89d2dca9",
+      "ticker": "GIVN.SW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 19
+    },
+    {
+      "backend_bars_identity_sha256": "a4b97491f98efe90eeae74f865f05e3b9fe6fae8aa4f0f8a89c72ebd0aca495b",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "f31995f9b1da336386f8e3f8895337ceb078794fcc8f6ddbfa0ad164d2db77fe",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:47.153Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "fad2280a13b385c3a27c17d6b10d97f048672c4b16f1afa834c8eb64181f900f",
+      "snapshot_file": "MC.PA.json",
+      "snapshot_sha256": "d5dd9f2240b99fb84bb0aefc02df4c7ff4e9c69e26a0243adb1899566ba67273",
+      "source_cache_file": "cache/MC.PA.json",
+      "source_cache_sha256": "498f9ad76fc90378fc1b94f36859e9ab97304c7286162b5859227d2dcb113999",
+      "ticker": "MC.PA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 20
+    },
+    {
+      "backend_bars_identity_sha256": "f537bd6abbde7830c18658495ccf582aa9f472f5a734f4b3f5bc3b4fc3b697a6",
+      "bar_count": 286,
+      "canonical_monthly_bars_sha256": "1b5fa84f7f4ab855ca3fa0723cecc71f131e11ce930c337809fb1f67740b0103",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:34.734Z",
+      "first_data_date": "2002-10-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "968dc4f7dc3760a4f4236663e833b8b4dea416aa134f74e40acc76e8b142f225",
+      "snapshot_file": "035420.KS.json",
+      "snapshot_sha256": "2d6d392642c99d621b736e051821b1b8b8f540ce44b04b1c029c74b6d4d2af82",
+      "source_cache_file": "cache/035420.KS.json",
+      "source_cache_sha256": "4270b61009886012189968544d9d8ddcc2ea9c8ac0c77bc50e072683db845e0f",
+      "ticker": "035420.KS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 21
+    },
+    {
+      "backend_bars_identity_sha256": "1fd31ba86123fdbe9e0612a6e57989689b7534297fd8b7072b639c6a77d06a2d",
+      "bar_count": 399,
+      "canonical_monthly_bars_sha256": "115d18caf85fbb56a9dc138e90e110a590892c8a088a8b8af4871dbe8deb8758",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:40.671Z",
+      "first_data_date": "1993-05-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "77f1096d6cd87d21ab2dc886521934142f4889aadb0762cdb4e07a60065c89f6",
+      "snapshot_file": "AZN.L.json",
+      "snapshot_sha256": "fe6f6455a947b1e868893d8684d5b8ba1618cf9ccbcca0da1acd54f19b82ff8c",
+      "source_cache_file": "cache/AZN.L.json",
+      "source_cache_sha256": "2060fede3b8d0d7c76a95d6a7272d0a3f4b20b1f4ef9bdcd64a8c8c34ad4f444",
+      "ticker": "AZN.L",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 22
+    },
+    {
+      "backend_bars_identity_sha256": "3880272730219d8b06208ca657edba2da8d87da2620cd8059f96be2e05032b4e",
+      "bar_count": 360,
+      "canonical_monthly_bars_sha256": "ad753f61d5d2daa6dc469a0230157055e1b360089634440ccebfbb83646c3021",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 2,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 6
+        },
+        "hard_failure_count": 6,
+        "heuristic_flag_count": 2,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:52.544Z",
+      "first_data_date": "1996-08-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "f980da47721d349528a1803e72b9f6ae7038aa8f3122f0fba58ee755fdc3f322",
+      "snapshot_file": "SHEL.L.json",
+      "snapshot_sha256": "6f33c210b6f94f97bd0a336f8b2250caaad3ca1cc0c99bb894238a4ac1a23af4",
+      "source_cache_file": "cache/SHEL.L.json",
+      "source_cache_sha256": "6499c4b90b622b39b013cff1b2a6dd2a46620ee56d84ba7c4687f0464d774b25",
+      "ticker": "SHEL.L",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 23
+    },
+    {
+      "backend_bars_identity_sha256": "88822134c95e0203e524ad6389a6fcc23c452a15fff2255e339cf686df0195fd",
+      "bar_count": 377,
+      "canonical_monthly_bars_sha256": "9e1c51a472b63522881d730b9f7a1985034bec6c821e4f36a65466f50e4ac728",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:50.312Z",
+      "first_data_date": "1995-03-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "88598e9d48481586c4f7c1659d1bab42c70afeb79d919603c9bc63f37a29922b",
+      "snapshot_file": "PHIA.AS.json",
+      "snapshot_sha256": "1221f721c6fa2d063294f2e95da2ced26286672aa59a45aedb4b496edce8144c",
+      "source_cache_file": "cache/PHIA.AS.json",
+      "source_cache_sha256": "a041aa96701bc60cca5263096dac1c38e8c4666db66b4d01dc79563f453bdea5",
+      "ticker": "PHIA.AS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 24
+    },
+    {
+      "backend_bars_identity_sha256": "979188442b89737e849f3b01bfef7b05e986f1ea90c4cc29c28189075db6ed9b",
+      "bar_count": 356,
+      "canonical_monthly_bars_sha256": "b2a5dc9b8c2301d6a1531c9a6712296a73931feb1f0119ce4879e3349ea1dd6f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:41.040Z",
+      "first_data_date": "1996-12-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "333f2982812137eedc5176c830b9ff6cbc78a50aaf607daedd9b4b042524bc5d",
+      "snapshot_file": "BAS.DE.json",
+      "snapshot_sha256": "c2947c95221ef5e497474d1a64ac0012326561f478066e462cfacca840d5da9c",
+      "source_cache_file": "cache/BAS.DE.json",
+      "source_cache_sha256": "19c71c5678f52b6dfdfd01c48a04ff7809113578b1fdb543a4d84b4501f20f1e",
+      "ticker": "BAS.DE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 25
+    },
+    {
+      "backend_bars_identity_sha256": "2d1fa338e982032a2079b139fa7e0ea5d6d9a577d3e1d3f326045f7fc37ab055",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "f8669b8b30788c4c8f09a66e137b8290f6a63f6c9e7d8e8b4fe42fe71715b7b4",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 1,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 1,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:55.714Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "57d096a52778bcc69c9fbda4ac8ae82c6dcf2f89475df5bdbae77afd6df4a012",
+      "snapshot_file": "VALE3.SA.json",
+      "snapshot_sha256": "3c3501ae1f5d0eed0f65c9fe15c754ec3436efc46c439726b464031c3159d33c",
+      "source_cache_file": "cache/VALE3.SA.json",
+      "source_cache_sha256": "a2c8aef3968fd25336078629e07542aa493201a03d0c3609f2fe5b47caa404e4",
+      "ticker": "VALE3.SA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 26
+    },
+    {
+      "backend_bars_identity_sha256": "8be8d36dcf9fe23a1f494afd9bc812a31b3cea3f6dd3d34a173017246de953ab",
+      "bar_count": 372,
+      "canonical_monthly_bars_sha256": "054dc60aa65830430d7dfc6304ae4661e38e6d956af8a1bdbd4e905947cf2cd3",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.645Z",
+      "first_data_date": "1995-08-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "d09001e13db3def9e6dd9f50f66f484719b5b162c1be19cad3a6c748645f985a",
+      "snapshot_file": "UBSG.SW.json",
+      "snapshot_sha256": "9062847eabd01ca956eacce9a226073ce226613d54f291bbce72257ed4aafd4e",
+      "source_cache_file": "cache/UBSG.SW.json",
+      "source_cache_sha256": "bd0c16be6d1a47d85ccee302873878a657b1212ea1ff20b9ee052bee6b893379",
+      "ticker": "UBSG.SW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 27
+    },
+    {
+      "backend_bars_identity_sha256": "cd5f4d42808eead49583c3a0e6779d1374be60f22c88bab575607c58863d9d22",
+      "bar_count": 357,
+      "canonical_monthly_bars_sha256": "def7dafa6cf4524b4270ebb59bd46d0ddd80fbf8d65aef6acf6009455913ddbc",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:43.926Z",
+      "first_data_date": "1996-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "ebb91701c6e9bf747fd2d962b1b933b766ba0fdb3a53d7e7bdb271e3e3cea49e",
+      "snapshot_file": "DTE.DE.json",
+      "snapshot_sha256": "f1b576a84a1b25b5b6886cb4427f54e8538a0ba6a9a56e6a7557537eadf2b721",
+      "source_cache_file": "cache/DTE.DE.json",
+      "source_cache_sha256": "c873122785dec418af26b3b6a475dee8a99a250cedc7a76dbd5f7b14140c4830",
+      "ticker": "DTE.DE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 28
+    },
+    {
+      "backend_bars_identity_sha256": "4c94e9f9ded66c0feb92f4d9798bf9d4a5d202c4464b431fc29838c9a9560f01",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "fad191c4e9d167f7f1e0dbee8d7abb8ec8241c3cbc38d3dc858ddfb9283d715a",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:51.794Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "0e845ca8c5372f240790b52e8c3f5f9c88e0d1b19fb62ab7c66fbdf10a41c09b",
+      "snapshot_file": "SAN.PA.json",
+      "snapshot_sha256": "3a2a0537ea554bead40498c10c31104b592ead6889890365ed3f0721f9fe96a6",
+      "source_cache_file": "cache/SAN.PA.json",
+      "source_cache_sha256": "d4ed541cff592d628cde7cff05b4b9acdc3ff6f8edac4b5a3be33d6097cf5833",
+      "ticker": "SAN.PA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 29
+    },
+    {
+      "backend_bars_identity_sha256": "c65cfbadc7d9cfa734ccbcbb06d729b698f0a8a2b4da45e7cb577e8cb1830b14",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "3c0a5580eaf5c245de01e129422c879757c47c72b8042253955315c14e4f6fec",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 1
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 0,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:53.595Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "992233e274e770768d6fa2131ba5a3b1e5cf96ef2570fd1e69440cedfb2b9f4f",
+      "snapshot_file": "SOL.JO.json",
+      "snapshot_sha256": "bd874002bcb779b5eb988c096a9c8d017d3c7805b860d68578e587813bb65dd5",
+      "source_cache_file": "cache/SOL.JO.json",
+      "source_cache_sha256": "8761d05033235eb4a837a4dd07388f1c600a1f99e0eca621d67e34c5058c37dc",
+      "ticker": "SOL.JO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 30
+    },
+    {
+      "backend_bars_identity_sha256": "e048401c981d0920e50bf9f5e3d9aa61b0c52d3dc612f0b03521d169e9e869cc",
+      "bar_count": 357,
+      "canonical_monthly_bars_sha256": "032ce7ecaa6c5bb654ae301372a426dcfe729190375fd6559a2ac91367f6641f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:53.144Z",
+      "first_data_date": "1996-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "5a48d9d8fbd1754f03baf3bfdbdaaf19468768884b675296bf8d435b0318a6e1",
+      "snapshot_file": "SIE.DE.json",
+      "snapshot_sha256": "daa5ec6a125138353627d66644c76e743e6cec027508b0baa042ede2eea1b4c1",
+      "source_cache_file": "cache/SIE.DE.json",
+      "source_cache_sha256": "e22ca17dfefa503cac12826e92d8633cbaa703d8046eeead617925a604cd6419",
+      "ticker": "SIE.DE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 31
+    },
+    {
+      "backend_bars_identity_sha256": "e8b7a85ded0f3d5537786ccfd710143feb48b66756e1b4eb8c4d7dfdeaeef193",
+      "bar_count": 373,
+      "canonical_monthly_bars_sha256": "205328db1b88b3e0b2217a1035ca7231a0911b96c389c73cae639786a3a6f8e2",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:44.917Z",
+      "first_data_date": "1995-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": "broken_out",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "3aebd54cd24219ac980a101f1e5759f80d0768027a835f4440e9039f3775efe2",
+      "snapshot_file": "FCX.json",
+      "snapshot_sha256": "b63b6b36b932a0f96f59a7cbba98f6ca380d8a2cbb2686a1de2d077af632f6b4",
+      "source_cache_file": "cache/FCX.json",
+      "source_cache_sha256": "bd71bc7ad82128be452fc33a7b3cee490fa0e9ca42b21dd7a57a49cf357039c7",
+      "ticker": "FCX",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              175,
+              178
+            ],
+            "purpose": "contrasts a normal rising-lid continuation"
+          },
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              210,
+              214
+            ],
+            "purpose": "pins the C-grade slope side of calibration"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 32
+    },
+    {
+      "backend_bars_identity_sha256": "2d034f0b8c0a8471c3027f699885c4e79440d01bf5977c3065f491b4ee98a294",
+      "bar_count": 403,
+      "canonical_monthly_bars_sha256": "ff717c9c078ffa3f418e6106408f2a42523611f600fa45695ee958e3ec997bce",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:35.573Z",
+      "first_data_date": "1993-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "de9f4baf8ba799afbdc26920c3f4cb4441f24673a6679eea1d2512f3a41585bc",
+      "snapshot_file": "2317.TW.json",
+      "snapshot_sha256": "60c04232f3d7f5282d0d2f6a092eebb92c1c48382f3444e7348e52ecccb9ad71",
+      "source_cache_file": "cache/2317.TW.json",
+      "source_cache_sha256": "00eae395df5a0ace704bdf1fc3b2bc45d6f86979fa4a976f20af7d87a384220a",
+      "ticker": "2317.TW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 33
+    },
+    {
+      "backend_bars_identity_sha256": "e613f8a50460966760b819f3b4bcb2ddcc0502b36755264b017bd9afd7b5036b",
+      "bar_count": 457,
+      "canonical_monthly_bars_sha256": "a4cc91ab4005bf1fcb2b9de650d2c1a9740e3f6c10cb037364cad9fd3a6e9cfe",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 1,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:50.966Z",
+      "first_data_date": "1988-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "569126f4683cd1c5c0a08bcec400b0048fee4212b42b6e28083ffd8b440310cf",
+      "snapshot_file": "REL.L.json",
+      "snapshot_sha256": "3f3c7aea55111991439bab103545240554014b76c488f43719d3d67e820314b0",
+      "source_cache_file": "cache/REL.L.json",
+      "source_cache_sha256": "c0e669d424902484c056d44e14a4197e5bdd48df42e1bdb42225f1236ad87516",
+      "ticker": "REL.L",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 34
+    },
+    {
+      "backend_bars_identity_sha256": "06365a213727b50244bc0d964f3f0e713de6ca2bbd3e5032c6cbd672ece23a3a",
+      "bar_count": 457,
+      "canonical_monthly_bars_sha256": "8115d2c73d4f56412709f9aab432a9b826c2e08f69c735f8710f9d23706c4a30",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:45.732Z",
+      "first_data_date": "1988-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "32c88a3ede08b6271a20a8c172f733f7ea43c11b1b40105074da133554925930",
+      "snapshot_file": "HSBA.L.json",
+      "snapshot_sha256": "08ff5ce5c7dc89fd219b9b009ddd6dd19b405c4378a7d7704ecac5d31a8f0d95",
+      "source_cache_file": "cache/HSBA.L.json",
+      "source_cache_sha256": "630ece822c8e71af4cd489915a59f2c4a5193dd5bf27f21f905a9b9b0942052f",
+      "ticker": "HSBA.L",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 35
+    },
+    {
+      "backend_bars_identity_sha256": "3cb468b9ffb291b7ab33547f74459118309c93e8797468fd0bd8901a40d33493",
+      "bar_count": 376,
+      "canonical_monthly_bars_sha256": "2dd13fa912fdb0cd2f53a3df69b3ad96e0037677e59da7ce4795536cef7ebf31",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:48.485Z",
+      "first_data_date": "1995-04-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": "2.1.0",
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": "A",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "5ed1f3e0d6979462a2b999433b681d2adaabe93d68fc4c0c1639874c0aa68854",
+      "snapshot_file": "NOVN.SW.json",
+      "snapshot_sha256": "5263437eb03e1b8ae709ff92e1de9418019c78546494b6b06c38d176eec0ee05",
+      "source_cache_file": "cache/NOVN.SW.json",
+      "source_cache_sha256": "5a99cd314c9b78199389f37291f1cff856af69a34f3c11264fe5fa4d2d5103c6",
+      "ticker": "NOVN.SW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 36
+    },
+    {
+      "backend_bars_identity_sha256": "f78032d8432a56be99356ff8173bd17d1d6e4b65edbacad7d4c96b157947a141",
+      "bar_count": 462,
+      "canonical_monthly_bars_sha256": "453d48784a067d96bcb9b882d9a7e383f5b83d6ab9682fff16d119b82e0a2c22",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:41.651Z",
+      "first_data_date": "1988-02-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "ff73699e92d1081c2a24a461ce1d8b8edeeade99bcce5157690caa504cb3ccad",
+      "snapshot_file": "BHP.AX.json",
+      "snapshot_sha256": "09fd968138bada3dd9ee37fcf674b9d613edb60208d650a82768bb4617441003",
+      "source_cache_file": "cache/BHP.AX.json",
+      "source_cache_sha256": "3a491c9cdffe46bfd50b5060d4f6a7c74c3692788afcf1714a2b7f8947de9303",
+      "ticker": "BHP.AX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 37
+    },
+    {
+      "backend_bars_identity_sha256": "62be9939ace362de59052b62d424fbce540c8e1bc74f105a13bb4b873fe24654",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "199fd85724e17157a48575b056b39e61f00f008444d7d0fe55f3e568d4690e5f",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:49.402Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": "breaking_out",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "e87bb7a8dcfe9cbc3e4572239417ffe2f983971a320d16841ec7215467cf2b2e",
+      "snapshot_file": "NUE.json",
+      "snapshot_sha256": "6fc3cbf14aa65991f846820b2047e1e02d7a1b45c2b597e846e546be21543b0a",
+      "source_cache_file": "cache/NUE.json",
+      "source_cache_sha256": "a7fee6a05e6231aea2018ce11621244d9b550d6fd52bb819562324fee182d289",
+      "ticker": "NUE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 38
+    },
+    {
+      "backend_bars_identity_sha256": "5a4fc9ecfa0a2bb18a7f03cdc8344e4b7f8f7d4725fcfa2b72a089aa4d668c4a",
+      "bar_count": 252,
+      "canonical_monthly_bars_sha256": "dbe29d95fd4f39e5673cdc92b296c918d32d814056ca8918f412c98c5b8290f3",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:42.268Z",
+      "first_data_date": "2005-08-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "B",
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "c03b1935135939ee1fdfc985dc0446704a87fffa121f50e15dc6cf0f397cfbab",
+      "snapshot_file": "CF.json",
+      "snapshot_sha256": "487538e285d75afe4068c651da5d840fb7046e648b5e5e70c2d7df5a88481a52",
+      "source_cache_file": "cache/CF.json",
+      "source_cache_sha256": "3c9baeeb211d849fd5535b4e17de869ce744eb39dbfdcd1e970a8e7931471ca8",
+      "ticker": "CF",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              210,
+              214
+            ],
+            "purpose": "pins the A-grade slope side of calibration"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 39
+    },
+    {
+      "backend_bars_identity_sha256": "7e30a5112f13c41c94161374dd7514d688b86108e5311499b767c0efd0012962",
+      "bar_count": 150,
+      "canonical_monthly_bars_sha256": "39be9b548d47523e1d8170938877f99898f2bdd5fe19a7652e647cb01f51993d",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:46.810Z",
+      "first_data_date": "2014-02-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "0424d8c1846b8f7b3376b3cc0129a9213088e11ccfbb0912b7e0652e804a3b9d",
+      "snapshot_file": "KN.json",
+      "snapshot_sha256": "03f78c87f20df2d4923c2100b23b8c935c40030e0c119c69cc3ae67ecd9aafa2",
+      "source_cache_file": "cache/KN.json",
+      "source_cache_sha256": "068c8123bade2bdeb0117b9edeb5ec2517d921b936d79d1dee8f0f221058b3ff",
+      "ticker": "KN",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              154,
+              159
+            ],
+            "purpose": "pins the exclusion side of the zone prominence gate"
+          },
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              175,
+              178
+            ],
+            "purpose": "pins the breakout peak-extension distinction"
+          },
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              200,
+              203
+            ],
+            "purpose": "illustrates the pressed-at-lid compression exception"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 40
+    },
+    {
+      "backend_bars_identity_sha256": "941b8cc54fc24ea149f3ee8717db7ba3658b663cb8e5d9abf84b27f0672e65c5",
+      "bar_count": 379,
+      "canonical_monthly_bars_sha256": "e00ff8113a0d3b00d387a15617d0afcaed1b29a31362dffdd9ee8be350687236",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 1,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 1,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:44.707Z",
+      "first_data_date": "1995-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": "2.1.0",
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": "A",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "2753c4d455ab4aa37545a0e2946d581d63e98bab1c2a829ad76cbe6d10d9b0e8",
+      "snapshot_file": "ENB.TO.json",
+      "snapshot_sha256": "27a07156831c63f6b4026997fe3c5227ebce387bcfbaea11e48b83804bfa7db8",
+      "source_cache_file": "cache/ENB.TO.json",
+      "source_cache_sha256": "14fc5cc5bf15eada49247ca2a3e1a40b8e88ff8b221e9df69ad1759af7ae6070",
+      "ticker": "ENB.TO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 41
+    },
+    {
+      "backend_bars_identity_sha256": "bc07dd4aca9c806b635d4eb3a3615392b4dd6a3bbcdd8be66fc6c83d68ecdcf8",
+      "bar_count": 288,
+      "canonical_monthly_bars_sha256": "05e45722532b4541ee59e610791e3cd350272510613f659b2b64240b970cf5c2",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 2,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 2,
+        "reviewable": true,
+        "status": "flagged_for_review"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.235Z",
+      "first_data_date": "2002-08-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "de9854101b2afced2086f4cfd4457454adc53db0931a7c85d183f84d994730ca",
+      "snapshot_file": "TCS.NS.json",
+      "snapshot_sha256": "fdb34573e6d62da28aa7322b13afb79596f3a5327de93983314bb69a9fa6ee3f",
+      "source_cache_file": "cache/TCS.NS.json",
+      "source_cache_sha256": "37cbbd51902b90f54df71b2f5807eff0469ceddf79ae2dcf6512223b2106b3b1",
+      "ticker": "TCS.NS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 42
+    },
+    {
+      "backend_bars_identity_sha256": "594b2abbcd9a2660ad4db6a202066607b2e661156c65adfd9dc1ad9d34636c22",
+      "bar_count": 439,
+      "canonical_monthly_bars_sha256": "3cf32e9e7531024f1931878dc84050a710c080f6c964018f8c1a4cd20a428d37",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:48.120Z",
+      "first_data_date": "1990-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "cc7435ca2241982add937dc8514a2f327c9bf40b442d73cfc1791e3dce7cfc7c",
+      "snapshot_file": "NESN.SW.json",
+      "snapshot_sha256": "0ba5a104f86fdbc54ede847586cbb7057687ede805aee0cc0c42f98ad0b72308",
+      "source_cache_file": "cache/NESN.SW.json",
+      "source_cache_sha256": "dca810928bd48b6e08bec9d460efef3fcde48f43bfc12dd6a8edef64f5a6a9bb",
+      "ticker": "NESN.SW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 43
+    },
+    {
+      "backend_bars_identity_sha256": "c3cba0df8c8129f3531460a143e98ad5bcb484485c097df7a5e3a5f5f1d547b2",
+      "bar_count": 356,
+      "canonical_monthly_bars_sha256": "37484424c70d61ea6ab0203363a9a6036277c768e1a65dd8713157d40c554f7f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:39.946Z",
+      "first_data_date": "1996-12-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": "2.1.0",
+        "flag": true,
+        "human_grade": "A",
+        "model_grade_at_review": "A",
+        "model_status_at_review": "coiling",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "298a7439c5e37f515275959ce82cc9c1a59f34700dc5df40be8c6795b24f3468",
+      "snapshot_file": "ALV.DE.json",
+      "snapshot_sha256": "4aae073eefcc43405333f0c9ee8239bea62052489da7b536f4259d93801dc603",
+      "source_cache_file": "cache/ALV.DE.json",
+      "source_cache_sha256": "c46a08e426d09c5310335de07768c5d7cbae1a146b7a938c740657756b62494f",
+      "ticker": "ALV.DE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 44
+    },
+    {
+      "backend_bars_identity_sha256": "ec1ffbb64bbd24296699b24e61285a5b5ea1c02adcf751ddfad2c3ccdaeee223",
+      "bar_count": 289,
+      "canonical_monthly_bars_sha256": "173f97db0da250ae3740305401b1c419dd3648eed76cb8b63e75081d7f68866b",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:46.031Z",
+      "first_data_date": "2002-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "373f83d91bb62584e41826f19f2dcdd0837e8da04831e7ed89418b9e776f003c",
+      "snapshot_file": "ICICIBANK.NS.json",
+      "snapshot_sha256": "eace1033e6f820c099a337beecfce0c37a7315ad460482361ea6d5b8154fd444",
+      "source_cache_file": "cache/ICICIBANK.NS.json",
+      "source_cache_sha256": "30f2280b452db24a9656de298ea4b5cebf757558ba94f551a49b40ed16446cca",
+      "ticker": "ICICIBANK.NS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 45
+    },
+    {
+      "backend_bars_identity_sha256": "cb6e55db1e8830895ae85c353ae75209d08fb30c7000353b6b78ea3260fc9469",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "452e8eee8adb64c4c7ef0f8fe9e66e09b31ac16376bf3f293b44b7e4c0525814",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 1,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 1,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:56.248Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "c3e244fd9ce5f96d601830c822dc905475d77713a12b52c38790787d565093c8",
+      "snapshot_file": "WEGE3.SA.json",
+      "snapshot_sha256": "0b7de454aff98d5348f2ff7c2aec08b36f2900bd173c3967f42511460b29fcaa",
+      "source_cache_file": "cache/WEGE3.SA.json",
+      "source_cache_sha256": "8c1397c1c8b35464ca5d17039657e64d72454d74289ee5656ca77dc7452a8920",
+      "ticker": "WEGE3.SA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 46
+    },
+    {
+      "backend_bars_identity_sha256": "504a77c75c4e24c44127da3cfdaab691dab4d82170f5e64998dff43faffceb2b",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "372084c9785f37015b803f217062e69735e24dffc846f7b17f066afb042f4e13",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 2,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 3
+        },
+        "hard_failure_count": 3,
+        "heuristic_flag_count": 2,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:52.297Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "6936a76a43fcf7ca7d601392a78bd13495cc33d5e9dcc9fa866879466c72537f",
+      "snapshot_file": "SBK.JO.json",
+      "snapshot_sha256": "b6261e5b617200fe8c8822f8970c3b9d88c0978c45bcb8a9686f50a6fdb34736",
+      "source_cache_file": "cache/SBK.JO.json",
+      "source_cache_sha256": "162856fc854d10c10745e1b9bebab9564cbeebe9228b2731a4577ce1cda7b81f",
+      "ticker": "SBK.JO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 47
+    },
+    {
+      "backend_bars_identity_sha256": "bb69b05ab203c57cde138b31115a059ede048314eb40cf3b8d3e4224d732e6bb",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "e88db959530447d495e8997ac6b8d7bf530dc6084d9933052aba40b7dfe7035f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:49.754Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "69f285167ceebfc2344a26b813ed4759e23acc6d67ae28b44c0ca7b0838edfe0",
+      "snapshot_file": "OR.PA.json",
+      "snapshot_sha256": "34859ea6d39cfdbf1df5a9bb05c2917ef954d9258ca08648423add18da999aff",
+      "source_cache_file": "cache/OR.PA.json",
+      "source_cache_sha256": "330d6680a656b6a47c84728523ef633974c15e16a0e08b9d9b8c0ab8da877f0a",
+      "ticker": "OR.PA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 48
+    },
+    {
+      "backend_bars_identity_sha256": "09efc87758c331bea867e788ba7500f0b1ebb8a545c95af61f29e74d34f9283e",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "76771773545fe151a2fb16abb9badd9664ba0734cbcd700bc0bf8f76a957635f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:38.547Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "94d6be746e1b5fc437043858d277eb0f21a1c5716abd5a63dc986b6b3dc9258f",
+      "snapshot_file": "9984.T.json",
+      "snapshot_sha256": "a98a0e30136cec12eae9a9aa3975c9dda98e96f6a7e59a54da9e905203197e90",
+      "source_cache_file": "cache/9984.T.json",
+      "source_cache_sha256": "098688307f54acc15a20c287008b8e12ad3232a95fcbf8043900161166d59924",
+      "ticker": "9984.T",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 49
+    },
+    {
+      "backend_bars_identity_sha256": "bff0a55410e78b8cb3b01f30c01a139b3e7e6f6db40d14b6e75e9f3c7b4dfcfb",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "d6da4e5c34fb3a8d812a2586541fa128cfe9761c7b1f68ca6c7054a0e32e435e",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:44.357Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "5637d40b9d3786fd68fda8f2cf06e93c58c26e89c4495383b377830071202c6b",
+      "snapshot_file": "EAT.json",
+      "snapshot_sha256": "cf75f32a88a2a7daacdf604ffa3886dddedc872f6cb9de92a0c1d06efc342fab",
+      "source_cache_file": "cache/EAT.json",
+      "source_cache_sha256": "97e73552d9fc00d7a42c633d53027e404a9226d85786a26a22178fbc9895a3aa",
+      "ticker": "EAT",
+      "tuning_anchor": {
+        "evidence": [
+          {
+            "file": "coil_analysis.py",
+            "lines": [
+              200,
+              203
+            ],
+            "purpose": "illustrates the pressed-at-lid compression exception"
+          }
+        ],
+        "flag": true,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 50
+    },
+    {
+      "backend_bars_identity_sha256": "797bf79220898051ac0749fabee60a70c614d90aa14bc0561b71a931e04fdada",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "9f28e6112b49f978952df70ffe123b5c1b8f0271fb0650733f137578b1ba4c31",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.009Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "c14dfcc3f81d775b3a9e8378b05cbc2529f444c91f7ed32c48c3000c2c247fa0",
+      "snapshot_file": "SU.PA.json",
+      "snapshot_sha256": "eaea551e2e5ab7aaab7aa12382b8d9cf948460fe06f2b714fc40fddede5803ee",
+      "source_cache_file": "cache/SU.PA.json",
+      "source_cache_sha256": "15900f9a0be904aa4bc71b6b1e322a39483bab6647b94bfcb385401bac580ac3",
+      "ticker": "SU.PA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 51
+    },
+    {
+      "backend_bars_identity_sha256": "fee2b77543901aecf88d24d5dfc5d12835970f354c2fd6e0971412150fdedd10",
+      "bar_count": 485,
+      "canonical_monthly_bars_sha256": "bead43c3a28ac4a703a08b261992d14963a8e1053b7f42bb731a98445ff44751",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:47.924Z",
+      "first_data_date": "1986-03-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "a3abdcbf8bc3c18dcfe7d9572e08f3fb478c00f947edcd47e20927a2f1b8c265",
+      "snapshot_file": "MSFT.json",
+      "snapshot_sha256": "88e9e9c7ff699fc19025de8449d2ebfa85ab557de5fd327f941a3bad7972ad5d",
+      "source_cache_file": "cache/MSFT.json",
+      "source_cache_sha256": "5fbeb9c044710e3b46ac3c4a7d72a615b3f6a7d294a919e0576048462a6a568e",
+      "ticker": "MSFT",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 52
+    },
+    {
+      "backend_bars_identity_sha256": "7686fa3bcd46b4ff3877e1e342a7ead61bad2075333eefa42a4dc6cba8806107",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "2260347a53096b962f2d9fb22e7f94ed906653c2b3401956bc99988ed2012774",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:36.679Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "d06d1b8ea82a0e75bfadc41fce4c7215f96b414a589fea899d3ddc674f6b55e9",
+      "snapshot_file": "6758.T.json",
+      "snapshot_sha256": "4894f5249a4e86e906a1879eea5cde67a03a379f6329d83dffe7f44851fb348d",
+      "source_cache_file": "cache/6758.T.json",
+      "source_cache_sha256": "003f4828aca68da5c48c3845aa76ed0dfbe0a7d7982c496c17618168e4b0c5d2",
+      "ticker": "6758.T",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 53
+    },
+    {
+      "backend_bars_identity_sha256": "293c7a229753bf204fddb7be3bcdc719f232c7bfdaec575687d2dee627486c82",
+      "bar_count": 301,
+      "canonical_monthly_bars_sha256": "e9d56c63afd705d51e4ec1ffdab0e17d19f3923d8e9eb9d0667a783cbd6b3d14",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:36.316Z",
+      "first_data_date": "2001-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "76758de85057f540b94e51cb56cbbd8d67014d811e4c3ce525cbf3357d9f18ae",
+      "snapshot_file": "2454.TW.json",
+      "snapshot_sha256": "4d0c54e2a45a9c4a24cf8ba9f6ff00702e65e06b49e8dbea0568e35ed33a1309",
+      "source_cache_file": "cache/2454.TW.json",
+      "source_cache_sha256": "6e4b658695996f2123a6f7b6cd2106c5ef199913d252b18e84835a3564ae827e",
+      "ticker": "2454.TW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 54
+    },
+    {
+      "backend_bars_identity_sha256": "4200bfa43e942e6c36c43f8ff5e4585feb357d38d19a00397146ad055a9bdcb5",
+      "bar_count": 308,
+      "canonical_monthly_bars_sha256": "c97a076ae1f395f010a2a448887702d8c3a837c6cbf6f73f6efaf7306327ae3c",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 1,
+          "nonpositive_price_fields": 1,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 1,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:46.550Z",
+      "first_data_date": "2000-12-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "9adaae459cd712eb08684ac9b9c368b3c7247165b09386377b1704407a9be027",
+      "snapshot_file": "ITUB4.SA.json",
+      "snapshot_sha256": "d92af391051df9d2572e84a370a62b80bbc1b95d67c640d65790d72d19bf72c3",
+      "source_cache_file": "cache/ITUB4.SA.json",
+      "source_cache_sha256": "dafc9d131167c9f4242c99587b21ddef82e584b4840bfa380195955784f7b283",
+      "ticker": "ITUB4.SA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 55
+    },
+    {
+      "backend_bars_identity_sha256": "c4ca60b8082257c3c1feffc458920ced13705f97aebe21d06f7b32070ab25299",
+      "bar_count": 340,
+      "canonical_monthly_bars_sha256": "67a87ea6622b1cbb6a7d76239d854d88b257652b7137a5da2edfe77c6db11ddf",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:52.058Z",
+      "first_data_date": "1998-04-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "a5e8f7035bce51a19ea6679b79645c4bd1383171bc998d5e28615534dcc468c9",
+      "snapshot_file": "SAP.DE.json",
+      "snapshot_sha256": "ba36111a2ed62d8873d36219b19c63b2888d5f265f4ecb5b65e4a67c153798c1",
+      "source_cache_file": "cache/SAP.DE.json",
+      "source_cache_sha256": "cbb7c42e0f8ade9f07566e45f17b4465432d6c0b75d9408fa86c4eef472fb8fe",
+      "ticker": "SAP.DE",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 56
+    },
+    {
+      "backend_bars_identity_sha256": "972f0d9d41318b45a40061e7f8c2ff2cf3678b982198b0a2923d8bbe74b4d5aa",
+      "bar_count": 381,
+      "canonical_monthly_bars_sha256": "d305b8f2df69f241d27e926f11d704a41ef5ac65e74be62c9833aedc3a760ce1",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:42.895Z",
+      "first_data_date": "1994-11-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "4e5f705ecd7a2e5cb09eec8751a36844ad5105c31c003a33cc2bec57946bd67d",
+      "snapshot_file": "COF.json",
+      "snapshot_sha256": "64804103595d990fdbf6ca0c6340e4caee31099e8baccc17f2688555a01accb7",
+      "source_cache_file": "cache/COF.json",
+      "source_cache_sha256": "10fb5a1d7f39be39334516fed6435ff7b962cb209d9d8a4ef00586d3d7c503ac",
+      "ticker": "COF",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 57
+    },
+    {
+      "backend_bars_identity_sha256": "c4721c342d30545a9ba0621669b00437ec2c96849ee48e127c8a252ce4696baf",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "1f7341e8d893d7b5d875f908e990e94c1cd5e5ef3048285ceb52f87a45f40b36",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 2
+        },
+        "hard_failure_count": 2,
+        "heuristic_flag_count": 0,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:48.763Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "69bada3a7039659958d2e7c2ed248832f54e8978234f984b066d3f0dcf5a19aa",
+      "snapshot_file": "NPN.JO.json",
+      "snapshot_sha256": "466bfa0c1352b6b61ac2d0ebeb2ac0772f86c4d60004c11f67b9004f730a9460",
+      "source_cache_file": "cache/NPN.JO.json",
+      "source_cache_sha256": "0fe1321f5d5fad51749e3d85c1932e1538de679d6d538663ec2221e071a85c57",
+      "ticker": "NPN.JO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 58
+    },
+    {
+      "backend_bars_identity_sha256": "5cd0bc8004b77fdac38a0bcebe025ed5d17b4f9ccd54e6e0a0f6cfb5a36a4273",
+      "bar_count": 462,
+      "canonical_monthly_bars_sha256": "aaa2b1d52380f6f45cdd694feaf8d7468f018fdf0c2ef7dc3d6b79b3eec4d1b0",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:56.501Z",
+      "first_data_date": "1988-02-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "8b5814baf8624de26d3cce125eb3cf889c926a6d67dd576fbd53e5d5403c843d",
+      "snapshot_file": "WES.AX.json",
+      "snapshot_sha256": "87858d520698d7da1bfe5a6ead6926646f9c7d79260736ae3d54d61008fc8be0",
+      "source_cache_file": "cache/WES.AX.json",
+      "source_cache_sha256": "c2ee6e241cd630891c8fab0e5ba99d521837e884c62c36a348b404c60d18f071",
+      "ticker": "WES.AX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 59
+    },
+    {
+      "backend_bars_identity_sha256": "3085ac441cbe70d1b934f81c37bef65e20115d781c7477a8d99e18ce7e6793d5",
+      "bar_count": 367,
+      "canonical_monthly_bars_sha256": "26e2af8bb997e495d22d93dc061a641e504daa328a5a746d50e7e2bf0c9110a1",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 1,
+          "extreme_wicks": 4,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 1
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 5,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:45.413Z",
+      "first_data_date": "1996-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "d6e33db3da8fbf9670512fba1011bd7b3b3415f91b4af41bf6ef32ab01c60d18",
+      "snapshot_file": "HDFCBANK.NS.json",
+      "snapshot_sha256": "8e97b4693ba49ca84f5512b5b0b85753963722cbbd2af0e692e0fd368a6cc871",
+      "source_cache_file": "cache/HDFCBANK.NS.json",
+      "source_cache_sha256": "6b5a3cd66de39b617b14b9fc847803117f808f1aef4adfe95bab5d5e249aed88",
+      "ticker": "HDFCBANK.NS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 60
+    },
+    {
+      "backend_bars_identity_sha256": "2cb3419ab6833b4dc8fbfe7dc179fd83e81b51291f6d0e5aa2cc7e646ec736fd",
+      "bar_count": 135,
+      "canonical_monthly_bars_sha256": "5d7839d575c63f98d5bb51123814208e9f748afd48df57ee0ca2db583b14864b",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:52.921Z",
+      "first_data_date": "2015-05-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "b8dfaab0f5f79e9b305479bdd1aea3a3ed63011505756f1a9a5f4aa716932f91",
+      "snapshot_file": "SHOP.TO.json",
+      "snapshot_sha256": "79cb5ba8e06b58c5b5346f868280b527bfefca9b8e80c05d98f20f172b06ea92",
+      "source_cache_file": "cache/SHOP.TO.json",
+      "source_cache_sha256": "3f4534a06fbb4443cde98a3e79e171c4551513aee9cfa48fb9f423fc2ba50804",
+      "ticker": "SHOP.TO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 61
+    },
+    {
+      "backend_bars_identity_sha256": "14dab3b10ded7f11bd40a7196de4fad8fb68d718f7877949028e47526d916c11",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "655149866e4191d331f1875cd146b1606ec9a0d3855d408a2098d50ea8f2223a",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:43.634Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "237cd9456cddc91ab0f62bb44bfad89d2481d802e7721e7e5375b5dbcc85f415",
+      "snapshot_file": "CSX.json",
+      "snapshot_sha256": "7f61fa841f96aa81ff12cca3d33aefdfa3e4f5b7b514b49c11494e969e6cd0d0",
+      "source_cache_file": "cache/CSX.json",
+      "source_cache_sha256": "6eb214adaeb348942ebea25812b9e6f1572b63f5344ee956d4bdf033066cfbf3",
+      "ticker": "CSX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 62
+    },
+    {
+      "backend_bars_identity_sha256": "2d9e66c475788d4442844876fdd581e7fe71be28e87090b98a61666ecb5b51ba",
+      "bar_count": 266,
+      "canonical_monthly_bars_sha256": "4a5de213af92f3242d04d621f9478eca1e580231b528635165ed7233c6f4a842",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 1
+        },
+        "hard_failure_count": 1,
+        "heuristic_flag_count": 0,
+        "reviewable": false,
+        "status": "quarantined"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:35.104Z",
+      "first_data_date": "2004-06-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "1ebfc49de053144098fa22ec17fbc1f95cb774864779edcaf3c5b2809c168bdd",
+      "snapshot_file": "0700.HK.json",
+      "snapshot_sha256": "b600eb1c1db30e21bf4637776ae4121428389400427f188a5477861fda729c9e",
+      "source_cache_file": "cache/0700.HK.json",
+      "source_cache_sha256": "00678c653ad4cb2b833b56425991f7869e49331059de9d98ec2cbdb9f1938a5a",
+      "ticker": "0700.HK",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 63
+    },
+    {
+      "backend_bars_identity_sha256": "733fc0693a6a0d40db27e132202fddb30724f7f466270605664180f66ed630e9",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "105ffe484d2b8ae94a81cf251a72b847c8f60a929dd35fcf9424844fcd492a43",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:34.091Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "2b1f9ce63d453911ce2c183a9d6053a6e6fd3d969aa692901c721be3ad621b46",
+      "snapshot_file": "000660.KS.json",
+      "snapshot_sha256": "1d8de24f4bf6d4e311313f2bd8da60b30a1ff29f6d084caa95c6a2df0053f338",
+      "source_cache_file": "cache/000660.KS.json",
+      "source_cache_sha256": "e4d78ba40b0e0ccc35326f0ba9b1cd8a02a02110b5797b31a957af1d3f919200",
+      "ticker": "000660.KS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 64
+    },
+    {
+      "backend_bars_identity_sha256": "b31e9d64ac3ea438e5381b9d023c95b1bbe46efb8a007db449406eeea5c406c6",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "4c099de03c7e2877eb684524cd4d89ee2e55517bb8cf3616dbd3d22daef14ae7",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:34.406Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "e603ea978752a66ee926b8183c8ad9fde52e08c5e4aed2536cb23c3401969b41",
+      "snapshot_file": "005930.KS.json",
+      "snapshot_sha256": "b3a753bbe265752aa2649cff7d06a45e7a488ff07085a3dabfd32a1ac0700343",
+      "source_cache_file": "cache/005930.KS.json",
+      "source_cache_sha256": "081c75ca1ea987daed6f5a1a2fb99bfa667213764167a72eb68e66d494a4b0ec",
+      "ticker": "005930.KS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 65
+    },
+    {
+      "backend_bars_identity_sha256": "8ea392b4149c534d57b7bfde9c310eff4fcdc0823719f52668cbdd0f077926a6",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "e183ee1ad75413b5af29426edcbe7cdc387d98930db22920f79b7ffc37bd2719",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:35.941Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "b943225a5f3848d5fb32b9f1a8bd9d9e8e0f7a25633710b20e4d07fc1496e175",
+      "snapshot_file": "2330.TW.json",
+      "snapshot_sha256": "67861cfe261d6e34b68992b5a544ec7060c621cbe3a3927466d11781cb24fe7b",
+      "source_cache_file": "cache/2330.TW.json",
+      "source_cache_sha256": "f8e1d76ec501e53c309ad94aace7875511658558091fda0cd3b29ef6ae095658",
+      "ticker": "2330.TW",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 66
+    },
+    {
+      "backend_bars_identity_sha256": "d40fad505c02d5402f1c7fcf2c7e44b643b6e5d49276f6a30bba06a9a76bacd9",
+      "bar_count": 95,
+      "canonical_monthly_bars_sha256": "6a43ec635c47dfb41be13854477380317a4aa1b633a98c67932fef611edc5370",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:36.539Z",
+      "first_data_date": "2018-09-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "44a377fa9ebddeb1e4f085ce0e12b1e054732e032e3fcfb5074f54adc732aabf",
+      "snapshot_file": "3690.HK.json",
+      "snapshot_sha256": "7b8458c917e88d5444639be451fcc0c0c8ed0f2d39cc13b7ae864b08a3945d48",
+      "source_cache_file": "cache/3690.HK.json",
+      "source_cache_sha256": "ec5d30c3a0b9e1eaa9bce08bf0913c73de46cafe9cd2231528b699e2eb168198",
+      "ticker": "3690.HK",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 67
+    },
+    {
+      "backend_bars_identity_sha256": "ee47d58abdbeb1435cfb83d33eae2c77bb457f05184a9e969b66334e4db04be5",
+      "bar_count": 319,
+      "canonical_monthly_bars_sha256": "7524f51208b6f337b0475f892adff19f1577194e6ee7ab5ad73d2046235d0107",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:37.609Z",
+      "first_data_date": "2000-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "991bfe24ff04eb4983497f47ec98f03c5fecbc25a1ed6da919ff649adcf2ebb9",
+      "snapshot_file": "8035.T.json",
+      "snapshot_sha256": "ea17d0a543847c9a7151b7ad902915f96af48efdf461dd34d4720440a7b50b29",
+      "source_cache_file": "cache/8035.T.json",
+      "source_cache_sha256": "e991a6c55b738328f599d682889f4436d356bdb6b612362f1e193896323c8feb",
+      "ticker": "8035.T",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 68
+    },
+    {
+      "backend_bars_identity_sha256": "8de91b510ca3a617f1f80f28dec6c3c6da80d7b09386d498912c738c3f1c9d41",
+      "bar_count": 251,
+      "canonical_monthly_bars_sha256": "f482f09816248fcf1c1866c70afca30bae2b44ca0642e9240f30aab5ec2a9a25",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:38.088Z",
+      "first_data_date": "2005-09-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "7b3df5eeb679e6c5e16d85735cdc0b109b5d7bac8adf3d7c261f727abb512858",
+      "snapshot_file": "8306.T.json",
+      "snapshot_sha256": "c1b61b8f8ffdc8de9fc36e675cd8eecc111a920f829a397139bdd4177ee3f42c",
+      "source_cache_file": "cache/8306.T.json",
+      "source_cache_sha256": "7175141d0a05810f4aacaed4edd66fc3a53db48b09fbe1a88426c4b860c7539e",
+      "ticker": "8306.T",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 69
+    },
+    {
+      "backend_bars_identity_sha256": "80860ea4a4c55a9adf1e6922422a32ca08aaa57533f59f027e59a19c68fa830e",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "6330a69496d83f4d9cff662f9e59a36c9bd5328c777185edc06803f7d174a3c8",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:39.057Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "9103bffa77208888896a25a7cecddade0d6c77274a931d458886f6cc11f4f973",
+      "snapshot_file": "AAPL.json",
+      "snapshot_sha256": "0db52fcbf4c7b83c2093a6bd1ccd813e9e1fdf87226606a2066487ce91865286",
+      "source_cache_file": "cache/AAPL.json",
+      "source_cache_sha256": "155d2e8b4f4f416ed7426a23c696d162dcaaee7d6e9efd8e5279d60f10214eeb",
+      "ticker": "AAPL",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 70
+    },
+    {
+      "backend_bars_identity_sha256": "0d33d1ce77f025baf47bc924a6307e0ea4e35372e44922bb5a3565eaf19aeff4",
+      "bar_count": 98,
+      "canonical_monthly_bars_sha256": "98a934f98c41024e4e2f6c49579a9d87446365bcfd9b31a9e6abedebce549259",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:39.443Z",
+      "first_data_date": "2018-06-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "9ca35342ae80c4bcb45755625825b4bfdc49287d3d6a19e930593a61038c8945",
+      "snapshot_file": "ADYEN.AS.json",
+      "snapshot_sha256": "2194c9cb4842936db3d6bbcfbe93b449aca9a33cec71be4d84ea8189ab274890",
+      "source_cache_file": "cache/ADYEN.AS.json",
+      "source_cache_sha256": "cd3d9a4ed0522ab13b0155fa92e1c00eb2002e6396f9bef03c917b2b6405ecc3",
+      "ticker": "ADYEN.AS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 71
+    },
+    {
+      "backend_bars_identity_sha256": "4a7f4523321aae18c4638fbc147744381ba9a2940be24f73c0f00a329e17daa8",
+      "bar_count": 299,
+      "canonical_monthly_bars_sha256": "a8460c7133783a8bc4f9ecadd8ef7f89957377030f072595449bc0976abb3ce6",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:39.682Z",
+      "first_data_date": "2001-09-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "83d3c4ab3cbf373b24746ff5c807944de32f8ae505cbd54a7b8bd85658b90848",
+      "snapshot_file": "AIR.PA.json",
+      "snapshot_sha256": "fc68843ca55e1142d1af5823a8b26ce0e7872429d1d27dca5b8b9e6406763b8e",
+      "source_cache_file": "cache/AIR.PA.json",
+      "source_cache_sha256": "021e45bc4acbdf55c451760dea7435645698697f6a43f0cac1b4fe0cc2dd1f0f",
+      "ticker": "AIR.PA",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 72
+    },
+    {
+      "backend_bars_identity_sha256": "b363278a0f707c8b58f1fd2984384782b145a6ae75d9fe6b6d79804c40154e50",
+      "bar_count": 337,
+      "canonical_monthly_bars_sha256": "3156ffc6ed4cfd3c9c3b70a5f04bd32e9824f81529ab20525445decdd148e77b",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:40.216Z",
+      "first_data_date": "1998-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "b88ad682b07ce55a201654077ba9cbd424680c8f310952983132bcb7e4f1b37d",
+      "snapshot_file": "ASML.AS.json",
+      "snapshot_sha256": "dce1d0e9ce045b3d85dc6d1c3590ba7635b1ec2bc268fdb339270b2b65704266",
+      "source_cache_file": "cache/ASML.AS.json",
+      "source_cache_sha256": "c95953e44d88cc8bc4b59a1dbf919f384b3fe4c54e097fadf3e3463ddfa0672f",
+      "ticker": "ASML.AS",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 73
+    },
+    {
+      "backend_bars_identity_sha256": "d68c48bda6bc113158cfd5d5691e29acdf9a5d808a366ccb0c08d4feb70e0223",
+      "bar_count": 387,
+      "canonical_monthly_bars_sha256": "8e4d91730c484c07551a6752f8ff3dd864579d9ace1a9fb2cb16cc057e66ec1e",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:43.284Z",
+      "first_data_date": "1994-05-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "99a5faaa2ef3b6e025ba8c52b47f6f1d6bd5f06f092f01e3493fe05267e7a1ff",
+      "snapshot_file": "CSL.AX.json",
+      "snapshot_sha256": "7f7edb0715bde5e32f5dd01a5524c1e0b0378ea0997f31fa97a8de7e1895641d",
+      "source_cache_file": "cache/CSL.AX.json",
+      "source_cache_sha256": "2e908f13d1ac048fcfab6f716bc9227813bd1ab9f358c49312d2c305016ff53f",
+      "ticker": "CSL.AX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 74
+    },
+    {
+      "backend_bars_identity_sha256": "8e59be5e0622b90f356cd26fc3b5ffb83e61c979eedf1b10653497d8b64d3fdb",
+      "bar_count": 361,
+      "canonical_monthly_bars_sha256": "cd87198fa1dfd21df311e7bf5d17995d7899f4595d2e23c213ae998b874c102f",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:47.420Z",
+      "first_data_date": "1996-07-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "3e1a56e4e5d06282371cd6d0494d5b2348570cb907edda3b58fa9116fa1f1718",
+      "snapshot_file": "MQG.AX.json",
+      "snapshot_sha256": "1a67b09863921ac61638c8fd893093387776fcd2ecfb4a7983a50c9e7cf806c4",
+      "source_cache_file": "cache/MQG.AX.json",
+      "source_cache_sha256": "d40701812fef785ca80a12ee4e1fe5e8261f3f662528a1389edffb431a0b3ae3",
+      "ticker": "MQG.AX",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 75
+    },
+    {
+      "backend_bars_identity_sha256": "f7edda726bd1831db55aca58f1ea1be25403aae32966aa6cabf1f5ad635b25e9",
+      "bar_count": 499,
+      "canonical_monthly_bars_sha256": "26ef5ff82117a5994ed08730a790ddefd87ef60520d79b9be5c75f226ff49cd7",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:49.070Z",
+      "first_data_date": "1985-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": null,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "2ffa42f3e2c7bf4e2084e921d1e14dfae5e507eb03fcfc3d23ef62870d3a8654",
+      "snapshot_file": "NSC.json",
+      "snapshot_sha256": "2653dfe22b26b17492fb3612a21440e09c5429326e1fecbd6752b4ad2a6324e1",
+      "source_cache_file": "cache/NSC.json",
+      "source_cache_sha256": "87b49b333a2602fb09cba796935c5bafa3e1fb162b858dbf61ce39639a6056f3",
+      "ticker": "NSC",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 76
+    },
+    {
+      "backend_bars_identity_sha256": "f0d0806d7eefa300f385294bb61a9b2feed3523031e86ab6257b9d4e656c1712",
+      "bar_count": 379,
+      "canonical_monthly_bars_sha256": "ed3d0dabe99e7a75aacae0c5b2df3fe9a7aa5dbc0ac632903f923dc26667a6b6",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:51.541Z",
+      "first_data_date": "1995-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "64f2dc14f6e925446d03a59279db027653ceabc989d8542b407ca890799e8774",
+      "snapshot_file": "RY.TO.json",
+      "snapshot_sha256": "351c260d78f58c83f5f32466004af76d7b52ed32079d8b3df2766585fb563f2f",
+      "source_cache_file": "cache/RY.TO.json",
+      "source_cache_sha256": "3657c9dc601e0569f67894d221bd422ca9dde3259ed6e2953393c3b14b394bba",
+      "ticker": "RY.TO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 77
+    },
+    {
+      "backend_bars_identity_sha256": "33945baba4736dc8988105dad915f5a9dbfcb504faccac323cbd47622f7383ac",
+      "bar_count": 379,
+      "canonical_monthly_bars_sha256": "8730f3ce56325facdf3bbbef09ce3b041fb69c85d1b03cc2c3509e03e7d49e6d",
+      "cohort_role": "prospective_international",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.430Z",
+      "first_data_date": "1995-01-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "flag": false,
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "3bc1cf133325e1ab2be9b2027e7869718331ef8aa8c3d34217d139a6252b5f93",
+      "snapshot_file": "TD.TO.json",
+      "snapshot_sha256": "4be28602c608d3f1578cd0f7483ac866355bb5d99617e610d3dfcec116290b7e",
+      "source_cache_file": "cache/TD.TO.json",
+      "source_cache_sha256": "5753ac2b3d9443a86ce29dc08be59b99775aa7693c8d8570a6577bb75d165831",
+      "ticker": "TD.TO",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 78
+    },
+    {
+      "backend_bars_identity_sha256": "41d507a3a7e4317ecec078d91dc05f3a2f112f9db200388898b5be763cec7b0c",
+      "bar_count": 232,
+      "canonical_monthly_bars_sha256": "89176342a898833c33e11680936ffe6a5281b8bb6cd0f119d33c14442fa95133",
+      "cohort_role": "control_reference",
+      "data_quality": {
+        "counts": {
+          "date_order_failures": 0,
+          "extreme_discontinuities": 0,
+          "extreme_wicks": 0,
+          "nonpositive_price_fields": 0,
+          "numeric_price_failures": 0,
+          "ohlc_invariant_failures": 0
+        },
+        "hard_failure_count": 0,
+        "heuristic_flag_count": 0,
+        "reviewable": true,
+        "status": "clear_by_defined_checks"
+      },
+      "data_source": "yfinance",
+      "fetched_at": "2026-07-27T06:45:54.854Z",
+      "first_data_date": "2007-04-01",
+      "last_data_date": "2026-07-01",
+      "prior_review": {
+        "algorithm_version_at_review": null,
+        "flag": true,
+        "human_grade": null,
+        "model_grade_at_review": null,
+        "model_status_at_review": "basing",
+        "source": "validation/major_high_feedback.json"
+      },
+      "screen_snapshot_sha256": "a5bfd4586d1cefc37483b5059f9de60f9ff76df7b98c9c920919d6222e72b137",
+      "snapshot_file": "UEC.json",
+      "snapshot_sha256": "d629c3ddb647f4d0005b744b2d6be85d8277b7085c2fffef5342991c8fbea9c4",
+      "source_cache_file": "cache/UEC.json",
+      "source_cache_sha256": "af4f21b23d5d9ce3ecb98bcd7626158bccc58b115da03be28a9688fecac6a675",
+      "ticker": "UEC",
+      "tuning_anchor": {
+        "evidence": [],
+        "flag": false,
+        "source_code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba"
+      },
+      "universe_position": 79
+    }
+  ],
+  "kind": "coilingview.saved-run-review-corpus-manifest",
+  "ordered_universe": [
+    "REG",
+    "SPG",
+    "PETR4.SA",
+    "ULVR.L",
+    "BG",
+    "0005.HK",
+    "VTR",
+    "1299.HK",
+    "UNP",
+    "LH",
+    "CNR.TO",
+    "MSCI",
+    "051910.KS",
+    "RELIANCE.NS",
+    "7203.T",
+    "CBA.AX",
+    "INFY.NS",
+    "9988.HK",
+    "GIVN.SW",
+    "MC.PA",
+    "035420.KS",
+    "AZN.L",
+    "SHEL.L",
+    "PHIA.AS",
+    "BAS.DE",
+    "VALE3.SA",
+    "UBSG.SW",
+    "DTE.DE",
+    "SAN.PA",
+    "SOL.JO",
+    "SIE.DE",
+    "FCX",
+    "2317.TW",
+    "REL.L",
+    "HSBA.L",
+    "NOVN.SW",
+    "BHP.AX",
+    "NUE",
+    "CF",
+    "KN",
+    "ENB.TO",
+    "TCS.NS",
+    "NESN.SW",
+    "ALV.DE",
+    "ICICIBANK.NS",
+    "WEGE3.SA",
+    "SBK.JO",
+    "OR.PA",
+    "9984.T",
+    "EAT",
+    "SU.PA",
+    "MSFT",
+    "6758.T",
+    "2454.TW",
+    "ITUB4.SA",
+    "SAP.DE",
+    "COF",
+    "NPN.JO",
+    "WES.AX",
+    "HDFCBANK.NS",
+    "SHOP.TO",
+    "CSX",
+    "0700.HK",
+    "000660.KS",
+    "005930.KS",
+    "2330.TW",
+    "3690.HK",
+    "8035.T",
+    "8306.T",
+    "AAPL",
+    "ADYEN.AS",
+    "AIR.PA",
+    "ASML.AS",
+    "CSL.AX",
+    "MQG.AX",
+    "NSC",
+    "RY.TO",
+    "TD.TO",
+    "UEC"
+  ],
+  "purpose": "Immutable evidence for blinded, human review of the July 27 v2.2.0 screened-stock run.",
+  "quality_checks": {
+    "extreme_discontinuity": {
+      "definition": "Median absolute open/close differs from the prior close by a symmetric scale ratio of at least 4x.",
+      "minimum_symmetric_scale_ratio": 4.0
+    },
+    "extreme_wick": {
+      "definition": "Maximum wick divided by median absolute open/close is at least 0.50 and at least 6x the trailing median full-range ratio.",
+      "minimum_baseline_observations": 12,
+      "minimum_ratio": 0.5,
+      "trailing_baseline_multiplier": 6.0,
+      "trailing_window_bars": 24
+    },
+    "nature": "Mechanical flags only; no finding repairs source evidence or establishes a market-data error.",
+    "quarantine_conditions": [
+      "date is missing, duplicated, or non-chronological",
+      "OHLC price is non-numeric or non-finite",
+      "high/low violates OHLC containment",
+      "OHLC price is zero or negative"
+    ]
+  },
+  "schema_version": 1,
+  "source_run": {
+    "algorithm_version": "2.2.0",
+    "byte_count": 33253,
+    "code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba",
+    "column_count": 39,
+    "columns": [
+      "ticker",
+      "age_years",
+      "last_close",
+      "score_total",
+      "score_long_coil",
+      "score_tight_resistance",
+      "score_ascending_compression",
+      "pos_in_10y_range",
+      "dist_to_10y_high_pct",
+      "range_ratio_24_120",
+      "range_ratio_24_60",
+      "low_36m_above_10y_low_pct",
+      "slope_high_60m",
+      "slope_low_60m",
+      "trend_r2_60m",
+      "peak_age_months",
+      "old_peak_similarity",
+      "lifecycle",
+      "status",
+      "grade",
+      "lid_grade",
+      "coil_score",
+      "lid_slope_pct_per_year",
+      "proximity_pct",
+      "current_price_position",
+      "span_years",
+      "touches",
+      "touch_count",
+      "reviewed",
+      "review_status",
+      "review_id",
+      "review_as_of",
+      "review_algorithm_version",
+      "review_stale",
+      "review_effective",
+      "data_date",
+      "freshness",
+      "fetched_at",
+      "data_source"
+    ],
+    "embedded_exact_copy": "source_run.csv",
+    "fetched_at_max": "2026-07-27T06:45:56.501Z",
+    "fetched_at_min": "2026-07-27T06:45:33.083Z",
+    "filename": "screen_2026-07-27_v2.2.0.csv",
+    "row_count": 79,
+    "sha256": "ae845f887498bbeab4ea082512cfb60f1d11ce5098213f7647b4fb045be1b45a"
+  },
+  "summary": {
+    "cohort_counts": {
+      "control_reference": 18,
+      "prospective_international": 61
+    },
+    "data_quality_finding_counts": {
+      "date_order_failures": 0,
+      "extreme_discontinuities": 17,
+      "extreme_wicks": 47,
+      "nonpositive_price_fields": 5,
+      "numeric_price_failures": 0,
+      "ohlc_invariant_failures": 15
+    },
+    "data_quality_status_counts": {
+      "clear_by_defined_checks": 61,
+      "flagged_for_review": 6,
+      "quarantined": 12
+    },
+    "first_data_date": "1985-01-01",
+    "last_data_date": "2026-07-01",
+    "monthly_bar_count": 27114,
+    "prior_review_ticker_count": 23,
+    "ticker_count": 79,
+    "tuning_anchor_ticker_count": 8
+  },
+  "supporting_sources": {
+    "prior_review": {
+      "file": "validation/major_high_feedback.json",
+      "in_universe_count": 23,
+      "in_universe_tickers": [
+        "0005.HK",
+        "AAPL",
+        "ALV.DE",
+        "BG",
+        "CF",
+        "COF",
+        "CSX",
+        "EAT",
+        "ENB.TO",
+        "FCX",
+        "KN",
+        "LH",
+        "MSCI",
+        "MSFT",
+        "NOVN.SW",
+        "NSC",
+        "NUE",
+        "REG",
+        "SPG",
+        "UEC",
+        "ULVR.L",
+        "UNP",
+        "VTR"
+      ],
+      "schema_version": 1,
+      "sha256": "479415fffab9c270cb872ac3126f928becda6639e0d70a9a11bb59b8ccb3585f"
+    },
+    "tuning_anchor_comments": {
+      "code_sha": "65a04cf6d13d4e31a4e9b15cbab54fa150a935ba",
+      "file": "coil_analysis.py",
+      "in_universe_count": 8,
+      "in_universe_tickers": [
+        "CF",
+        "CNR.TO",
+        "EAT",
+        "FCX",
+        "KN",
+        "LH",
+        "REG",
+        "SPG"
+      ]
+    }
+  },
+  "trust_status": "review_evidence_not_validated_training_truth"
+}

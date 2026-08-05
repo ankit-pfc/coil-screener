@@ -28,3 +28,6 @@ web/src/routeTree.gen.ts
 
 # Local review store (production uses DATABASE_URL or a mounted SQLite volume)
 reviews.db
+
+# Off-service review backups contain private reviewer work. Keep them local.
+.review_backups/
