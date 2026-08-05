@@ -17,7 +17,7 @@ lid, before the breakout has played out:
    / ascending compression), so price is being squeezed into the lid.
 5. Loaded     - the last close sits near the lid, not mid-base.
 
-How the lid is chosen (v2.2)
+How the lid is chosen (v2.3)
 ----------------------------
 The lid is a **repeated historical ceiling**, never a line through the live
 price. The monthly series is aggregated into quarterly candles, a trailing
@@ -30,9 +30,12 @@ members within ``zone_similarity_pct`` of each other, separated by at least
 ``zone_min_separation_quarters``. Zones whose level is unreachable from the
 last close are filtered out as a different price era, and the survivors are
 ranked **recency first** (most recent repeated ceiling wins), then by member
-count, span, and start index. The winning zone's earliest and latest members
-anchor the line; interior members are touches. If no zone qualifies there is
-no lid, which is the right answer for a chart that never built a ceiling.
+count, span, and start index. Every zone member is a confirmed two-sided
+quarterly mountain. The latest completed quarter gets no shortcut: until a
+later quarter confirms its rejection, it is current price evidence rather than
+structure. The winning zone's earliest and latest members anchor the line;
+interior members are touches. If no zone qualifies there is no lid, which is
+the right answer for a chart that never built a ceiling.
 
 Where the last close is allowed to matter: proximity to the lid, the +/-20%
 band that decides ``metrics.current_price_position``, the breakout state
@@ -58,7 +61,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 SCHEMA_VERSION = 2
-ALGORITHM_VERSION = "2.2.0"
+ALGORITHM_VERSION = "2.3.0"
 ANALYSIS_INTERVAL = "3M"  # classification is quarterly-native regardless of view
 SOURCE = "timeseries"
 BARS_PER_YEAR = 12.0  # module operates on monthly bars
@@ -1441,14 +1444,12 @@ class LidZone:
     """A repeated ceiling: mountains standing at one price level over time.
 
     ``members`` are ordered oldest -> newest. ``level`` is the arithmetic mean
-    of the member prices, recomputed whenever a member joins.
-    ``immediate_idx`` marks the one member (if any) admitted by the
-    latest-completed-quarter rule rather than by confirmed two-sided fall.
+    of confirmed member prices. A member can enter only through
+    ``_mountain_candidates``; unconfirmed right-edge bars are never structure.
     """
 
     level: float
     members: tuple[SwingPoint, ...]
-    immediate_idx: Optional[int] = None
     reject_reason: Optional[str] = None
 
     @property
@@ -1466,15 +1467,6 @@ class LidZone:
     @property
     def span(self) -> int:
         return self.last_idx - self.first_idx
-
-    def with_immediate_member(self, member: SwingPoint) -> "LidZone":
-        members = tuple(sorted(self.members + (member,), key=lambda p: p.idx))
-        return LidZone(
-            level=sum(point.price for point in members) / len(members),
-            members=members,
-            immediate_idx=member.idx,
-        )
-
 
 def _mountain_candidates(
     quarterly: list[dict[str, Any]],
@@ -1557,50 +1549,6 @@ def _cluster_price_zones(
     return zones
 
 
-def _admit_latest_completed_quarter(
-    zones: list[LidZone],
-    quarterly_completed: list[dict[str, Any]],
-    config: CoilConfig = DEFAULT_CONFIG,
-) -> list[LidZone]:
-    """Let the latest completed quarter join a zone without a confirmed fall.
-
-    A fresh tag of a known ceiling should lift that zone's recency at once
-    rather than wait three quarters for the fall to confirm. Scoped to the
-    single latest completed quarter: applying it to *any* completed quarter
-    re-admits pass-through bars from a breakout leg (ENB's 2024-12 at 61.99
-    would drag the lid from 60.0 to 62.5).
-    """
-    if not quarterly_completed:
-        return list(zones)
-    tolerance = max(0.0, config.zone_similarity_pct) / 100.0
-    separation = max(0, config.zone_min_separation_quarters)
-    q_idx = len(quarterly_completed) - 1
-    bar = quarterly_completed[q_idx]
-    high = float(bar["high"])
-    out: list[LidZone] = []
-    for zone in zones:
-        joins = (
-            zone.level > 0
-            and abs(high - zone.level) / zone.level <= tolerance
-            and q_idx > zone.last_idx
-            and q_idx - zone.last_idx >= separation
-        )
-        if not joins:
-            out.append(zone)
-            continue
-        out.append(
-            zone.with_immediate_member(
-                SwingPoint(
-                    idx=q_idx,
-                    date=str(bar["date"]),
-                    price=high,
-                    prominence_pct=0.0,
-                )
-            )
-        )
-    return out
-
-
 def _zone_reject_reason(
     zone: LidZone,
     last_close: float,
@@ -1651,11 +1599,7 @@ def _select_lid_zone(
 ) -> tuple[Optional[LidZone], list[LidZone]]:
     """(winning zone, rejected zones) over the completed quarterly series."""
     candidates = _mountain_candidates(quarterly_completed, qconfig)
-    zones = _admit_latest_completed_quarter(
-        _cluster_price_zones(candidates, config),
-        quarterly_completed,
-        config,
-    )
+    zones = _cluster_price_zones(candidates, config)
     eligible: list[LidZone] = []
     rejected: list[LidZone] = []
     for zone in zones:
@@ -1703,22 +1647,11 @@ def _hypothesis_from_zone(
     role_points = [
         RolePoint(
             point=member,
-            # The immediately-qualified member has not made a confirmed
-            # two-sided fall yet, so it is a retest, not a mountain.
-            role=(
-                ROLE_STRUCTURAL_RETEST
-                if member.idx == zone.immediate_idx
-                else ROLE_MAJOR_TOP
-            ),
+            role=ROLE_MAJOR_TOP,
             evidence={
                 "zone_level": round(zone.level, 4),
                 "zone_member_count": zone.member_count,
                 "lid_anchor": member.idx in anchor_idxs,
-                **(
-                    {"immediate_qualification": True}
-                    if member.idx == zone.immediate_idx
-                    else {}
-                ),
             },
         )
         for member in zone.members
@@ -1779,14 +1712,15 @@ def _analyze_quarterly_structure(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
 ) -> Optional[QuarterlyStructure]:
-    """Full-history quarterly detection + lid-zone selection (v2.2).
+    """Full-history quarterly detection + lid-zone selection (v2.3).
 
     The lid is the most recent repeated ceiling: a price zone touched at least
-    twice by confirmed mountains, well separated in time. Nothing in the
-    incomplete final quarter contributes to that choice, and nothing about the
-    last close ranks it — only the era-relevance filter consults price at all.
-    When no zone qualifies there is no lid, which is the correct answer for a
-    trending chart that has never built a ceiling.
+    twice by confirmed mountains, well separated in time. Neither the
+    incomplete final quarter nor an unconfirmed latest completed quarter can
+    contribute to that choice. Nothing about the last close ranks it — only the
+    era-relevance filter consults price at all. When no zone qualifies there is
+    no lid, which is the correct answer for a trending chart that has never
+    built a ceiling.
     """
     if len(bars) < 2:
         return None

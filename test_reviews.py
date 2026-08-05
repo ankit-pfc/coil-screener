@@ -404,9 +404,8 @@ def test_reviewed_points_override_algorithm_structure(client, tmp_cache):
     assert reviewed["review"]["review_id"] is not None
     # The algorithm's own structure is retained for comparison.
     assert reviewed["review"]["algorithm"] is not None
-    # Three constructed lid touches plus the immediately-qualified latest
-    # completed quarter, which lands on the same zone level.
-    assert len(reviewed["review"]["algorithm"]["major_highs"]) == 4
+    # Only the three confirmed constructed lid touches are algorithmic tops.
+    assert len(reviewed["review"]["algorithm"]["major_highs"]) == 3
     # The effective lid is fit through the reviewed anchors.
     anchors = reviewed["active_lid"]["anchors"]
     assert [a["date"] for a in anchors] == ["2011-09-01", "2018-05-01"]
