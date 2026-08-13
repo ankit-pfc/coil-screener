@@ -21,7 +21,11 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from coil_analysis import ALGORITHM_VERSION, analyze_coil
+from coil_analysis import (
+    ALGORITHM_VERSION,
+    ANALYSIS_MODE_ALGORITHM_ONLY,
+    analyze_coil,
+)
 from screen_monthly import _lifecycle_row, _screen_sort_key
 
 
@@ -127,7 +131,17 @@ def candidate_rows(
             continue
         ticker = str(snapshot["ticker"]).strip().upper()
         bars = snapshot["monthly_bars"]
-        analysis = analyze_coil(bars, review_override=None)
+        analysis = analyze_coil(
+            bars,
+            review_override=None,
+            mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+            adjustment_mode=str(
+                (snapshot.get("source_cache_metadata") or {}).get(
+                    "adjustment_mode"
+                )
+                or "unknown"
+            ),
+        )
         if analysis.get("grade") is None:
             continue
         metadata = snapshot.get("source_cache_metadata") or {}

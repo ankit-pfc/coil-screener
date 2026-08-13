@@ -126,21 +126,89 @@ def fit_trend_r2(values: pd.Series) -> float:
     return float(1 - ss_res / ss_tot)
 
 
+def _split_adjust_and_aggregate_monthly(daily: pd.DataFrame) -> pd.DataFrame:
+    """Build split-only adjusted monthly OHLCV from raw daily provider bars.
+
+    Yahoo's ``auto_adjust`` uses Adj Close and therefore includes distributions.
+    Validation needs a narrower, auditable policy: raw daily OHLC is expressed
+    in the latest share units using only reported ``Stock Splits`` events, then
+    aggregated to calendar months. The split-day candle is already post-split,
+    so only events strictly after a daily candle affect that candle.
+    """
+    required = ["Open", "High", "Low", "Close"]
+    missing = [name for name in [*required, "Stock Splits"] if name not in daily]
+    if missing:
+        raise ValueError(
+            "provider history cannot prove split adjustment; missing "
+            + ", ".join(missing)
+        )
+    frame = daily.copy().sort_index()
+    if frame.empty:
+        return frame
+    prices = frame[required].apply(pd.to_numeric, errors="coerce")
+    price_values = prices.to_numpy(dtype=float)
+    if not np.isfinite(price_values).all() or (price_values <= 0).any():
+        raise ValueError("raw daily provider history contains invalid OHLC")
+
+    splits = pd.to_numeric(frame["Stock Splits"], errors="coerce")
+    invalid_split = (
+        splits.isna()
+        | ~np.isfinite(splits)
+        | ((splits != 0.0) & (splits <= 0.0))
+    )
+    if bool(invalid_split.any()):
+        raise ValueError("provider history contains an invalid split factor")
+    split_events = splits.mask(splits == 0.0, 1.0)
+    inclusive_factor = split_events.iloc[::-1].cumprod().iloc[::-1]
+    future_factor = inclusive_factor / split_events
+
+    adjusted = prices.div(future_factor, axis=0)
+    if "Volume" in frame:
+        volume = pd.to_numeric(frame["Volume"], errors="coerce")
+        volume = volume.where(np.isfinite(volume) & (volume >= 0.0))
+        adjusted["Volume"] = volume.mul(future_factor, axis=0)
+    else:
+        adjusted["Volume"] = np.nan
+
+    index = pd.DatetimeIndex(adjusted.index)
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    periods = index.to_period("M")
+    prices_monthly = adjusted.groupby(periods).agg(
+        Open=("Open", "first"),
+        High=("High", "max"),
+        Low=("Low", "min"),
+        Close=("Close", "last"),
+    )
+    volume_monthly = adjusted["Volume"].groupby(periods).agg(
+        lambda values: values.sum() if values.notna().all() else np.nan
+    )
+    monthly = prices_monthly.assign(Volume=volume_monthly)
+    monthly.index = monthly.index.to_timestamp()
+    monthly.attrs.update(
+        {
+            "adjustment_mode": "split_adjusted",
+            "adjustment_source": "yfinance_stock_splits",
+            "source_interval": "1d",
+            "adjustment_transform_version": "yfinance-stock-splits-v1",
+        }
+    )
+    return monthly
+
+
 def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
     data = yf.download(
         ticker,
         period="max",
-        interval="1mo",
+        interval="1d",
         auto_adjust=False,
+        actions=True,
         progress=False,
         multi_level_index=False,
     )
     if data is None or data.empty:
         return None
-    data = data.dropna(subset=["Open", "High", "Low", "Close"])
-    if data.empty:
-        return None
-    return data
+    return _split_adjust_and_aggregate_monthly(data)
 
 
 def normalize_tickers(tickers: Iterable[str]) -> List[str]:
@@ -165,8 +233,9 @@ def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[st
         data = yf.download(
             batch,
             period="max",
-            interval="1mo",
+            interval="1d",
             auto_adjust=False,
+            actions=True,
             progress=False,
             threads=True,
             group_by="ticker",
@@ -178,13 +247,17 @@ def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[st
             for ticker in batch:
                 if ticker not in data.columns.get_level_values(0):
                     continue
-                ticker_df = data[ticker].dropna(subset=["Open", "High", "Low", "Close"])
+                ticker_df = data[ticker]
                 if not ticker_df.empty:
-                    histories[ticker] = ticker_df
+                    histories[ticker] = _split_adjust_and_aggregate_monthly(
+                        ticker_df
+                    )
         else:
-            ticker_df = data.dropna(subset=["Open", "High", "Low", "Close"])
+            ticker_df = data
             if not ticker_df.empty and len(batch) == 1:
-                histories[batch[0]] = ticker_df
+                histories[batch[0]] = _split_adjust_and_aggregate_monthly(
+                    ticker_df
+                )
 
     return histories
 
@@ -381,6 +454,8 @@ def _lifecycle_row(
     metrics = analysis.get("metrics") or {}
     review = analysis.get("review") or {}
     freshness = payload.get("freshness") or {}
+    analysis_metadata = analysis.get("analysis_metadata") or {}
+    data_quality = analysis_metadata.get("data_quality") or {}
     row = {
         **legacy,
         "ticker": ticker,
@@ -409,6 +484,11 @@ def _lifecycle_row(
         "freshness": freshness.get("status", "unknown"),
         "fetched_at": freshness.get("fetched_at"),
         "data_source": freshness.get("source"),
+        "adjustment_mode": data_quality.get("adjustment_mode")
+        or freshness.get("adjustment_mode"),
+        "data_quality_status": data_quality.get("status"),
+        "analysis_variant": analysis_metadata.get("variant"),
+        "analysis_mode": analysis_metadata.get("mode"),
     }
     return row
 
@@ -420,6 +500,8 @@ def run_lifecycle_screen(
     review_override_for: Optional[Callable[[str], Optional[dict[str, Any]]]] = None,
     review_state_for: Optional[Callable[[str], Optional[dict[str, Any]]]] = None,
     force_refresh: bool = False,
+    analysis_variant: str = "v2_3_1",
+    analysis_mode: str = "effective",
 ) -> dict[str, Any]:
     """Structurally screen every ticker without a legacy-score gate.
 
@@ -428,13 +510,27 @@ def run_lifecycle_screen(
     ``review_state_for`` supplies the latest human decision so rows can carry
     review status and staleness alongside the effective analysis.
     """
-    from coil_analysis import ALGORITHM_VERSION, DEFAULT_CONFIG, analyze_coil
+    from coil_analysis import (
+        ALGORITHM_VERSION,
+        ANALYSIS_MODE_ALGORITHM_ONLY,
+        ANALYSIS_MODE_EFFECTIVE,
+        ANALYSIS_VARIANT_V2_3_1,
+        DEFAULT_CONFIG,
+        analyze_coil,
+    )
     from history_cache import get_history_payload
     from reviews import annotate_review
 
     symbols = normalize_tickers(tickers)
+    if analysis_variant != ANALYSIS_VARIANT_V2_3_1:
+        raise ValueError(f"unsupported analysis variant: {analysis_variant}")
+    if analysis_mode not in {
+        ANALYSIS_MODE_ALGORITHM_ONLY,
+        ANALYSIS_MODE_EFFECTIVE,
+    }:
+        raise ValueError(f"unsupported analysis mode: {analysis_mode}")
     results: list[dict[str, Any]] = []
-    failures: list[dict[str, str]] = []
+    failures: list[dict[str, Any]] = []
     for ticker in symbols:
         try:
             payload = get_history_payload(
@@ -448,10 +544,34 @@ def run_lifecycle_screen(
                     {"ticker": ticker, "error": "No usable monthly history found."}
                 )
                 continue
-            override = review_override_for(ticker) if review_override_for else None
-            analysis = analyze_coil(payload["bars"], review_override=override)
-            state = review_state_for(ticker) if review_state_for else None
-            annotate_review(analysis, state, algorithm_version=ALGORITHM_VERSION)
+            override = (
+                review_override_for(ticker)
+                if analysis_mode == ANALYSIS_MODE_EFFECTIVE and review_override_for
+                else None
+            )
+            freshness = payload.get("freshness") or {}
+            analysis = analyze_coil(
+                payload["bars"],
+                review_override=override,
+                variant=analysis_variant,
+                mode=analysis_mode,
+                adjustment_mode=str(
+                    freshness.get("adjustment_mode") or "unknown"
+                ),
+            )
+            if analysis_mode == ANALYSIS_MODE_EFFECTIVE:
+                state = review_state_for(ticker) if review_state_for else None
+                annotate_review(analysis, state, algorithm_version=ALGORITHM_VERSION)
+            quality = (analysis.get("analysis_metadata") or {}).get("data_quality") or {}
+            if quality.get("blocked"):
+                failures.append(
+                    {
+                        "ticker": ticker,
+                        "error": "Strict OHLC integrity checks failed.",
+                        "data_quality": quality,
+                    }
+                )
+                continue
             bar_count = analysis.get("bar_count")
             if isinstance(bar_count, int) and bar_count < DEFAULT_CONFIG.min_bars:
                 failures.append(
@@ -482,25 +602,36 @@ def run_lifecycle_screen(
         "bucket_counts": bucket_counts,
         "failures": failures,
         "algorithm_version": ALGORITHM_VERSION,
+        "analysis_variant": analysis_variant,
+        "analysis_mode": analysis_mode,
         "screened_at": screened_at,
     }
 
 
 def run_screen(
-    tickers: Iterable[str], *, force_refresh: bool = False
+    tickers: Iterable[str],
+    *,
+    force_refresh: bool = False,
+    analysis_variant: str = "v2_3_1",
+    analysis_mode: str = "effective",
 ) -> pd.DataFrame:
     """Compatibility DataFrame wrapper over the lifecycle-aware screener.
 
     Existing CLI/CSV callers still receive a DataFrame, now enriched with v2
     structure. Envelope metadata is retained in ``DataFrame.attrs``.
     """
-    from reviews import get_review_store
+    review_override_for = None
+    if analysis_mode == "effective":
+        from reviews import get_review_store
 
-    store = get_review_store()
+        store = get_review_store()
+        review_override_for = lambda ticker: store.get_override(ticker, "3M")
     run = run_lifecycle_screen(
         tickers,
-        review_override_for=lambda ticker: store.get_override(ticker, "3M"),
+        review_override_for=review_override_for,
         force_refresh=force_refresh,
+        analysis_variant=analysis_variant,
+        analysis_mode=analysis_mode,
     )
     df = pd.DataFrame(run["results"])
     df.attrs.update({key: value for key, value in run.items() if key != "results"})

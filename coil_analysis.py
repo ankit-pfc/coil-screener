@@ -20,8 +20,9 @@ lid, before the breakout has played out:
 How the lid is chosen (v2.3)
 ----------------------------
 The lid is a **repeated historical ceiling**, never a line through the live
-price. The monthly series is aggregated into quarterly candles, a trailing
-partial quarter is dropped, and the confirmed quarterly mountains are
+price. The monthly series is aggregated into quarterly candles; a trailing
+partial quarter and any quarter whose final monthly candle is still open are
+dropped, and the confirmed quarterly mountains are
 clustered by price into *zones*. The clustering pool has its own prominence
 gate (``zone_candidate_prominence_pct``), looser than the chart overlay's,
 because a touch of a ceiling inside a coil falls away far less than a
@@ -53,18 +54,30 @@ drop to the valley separating it from its nearest same-height neighbor.
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import json
 import math
 from dataclasses import dataclass, replace
+from datetime import date as calendar_date
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from bar_integrity import (
+    ADJUSTMENT_SPLIT_ADJUSTED,
+    ADJUSTMENT_UNKNOWN,
+    DATA_QUALITY_BLOCKED,
+    inspect_monthly_bars,
+)
+
 SCHEMA_VERSION = 2
-ALGORITHM_VERSION = "2.3.0"
+ALGORITHM_VERSION = "2.3.1"
 ANALYSIS_INTERVAL = "3M"  # classification is quarterly-native regardless of view
 SOURCE = "timeseries"
 BARS_PER_YEAR = 12.0  # module operates on monthly bars
+ANALYSIS_VARIANT_V2_3_1 = "v2_3_1"
+ANALYSIS_MODE_ALGORITHM_ONLY = "algorithm_only"
+ANALYSIS_MODE_EFFECTIVE = "effective"
 
 # Point roles (schema v2). A point is exactly one of these:
 ROLE_MAJOR_TOP = "major_top"  # confirmed two-sided mountain
@@ -230,11 +243,16 @@ class SwingPoint:
     date: str
     price: float
     prominence_pct: float
+    confirmed_at_idx: Optional[int] = None
+    confirmed_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "idx": self.idx,
             "date": self.date,
+            "peak_date": self.date,
+            "confirmed_at_idx": self.confirmed_at_idx,
+            "confirmed_at": self.confirmed_at,
             "price": round(self.price, 4),
             "prominence_pct": round(self.prominence_pct, 2),
             "source": SOURCE,
@@ -309,20 +327,8 @@ def _log_trend_r2(closes: list[float]) -> Optional[float]:
 
 
 def _clean_bars(bars: Iterable[dict[str, Any]], as_of: Optional[str]) -> list[dict[str, Any]]:
-    """Drop unusable bars, sort by date, and truncate at ``as_of`` (inclusive)."""
-    out = []
-    for bar in bars:
-        date = bar.get("date")
-        high, low, close = bar.get("high"), bar.get("low"), bar.get("close")
-        if not date or high is None or low is None or close is None:
-            continue
-        if high <= 0 or low <= 0 or close <= 0:
-            continue
-        if as_of and str(date) > as_of:
-            continue
-        out.append(bar)
-    out.sort(key=lambda b: str(b["date"]))
-    return out
+    """Compatibility wrapper over strict inspection; callers should read reports."""
+    return inspect_monthly_bars(bars, as_of=as_of).bars
 
 
 def _pivot_high_indexes(highs: list[float], left: int, right: int) -> list[int]:
@@ -910,36 +916,72 @@ def _aggregate_quarterly_display_bars(
     return quarters
 
 
-def _quarter_is_complete(quarter: dict[str, Any]) -> bool:
-    """A quarter is complete when it contains its calendar-final month."""
-    return int(quarter["_last_month"]) % 3 == 0
+def _month_is_complete(
+    year: int,
+    month: int,
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> bool:
+    """Whether a monthly candle has actually closed.
 
-
-def _completed_quarters(quarterly: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The structure series: quarterly bars minus a trailing partial quarter.
-
-    Invariant (v2.2): nothing inside the incomplete final quarter may become a
-    top, a marker, a touch, or a lid anchor. Indices are preserved because only
-    a trailing element is dropped, so a quarterly index is valid in both lists.
-    The full series is still used for the last close, the breakout state
-    machine's provisional escape, and chart rendering.
+    Live analysis never treats the current calendar month as complete, even
+    when it is March, June, September, or December. Historical ``as_of`` runs
+    may include that month only when the cutoff reaches its calendar end.
     """
-    if quarterly and not _quarter_is_complete(quarterly[-1]):
-        return quarterly[:-1]
-    return list(quarterly)
+    if as_of:
+        try:
+            cutoff = calendar_date.fromisoformat(str(as_of)[:10])
+        except ValueError:
+            return False
+        month_end = calendar_date(year, month, calendar.monthrange(year, month)[1])
+        return cutoff >= month_end
+    live_date = today or calendar_date.today()
+    return (year, month) < (live_date.year, live_date.month)
+
+
+def _quarter_is_complete(
+    quarter: dict[str, Any],
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> bool:
+    """A quarter is complete only after its calendar-final month has closed."""
+    month = int(quarter["_last_month"])
+    if month % 3 != 0:
+        return False
+    try:
+        year = int(str(quarter["date"])[:4])
+    except (TypeError, ValueError):
+        return False
+    return _month_is_complete(year, month, as_of=as_of, today=today)
+
+
+def _completed_quarters(
+    quarterly: list[dict[str, Any]],
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> list[dict[str, Any]]:
+    """Return only quarters whose final monthly candle has actually closed."""
+    return [
+        quarter
+        for quarter in quarterly
+        if _quarter_is_complete(quarter, as_of=as_of, today=today)
+    ]
 
 
 def _last_structural_month_idx(
     quarterly: list[dict[str, Any]],
     monthly_last_idx: int,
+    *,
+    as_of: Optional[str] = None,
 ) -> int:
     """Last monthly index that belongs to a completed quarter."""
-    completed = _completed_quarters(quarterly)
+    completed = _completed_quarters(quarterly, as_of=as_of)
     if not completed:
         return -1
-    if len(completed) == len(quarterly):
-        return monthly_last_idx
-    return int(completed[-1]["_close_source_idx"])
+    return min(monthly_last_idx, int(completed[-1]["_close_source_idx"]))
 
 
 def _quarterly_scaled_config(config: CoilConfig) -> CoilConfig:
@@ -989,12 +1031,19 @@ def _remap_quarterly_role_point(
     source_idx = int(
         rp.evidence.get("source_month_idx", quarterly[rp.point.idx]["_high_source_idx"])
     )
+    confirmed_month_idx: int | None = None
+    if rp.point.confirmed_at_idx is not None:
+        confirmed_month_idx = int(
+            quarterly[rp.point.confirmed_at_idx]["_close_source_idx"]
+        )
     return RolePoint(
         point=SwingPoint(
             idx=source_idx,
             date=str(bars[source_idx]["date"]),
             price=rp.point.price,
             prominence_pct=rp.point.prominence_pct,
+            confirmed_at_idx=confirmed_month_idx,
+            confirmed_at=rp.point.confirmed_at,
         ),
         role=rp.role,
         evidence=rp.evidence,
@@ -1024,6 +1073,7 @@ def _cap_major_highs(
 def detect_display_major_highs(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
+    as_of: Optional[str] = None,
 ) -> list[SwingPoint]:
     """Detect overlay mountains on the same quarterly candles the user sees.
 
@@ -1032,11 +1082,13 @@ def detect_display_major_highs(
     remapped to the source month that supplied the quarter's high so API dates
     remain precise while the frontend still lands on the correct 3M candle.
 
-    v2.2: the points are the members of the selected lid zone, capped to the
-    latest ``display_max_highs`` for the legacy overlay contract. An empty
-    list means no zone qualified, i.e. the chart has no lid.
+    v2.3.1: the points are the members of the selected lid zone. Every member
+    stays visible even when a zone has more than ``display_max_highs`` members;
+    that setting only limits optional non-member backfill for the legacy
+    overlay contract. Ongoing monthly/quarterly candles are never returned.
+    An empty list means no zone qualified, i.e. the chart has no lid.
     """
-    structure = _analyze_quarterly_structure(bars, config)
+    structure = _analyze_quarterly_structure(bars, config, as_of=as_of)
     if structure is None:
         return []
     return [
@@ -1267,6 +1319,8 @@ def _run_breakout_state_machine(
     value_at: Any,
     start_idx: int,
     config: CoilConfig,
+    *,
+    as_of: Optional[str] = None,
 ) -> BreakoutAssessment:
     """Walk completed quarterly closes against the lid.
 
@@ -1301,13 +1355,13 @@ def _run_breakout_state_machine(
         close = float(bar["close"])
         low = float(bar["low"])
         high = float(bar["high"])
-        complete = q < last_idx or _quarter_is_complete(bar)
+        complete = _quarter_is_complete(bar, as_of=as_of)
         above_band = close > threshold
 
         if not complete:
-            if above_band and out.state == "sealed":
+            if q == last_idx and above_band and out.state == "sealed":
                 out.provisional_escape = _quarter_ref(bar, q)
-            break
+            continue
 
         if above_band:
             out.violation_idxs.append(q)
@@ -1468,7 +1522,7 @@ class LidZone:
     def span(self) -> int:
         return self.last_idx - self.first_idx
 
-def _mountain_candidates(
+def _raw_mountain_candidates(
     quarterly: list[dict[str, Any]],
     qconfig: CoilConfig,
 ) -> list[SwingPoint]:
@@ -1513,6 +1567,54 @@ def _mountain_candidates(
             )
         )
     return out
+
+
+def _mountain_candidates(
+    quarterly: list[dict[str, Any]],
+    qconfig: CoilConfig,
+) -> list[SwingPoint]:
+    """Current candidates annotated with their first observable prefix.
+
+    ``peak_date`` is where the high occurred.  ``confirmed_at`` is the first
+    completed quarterly prefix on which the same peak satisfied the existing
+    two-sided pivot, plateau, and prominence rules.  Computing this by replay
+    is deliberately conservative and avoids pretending a later-confirmed top
+    was known at its peak.
+    """
+    current = _raw_mountain_candidates(quarterly, qconfig)
+    if not current:
+        return []
+    wanted = {point.idx for point in current}
+    def confirmation_date(quarter: dict[str, Any]) -> str:
+        parsed = calendar_date.fromisoformat(str(quarter["date"])[:10])
+        return calendar_date(
+            parsed.year,
+            parsed.month,
+            calendar.monthrange(parsed.year, parsed.month)[1],
+        ).isoformat()
+
+    first_seen: dict[int, tuple[int, str]] = {}
+    minimum_prefix = max(1, qconfig.pivot_left + qconfig.pivot_right + 1)
+    for end in range(minimum_prefix, len(quarterly) + 1):
+        for point in _raw_mountain_candidates(quarterly[:end], qconfig):
+            if point.idx in wanted and point.idx not in first_seen:
+                first_seen[point.idx] = (
+                    end - 1,
+                    confirmation_date(quarterly[end - 1]),
+                )
+        if len(first_seen) == len(wanted):
+            break
+    return [
+        replace(
+            point,
+            confirmed_at_idx=first_seen.get(point.idx, (len(quarterly) - 1, ""))[0],
+            confirmed_at=first_seen.get(
+                point.idx,
+                (len(quarterly) - 1, confirmation_date(quarterly[-1])),
+            )[1],
+        )
+        for point in current
+    ]
 
 
 def _cluster_price_zones(
@@ -1622,6 +1724,8 @@ def _hypothesis_from_zone(
     quarterly: list[dict[str, Any]],
     zone: LidZone,
     config: CoilConfig,
+    *,
+    as_of: Optional[str] = None,
 ) -> Optional[LidHypothesis]:
     """Fit the lid through a zone's earliest and latest member.
 
@@ -1644,6 +1748,10 @@ def _hypothesis_from_zone(
         return intercept + slope * idx
 
     anchor_idxs = {anchors[0].idx, anchors[-1].idx}
+    evidence_ready_idx = max(
+        point.confirmed_at_idx if point.confirmed_at_idx is not None else point.idx
+        for point in anchors
+    )
     role_points = [
         RolePoint(
             point=member,
@@ -1666,7 +1774,13 @@ def _hypothesis_from_zone(
         value_at_last_bar=value_at_last,
         slope_pct_per_year=slope * 4.0 / value_at_last * 100.0,
         fit_error_pct=_fit_error_pct(anchors, slope, intercept),
-        breakout=_run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config),
+        breakout=_run_breakout_state_machine(
+            quarterly,
+            value_at,
+            evidence_ready_idx + 1,
+            config,
+            as_of=as_of,
+        ),
     )
 
 
@@ -1711,6 +1825,8 @@ def _rejected_zone_diagnostics(zones: list[LidZone]) -> list[dict[str, Any]]:
 def _analyze_quarterly_structure(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
+    *,
+    as_of: Optional[str] = None,
 ) -> Optional[QuarterlyStructure]:
     """Full-history quarterly detection + lid-zone selection (v2.3).
 
@@ -1724,19 +1840,27 @@ def _analyze_quarterly_structure(
     """
     if len(bars) < 2:
         return None
-    quarterly = _aggregate_quarterly_display_bars(bars)
-    if len(quarterly) < 3:
+    quarterly_display = _aggregate_quarterly_display_bars(bars)
+    if len(quarterly_display) < 3:
         return None
-    completed = _completed_quarters(quarterly)
+    completed = _completed_quarters(quarterly_display, as_of=as_of)
     if len(completed) < 2:
         return None
+    # Structural coordinates contain completed quarters only.  Preserve at
+    # most the trailing partial quarter as provisional breakout context; an
+    # incomplete historical quarter can never shift or anchor the structure.
+    quarterly = list(completed)
+    if quarterly_display and not _quarter_is_complete(
+        quarterly_display[-1], as_of=as_of
+    ):
+        quarterly.append(quarterly_display[-1])
     qconfig = _quarterly_scaled_config(config)
-    last_close = float(quarterly[-1]["close"])
+    last_close = float(quarterly_display[-1]["close"])
 
     zone, rejected_zones = _select_lid_zone(completed, qconfig, config, last_close)
     if zone is None:
         return None
-    hypothesis = _hypothesis_from_zone(quarterly, zone, config)
+    hypothesis = _hypothesis_from_zone(quarterly, zone, config, as_of=as_of)
     if hypothesis is None:
         return None
     return _finalize_structure(
@@ -1803,13 +1927,13 @@ def _month_to_quarter_map(
 ) -> dict[int, int]:
     """Monthly bar index -> index of its containing quarter."""
     mapping: dict[int, int] = {}
-    q_iter = 0
+    by_key = {quarter["_quarter_key"]: idx for idx, quarter in enumerate(quarterly)}
     for m_idx, bar in enumerate(bars):
         text = str(bar["date"])
         key = (int(text[:4]), (int(text[5:7]) - 1) // 3 + 1)
-        while q_iter < len(quarterly) - 1 and quarterly[q_iter]["_quarter_key"] != key:
-            q_iter += 1
-        mapping[m_idx] = q_iter
+        q_idx = by_key.get(key)
+        if q_idx is not None:
+            mapping[m_idx] = q_idx
     return mapping
 
 
@@ -1817,6 +1941,8 @@ def _structure_from_review_override(
     bars: list[dict[str, Any]],
     override_points: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
+    *,
+    as_of: Optional[str] = None,
 ) -> Optional[QuarterlyStructure]:
     """Effective structure from approved human-review points.
 
@@ -1839,12 +1965,18 @@ def _structure_from_review_override(
     """
     if len(bars) < 2:
         return None
-    quarterly = _aggregate_quarterly_display_bars(bars)
-    if len(quarterly) < 3:
+    quarterly_display = _aggregate_quarterly_display_bars(bars)
+    if len(quarterly_display) < 3:
         return None
+    completed = _completed_quarters(quarterly_display, as_of=as_of)
+    quarterly = list(completed)
+    if quarterly_display and not _quarter_is_complete(
+        quarterly_display[-1], as_of=as_of
+    ):
+        quarterly.append(quarterly_display[-1])
     month_by_prefix = {str(bar["date"])[:7]: idx for idx, bar in enumerate(bars)}
     month_to_q = _month_to_quarter_map(bars, quarterly)
-    last_structural_q = len(_completed_quarters(quarterly)) - 1
+    last_structural_q = len(completed) - 1
 
     explicit_membership = any(bool(point.get("lid_member")) for point in override_points)
     role_points: list[RolePoint] = []
@@ -1853,12 +1985,25 @@ def _structure_from_review_override(
         m_idx = month_by_prefix.get(date)
         if m_idx is None:
             continue
-        q_idx = month_to_q[m_idx]
+        q_idx = month_to_q.get(m_idx)
+        if q_idx is None:
+            continue
         if q_idx > last_structural_q:
             continue
         price = point.get("price")
         role = point.get("role") or ROLE_MAJOR_TOP
         lid_member = bool(point.get("lid_member")) if explicit_membership else None
+        confirmation_month_idx = int(quarterly[q_idx]["_close_source_idx"])
+        confirmation_month = calendar_date.fromisoformat(
+            str(bars[confirmation_month_idx]["date"])[:10]
+        )
+        confirmation_date = calendar_date(
+            confirmation_month.year,
+            confirmation_month.month,
+            calendar.monthrange(
+                confirmation_month.year, confirmation_month.month
+            )[1],
+        ).isoformat()
         role_points.append(
             RolePoint(
                 point=SwingPoint(
@@ -1866,6 +2011,8 @@ def _structure_from_review_override(
                     date=str(quarterly[q_idx]["date"]),
                     price=float(price) if price is not None else float(bars[m_idx]["high"]),
                     prominence_pct=0.0,
+                    confirmed_at_idx=q_idx,
+                    confirmed_at=confirmation_date,
                 ),
                 role=role,
                 evidence={
@@ -1896,7 +2043,13 @@ def _structure_from_review_override(
     def value_at(idx: int) -> float:
         return intercept + slope * idx
 
-    breakout = _run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config)
+    breakout = _run_breakout_state_machine(
+        quarterly,
+        value_at,
+        anchors[0].idx,
+        config,
+        as_of=as_of,
+    )
     hypothesis = LidHypothesis(
         window_start=anchors[0].idx,
         role_points=role_points,
@@ -1921,12 +2074,16 @@ def _resistance_fit_from_active_lid(active_lid: ActiveLidFit) -> ResistanceFit:
         date=first.date,
         price=active_lid.value_at(first.idx),
         prominence_pct=first.prominence_pct,
+        confirmed_at_idx=first.confirmed_at_idx,
+        confirmed_at=first.confirmed_at,
     )
     anchor_b = SwingPoint(
         idx=last.idx,
         date=last.date,
         price=active_lid.value_at(last.idx),
         prominence_pct=last.prominence_pct,
+        confirmed_at_idx=last.confirmed_at_idx,
+        confirmed_at=last.confirmed_at,
     )
     return ResistanceFit(
         anchor_a=anchor_a,
@@ -1993,6 +2150,9 @@ def grade_for_slope(slope_pct_per_year: float, config: CoilConfig = DEFAULT_CONF
 
 
 def _point_dict(point: SwingPoint) -> dict[str, Any]:
+    # Stable compatibility projection.  Rich top evidence is emitted by
+    # ``SwingPoint.to_dict`` and ``_role_point_dict``; line endpoints retain
+    # their long-standing three-field shape for existing clients.
     return {"idx": point.idx, "date": point.date, "price": round(point.price, 4)}
 
 
@@ -2011,10 +2171,13 @@ def _role_point_dict(rp: RolePoint, lid_member: bool) -> dict[str, Any]:
     return {
         "idx": rp.point.idx,
         "date": rp.point.date,
+        "peak_date": rp.point.date,
+        "confirmed_at_idx": rp.point.confirmed_at_idx,
+        "confirmed_at": rp.point.confirmed_at,
         "price": round(rp.point.price, 4),
         "prominence_pct": round(rp.point.prominence_pct, 2),
         "role": rp.role,
-        "confirmed": rp.role != ROLE_PROVISIONAL_TOP,
+        "confirmed": rp.point.confirmed_at is not None,
         "lid_member": lid_member,
         "source": SOURCE,
         "evidence": rp.evidence,
@@ -2026,6 +2189,10 @@ def analyze_coil(
     config: CoilConfig = DEFAULT_CONFIG,
     as_of: Optional[str] = None,
     review_override: Optional[dict[str, Any]] = None,
+    *,
+    variant: str = ANALYSIS_VARIANT_V2_3_1,
+    mode: str = ANALYSIS_MODE_EFFECTIVE,
+    adjustment_mode: str = ADJUSTMENT_UNKNOWN,
 ) -> dict[str, Any]:
     """Full analysis of one monthly bar series. JSON-ready dict, schema v2.
 
@@ -2042,10 +2209,33 @@ def analyze_coil(
     returned for diagnosis but never graded. The obsolete pair search is
     reported under ``diagnostics`` only.
     """
-    clean = _clean_bars(bars, as_of)
+    if variant != ANALYSIS_VARIANT_V2_3_1:
+        raise ValueError(f"unsupported analysis variant: {variant}")
+    if mode not in {ANALYSIS_MODE_ALGORITHM_ONLY, ANALYSIS_MODE_EFFECTIVE}:
+        raise ValueError(f"unsupported analysis mode: {mode}")
+    inspected = inspect_monthly_bars(
+        list(bars),
+        as_of=as_of,
+        adjustment_mode=adjustment_mode,
+    )
+    clean = inspected.bars
+    data_quality = inspected.report
     last_bar_date = clean[-1]["date"] if clean else as_of
     quarterly = _aggregate_quarterly_display_bars(clean) if clean else []
-    incomplete_last_quarter = bool(quarterly) and not _quarter_is_complete(quarterly[-1])
+    incomplete_last_quarter = bool(quarterly) and not _quarter_is_complete(
+        quarterly[-1], as_of=as_of
+    )
+    completed_quarters = _completed_quarters(quarterly, as_of=as_of)
+    completed_evidence_cutoff = None
+    if completed_quarters:
+        completed_date = calendar_date.fromisoformat(
+            str(completed_quarters[-1]["date"])[:10]
+        )
+        completed_evidence_cutoff = calendar_date(
+            completed_date.year,
+            completed_date.month,
+            calendar.monthrange(completed_date.year, completed_date.month)[1],
+        ).isoformat()
     result: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "algorithm_version": ALGORITHM_VERSION,
@@ -2059,6 +2249,12 @@ def analyze_coil(
             "bar_count_quarterly": len(quarterly),
             "analysis_interval": ANALYSIS_INTERVAL,
             "algorithm_version": ALGORITHM_VERSION,
+            "variant": variant,
+            "mode": mode,
+            "evidence_cutoff": data_quality.get("evidence_cutoff"),
+            "completed_evidence_cutoff": completed_evidence_cutoff,
+            "adjustment_mode": data_quality.get("adjustment_mode"),
+            "data_quality": data_quality,
             "data_freshness": {
                 "last_bar_date": last_bar_date,
                 "incomplete_last_quarter": incomplete_last_quarter,
@@ -2072,13 +2268,25 @@ def analyze_coil(
         "major_highs": [],
         "active_lid": None,
         "breakout": None,
-        "review": {"reviewed": False, "effective": "algorithm"},
+        "review": {
+            "reviewed": False,
+            "effective": "algorithm",
+            "analysis_mode": mode,
+        },
         "resistance": None,
         "support": None,
         "metrics": None,
         "diagnostics": {"pair_search": None, "rejected_hypotheses": []},
         "notes": [],
     }
+    if data_quality["status"] == DATA_QUALITY_BLOCKED:
+        result["status"] = "invalid_data"
+        result["analysis_metadata"]["classification_blocked"] = True
+        result["notes"].append(
+            "analysis blocked: strict OHLC integrity checks failed"
+        )
+        return result
+    result["analysis_metadata"]["classification_blocked"] = False
     if len(clean) < config.min_bars:
         result["notes"].append(f"insufficient history: {len(clean)} bars < {config.min_bars}")
         return result
@@ -2103,14 +2311,21 @@ def analyze_coil(
             "lid_grade": grade_for_slope(pair_fit.slope_pct_per_year, config),
         }
 
-    structure = _analyze_quarterly_structure(clean, config)
+    structure = _analyze_quarterly_structure(clean, config, as_of=as_of)
 
     # Approved human reviews override the algorithm's structure. The raw
     # algorithm result is retained for comparison and future calibration;
     # slope, grade, and lifecycle are recomputed from the reviewed anchors.
-    if review_override and review_override.get("points"):
+    if (
+        mode == ANALYSIS_MODE_EFFECTIVE
+        and review_override
+        and review_override.get("points")
+    ):
         overridden = _structure_from_review_override(
-            clean, review_override["points"], config
+            clean,
+            review_override["points"],
+            config,
+            as_of=as_of,
         )
         if overridden is not None:
             algorithm_summary = None
@@ -2127,6 +2342,7 @@ def analyze_coil(
             result["review"] = {
                 "reviewed": True,
                 "effective": "human",
+                "analysis_mode": mode,
                 "review_id": review_override.get("review_id"),
                 "updated_at": review_override.get("updated_at"),
                 "algorithm": algorithm_summary,
@@ -2152,7 +2368,9 @@ def analyze_coil(
     # interior members (structure that does not move the line), plus minor
     # swing highs inside the regime that land within the touch tolerance.
     # Nothing inside the incomplete final quarter may be a touch.
-    structural_month_limit = _last_structural_month_idx(quarterly, last_idx)
+    structural_month_limit = _last_structural_month_idx(
+        quarterly, last_idx, as_of=as_of
+    )
     touch_tol = config.touch_tolerance_pct / 100.0
     extra_touches: list[SwingPoint] = [
         rp.point
@@ -2169,7 +2387,25 @@ def analyze_coil(
             continue
         line_value = lid.value_at(swing.idx)
         if line_value > 0 and abs(swing.price - line_value) / line_value <= touch_tol:
-            extra_touches.append(swing)
+            confirmation_idx = swing.idx + max(0, config.pivot_right)
+            if confirmation_idx > structural_month_limit:
+                continue
+            confirmation_month = calendar_date.fromisoformat(
+                str(clean[confirmation_idx]["date"])[:10]
+            )
+            extra_touches.append(
+                replace(
+                    swing,
+                    confirmed_at_idx=confirmation_idx,
+                    confirmed_at=calendar_date(
+                        confirmation_month.year,
+                        confirmation_month.month,
+                        calendar.monthrange(
+                            confirmation_month.year, confirmation_month.month
+                        )[1],
+                    ).isoformat(),
+                )
+            )
     touches = _cluster_touches(
         sorted(list(lid.points) + extra_touches, key=lambda s: s.idx),
         config.touch_cluster_bars,
@@ -2399,6 +2635,61 @@ def analyze_coil(
         100.0 * (0.30 * flat + 0.20 * touch_score + 0.20 * compress + 0.15 * prox + 0.15 * span_score), 1
     )
     return result
+
+
+def replay_completed_quarter_prefixes(
+    bars: Iterable[dict[str, Any]],
+    config: CoilConfig = DEFAULT_CONFIG,
+    *,
+    adjustment_mode: str = ADJUSTMENT_UNKNOWN,
+    today: Optional[calendar_date] = None,
+) -> dict[str, Any]:
+    """Re-run algorithm-only analysis at every available quarter end.
+
+    This is the point-in-time oracle used by tests and benchmarks.  Each result
+    is computed fresh from the original immutable bars and an exact calendar
+    cutoff; it never truncates or backfills one full-history analysis.
+    """
+    source = list(bars)
+    inspected = inspect_monthly_bars(
+        source,
+        adjustment_mode=adjustment_mode,
+        today=today,
+    )
+    if inspected.report["status"] == DATA_QUALITY_BLOCKED:
+        return {
+            "variant": ANALYSIS_VARIANT_V2_3_1,
+            "mode": ANALYSIS_MODE_ALGORITHM_ONLY,
+            "data_quality": inspected.report,
+            "snapshots": [],
+        }
+    snapshots: list[dict[str, Any]] = []
+    for bar in inspected.bars:
+        parsed = calendar_date.fromisoformat(str(bar["date"])[:10])
+        if parsed.month % 3 != 0:
+            continue
+        if not _month_is_complete(parsed.year, parsed.month, today=today):
+            continue
+        cutoff = calendar_date(
+            parsed.year,
+            parsed.month,
+            calendar.monthrange(parsed.year, parsed.month)[1],
+        ).isoformat()
+        analysis = analyze_coil(
+            source,
+            config=config,
+            as_of=cutoff,
+            variant=ANALYSIS_VARIANT_V2_3_1,
+            mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+            adjustment_mode=adjustment_mode,
+        )
+        snapshots.append({"as_of": cutoff, "analysis": analysis})
+    return {
+        "variant": ANALYSIS_VARIANT_V2_3_1,
+        "mode": ANALYSIS_MODE_ALGORITHM_ONLY,
+        "data_quality": inspected.report,
+        "snapshots": snapshots,
+    }
 
 
 # ---------------------------------------------------------------------------

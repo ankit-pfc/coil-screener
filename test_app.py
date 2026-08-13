@@ -46,7 +46,7 @@ def _synthetic_monthly(rows: int = 130) -> pd.DataFrame:
     high = [base + 5 + (i % 3) for i in range(rows)]
     low = [base - 5 - (i % 3) for i in range(rows)]
     close = [base + (i % 2) for i in range(rows)]
-    return pd.DataFrame(
+    result = pd.DataFrame(
         {
             "Open": close,
             "High": high,
@@ -56,6 +56,11 @@ def _synthetic_monthly(rows: int = 130) -> pd.DataFrame:
         },
         index=idx,
     )
+    result.attrs["adjustment_mode"] = "split_adjusted"
+    result.attrs["adjustment_source"] = "yfinance_stock_splits"
+    result.attrs["source_interval"] = "1d"
+    result.attrs["adjustment_transform_version"] = "yfinance-stock-splits-v1"
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -412,6 +417,32 @@ def test_coil_endpoint_analyzes_cached_bars(client, monkeypatch, tmp_cache):
     }
 
 
+def test_coil_algorithm_only_never_reads_review_state(
+    client, monkeypatch, tmp_cache
+):
+    from test_coil_analysis import make_coil_bars
+
+    _seed_coil_cache(tmp_cache, "PURE", make_coil_bars())
+    monkeypatch.setattr(
+        app_module,
+        "get_review_store",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("algorithm_only must not open the review store")
+        ),
+    )
+
+    resp = client.get(
+        "/api/coil/PURE",
+        params={"variant": "v2_3_1", "mode": "algorithm_only"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["analysis_metadata"]["variant"] == "v2_3_1"
+    assert body["analysis_metadata"]["mode"] == "algorithm_only"
+    assert body["review"]["analysis_mode"] == "algorithm_only"
+
+
 def test_coil_endpoint_as_of_replays_pre_breakout(client, tmp_cache):
     from test_coil_analysis import make_coil_bars, month_dates
 
@@ -469,6 +500,38 @@ def test_screen_contract(client, monkeypatch):
     assert body["results"][0]["ticker"] == "TEST"
     assert body["bucket_counts"] == {"pre_breakout": 1}
     assert body["failures"] == []
+
+
+def test_screen_forwards_explicit_analysis_variant_and_mode(client, monkeypatch):
+    seen = {}
+
+    def fake_run(tickers, **kwargs):
+        seen.update(kwargs)
+        return {
+            "results": [],
+            "bucket_counts": {},
+            "failures": [],
+            "algorithm_version": "test-v2",
+            "analysis_variant": kwargs["analysis_variant"],
+            "analysis_mode": kwargs["analysis_mode"],
+            "screened_at": "2026-01-01T00:00:00.000Z",
+        }
+
+    monkeypatch.setattr(app_module, "run_lifecycle_screen", fake_run)
+
+    resp = client.post(
+        "/api/screen",
+        json={
+            "tickers": ["TEST"],
+            "analysisVariant": "v2_3_1",
+            "analysisMode": "algorithm_only",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert seen["analysis_variant"] == "v2_3_1"
+    assert seen["analysis_mode"] == "algorithm_only"
+    assert resp.json()["analysis_mode"] == "algorithm_only"
 
 
 def test_screen_rows_expose_the_lid_band_position_end_to_end(

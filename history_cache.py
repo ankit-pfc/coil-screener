@@ -2,9 +2,9 @@
 
 Writable entries are valid for 24 hours.  The tracked ``seed_cache`` and old
 payloads without metadata are intentionally stale: they are useful offline,
-but should never prevent a live refresh.  Refreshes merge by month (live bars
-win), recompute features over the complete history, and replace the writable
-file atomically.  If refresh fails, any usable cached/seed bars are returned
+but should never prevent a live refresh. Canonical refreshes replace the cache
+from a full-history provider response because a later split changes the basis
+of every older price. If refresh fails, any usable cached/seed bars are returned
 with an explicit ``stale_fallback`` freshness status.
 """
 from __future__ import annotations
@@ -19,8 +19,13 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent
 CACHE_DIR = PROJECT_ROOT / "cache"
 SEED_DIR = PROJECT_ROOT / "seed_cache"
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 4
 CACHE_TTL = timedelta(hours=24)
+DEFAULT_ADJUSTMENT_MODE = "unknown"
+CANONICAL_ADJUSTMENT_MODE = "split_adjusted"
+CANONICAL_ADJUSTMENT_SOURCE = "yfinance_stock_splits"
+CANONICAL_SOURCE_INTERVAL = "1d"
+CANONICAL_TRANSFORM_VERSION = "yfinance-stock-splits-v1"
 
 
 def _clean(value: Any) -> Any:
@@ -143,6 +148,14 @@ def _metadata_is_fresh(payload: dict[str, Any], now: datetime) -> bool:
         return False
     if metadata.get("schema_version") != CACHE_SCHEMA_VERSION:
         return False
+    if metadata.get("adjustment_mode") != CANONICAL_ADJUSTMENT_MODE:
+        return False
+    if metadata.get("adjustment_source") != CANONICAL_ADJUSTMENT_SOURCE:
+        return False
+    if metadata.get("source_interval") != CANONICAL_SOURCE_INTERVAL:
+        return False
+    if metadata.get("adjustment_transform_version") != CANONICAL_TRANSFORM_VERSION:
+        return False
     fetched_at = _parse_time(metadata.get("fetched_at"))
     if fetched_at is None:
         return False
@@ -166,6 +179,12 @@ def _freshness(
         "last_bar_date": metadata.get("last_bar_date")
         or (bars[-1].get("date") if bars else None),
         "source": metadata.get("source") or origin,
+        "adjustment_mode": metadata.get("adjustment_mode") or "unknown",
+        "adjustment_source": metadata.get("adjustment_source"),
+        "source_interval": metadata.get("source_interval"),
+        "adjustment_transform_version": metadata.get(
+            "adjustment_transform_version"
+        ),
         "origin": origin,
         "refresh_error": refresh_error,
     }
@@ -191,6 +210,10 @@ def write_cache(
     *,
     fetched_at: Optional[datetime] = None,
     source: str = "yfinance",
+    adjustment_mode: str = DEFAULT_ADJUSTMENT_MODE,
+    adjustment_source: str | None = None,
+    source_interval: str | None = None,
+    adjustment_transform_version: str | None = None,
 ) -> dict[str, Any]:
     """Atomically persist complete bars, features, and cache metadata."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -204,6 +227,10 @@ def write_cache(
             "fetched_at": _iso_utc(timestamp),
             "last_bar_date": bars[-1]["date"] if bars else None,
             "source": source,
+            "adjustment_mode": adjustment_mode,
+            "adjustment_source": adjustment_source,
+            "source_interval": source_interval,
+            "adjustment_transform_version": adjustment_transform_version,
         },
     }
     target = cache_path(symbol)
@@ -241,6 +268,7 @@ def get_history_payload(
     *,
     force_refresh: bool = False,
     source: str = "yfinance",
+    adjustment_mode: str | None = None,
 ) -> Optional[dict[str, Any]]:
     """Return full history, refreshing stale data and preserving fallback bars."""
     symbol = symbol.strip().upper()
@@ -272,7 +300,20 @@ def get_history_payload(
         )
 
     try:
-        merged = _merge_history(cached, live)
+        live_adjustment_mode = str(
+            live.attrs.get("adjustment_mode")
+            or adjustment_mode
+            or DEFAULT_ADJUSTMENT_MODE
+        )
+        adjustment_source = live.attrs.get("adjustment_source")
+        source_interval = live.attrs.get("source_interval")
+        adjustment_transform_version = live.attrs.get(
+            "adjustment_transform_version"
+        )
+        # The canonical fetch asks for the full provider history. Never merge
+        # it with a prior adjusted cache: a later split changes the basis of
+        # every older price, so equal mode strings do not prove equal bases.
+        merged = _merge_history(None, live)
         if merged.empty:
             raise ValueError("refresh returned no usable monthly history")
         features = compute_features(symbol, merged)
@@ -284,6 +325,18 @@ def get_history_payload(
             features_dict,
             fetched_at=now,
             source=source,
+            adjustment_mode=live_adjustment_mode,
+            adjustment_source=(
+                str(adjustment_source) if adjustment_source is not None else None
+            ),
+            source_interval=(
+                str(source_interval) if source_interval is not None else None
+            ),
+            adjustment_transform_version=(
+                str(adjustment_transform_version)
+                if adjustment_transform_version is not None
+                else None
+            ),
         )
     except Exception as exc:
         if cached is None:
