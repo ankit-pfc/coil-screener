@@ -443,6 +443,52 @@ def test_coil_algorithm_only_never_reads_review_state(
     assert body["review"]["analysis_mode"] == "algorithm_only"
 
 
+def test_coil_v24_validation_endpoint_is_additive_and_algorithm_only(
+    client, monkeypatch, tmp_cache
+):
+    from test_coil_validation_v24 import mature_coil_bars
+
+    _seed_coil_cache(tmp_cache, "VALIDATE", mature_coil_bars())
+    monkeypatch.setattr(app_module, "fetch_monthly_history", lambda symbol: None)
+    monkeypatch.setattr(
+        app_module,
+        "get_review_store",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("validation detector must not open the review store")
+        ),
+    )
+
+    resp = client.get(
+        "/api/coil/VALIDATE",
+        params={"variant": "v2_4_validation", "mode": "algorithm_only"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["analysis_metadata"]["variant"] == "v2_4_validation"
+    assert body["analysis_metadata"]["mode"] == "algorithm_only"
+    assert body["top_candidates"]
+    assert body["lid_hypotheses"]
+    assert body["resistance_band"] is not None
+    assert body["pattern_assessment"]["structure_state"] == "qualified"
+
+
+def test_coil_v24_validation_rejects_effective_mode(client, tmp_cache):
+    from test_coil_validation_v24 import mature_coil_bars
+
+    _seed_coil_cache(tmp_cache, "VALIDATE", mature_coil_bars())
+
+    resp = client.get(
+        "/api/coil/VALIDATE",
+        params={"variant": "v2_4_validation", "mode": "effective"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == (
+        "v2_4_validation is available only in algorithm_only mode."
+    )
+
+
 def test_coil_endpoint_as_of_replays_pre_breakout(client, tmp_cache):
     from test_coil_analysis import make_coil_bars, month_dates
 
@@ -532,6 +578,49 @@ def test_screen_forwards_explicit_analysis_variant_and_mode(client, monkeypatch)
     assert seen["analysis_variant"] == "v2_3_1"
     assert seen["analysis_mode"] == "algorithm_only"
     assert resp.json()["analysis_mode"] == "algorithm_only"
+
+
+def test_screen_forwards_v24_validation_variant(client, monkeypatch):
+    seen = {}
+
+    def fake_run(tickers, **kwargs):
+        seen.update(kwargs)
+        return {
+            "results": [],
+            "bucket_counts": {},
+            "failures": [],
+            "algorithm_version": "2.4.0-validation",
+            "analysis_variant": kwargs["analysis_variant"],
+            "analysis_mode": kwargs["analysis_mode"],
+            "screened_at": "2026-01-01T00:00:00.000Z",
+        }
+
+    monkeypatch.setattr(app_module, "run_lifecycle_screen", fake_run)
+    resp = client.post(
+        "/api/screen",
+        json={
+            "tickers": ["TEST"],
+            "analysisVariant": "v2_4_validation",
+            "analysisMode": "algorithm_only",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert seen["analysis_variant"] == "v2_4_validation"
+    assert seen["analysis_mode"] == "algorithm_only"
+
+
+def test_screen_rejects_v24_effective_mode_before_opening_review_state(client):
+    resp = client.post(
+        "/api/screen",
+        json={
+            "tickers": ["TEST"],
+            "analysisVariant": "v2_4_validation",
+            "analysisMode": "effective",
+        },
+    )
+
+    assert resp.status_code == 400
 
 
 def test_screen_rows_expose_the_lid_band_position_end_to_end(

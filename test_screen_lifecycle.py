@@ -249,6 +249,27 @@ def test_algorithm_only_screen_skips_review_callbacks(monkeypatch):
     assert seen["mode"] == "algorithm_only"
 
 
+def test_v24_screen_envelope_reports_validation_version(monkeypatch):
+    monkeypatch.setattr(
+        history_cache, "get_history_payload", lambda symbol, *a, **k: _payload(symbol)
+    )
+    monkeypatch.setattr(
+        coil_analysis,
+        "analyze_coil",
+        lambda bars, **kwargs: _analysis("forming", 40.0),
+    )
+
+    run = run_lifecycle_screen(
+        ["VALIDATE"],
+        fetch_monthly=lambda _: None,
+        analysis_variant="v2_4_validation",
+        analysis_mode="algorithm_only",
+    )
+
+    assert run["algorithm_version"] == "2.4.0-validation"
+    assert run["analysis_variant"] == "v2_4_validation"
+
+
 def test_algorithm_only_dataframe_wrapper_never_opens_review_store(monkeypatch):
     seen = {}
 

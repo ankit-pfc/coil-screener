@@ -23,6 +23,7 @@ from coil_analysis import (
     ANALYSIS_MODE_ALGORITHM_ONLY,
     ANALYSIS_MODE_EFFECTIVE,
     ANALYSIS_VARIANT_V2_3_1,
+    ANALYSIS_VARIANT_V2_4_VALIDATION,
     analyze_coil,
 )
 from history_cache import get_history_payload, read_cache
@@ -321,7 +322,7 @@ class ScreenRequest(BaseModel):
     universe: Literal["sp500", "international"] | None = None
     limit: int | None = None
     force_refresh: bool = False
-    analysis_variant: Literal["v2_3_1"] = Field(
+    analysis_variant: Literal["v2_3_1", "v2_4_validation"] = Field(
         default=ANALYSIS_VARIANT_V2_3_1,
         alias="analysisVariant",
     )
@@ -606,6 +607,14 @@ def saved_run(filename: str) -> dict[str, Any]:
 
 @app.post("/api/screen")
 def screen(request: ScreenRequest) -> dict[str, Any]:
+    if (
+        request.analysis_variant == ANALYSIS_VARIANT_V2_4_VALIDATION
+        and request.analysis_mode != ANALYSIS_MODE_ALGORITHM_ONLY
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="v2_4_validation is available only in algorithm_only mode.",
+        )
     tickers = build_ticker_list(
         explicit_tickers=request.tickers,
         universe=request.universe,
@@ -659,7 +668,7 @@ def coil(
     ticker: str,
     as_of: str | None = None,
     force_refresh: bool = False,
-    variant: Literal["v2_3_1"] = ANALYSIS_VARIANT_V2_3_1,
+    variant: Literal["v2_3_1", "v2_4_validation"] = ANALYSIS_VARIANT_V2_3_1,
     mode: Literal["algorithm_only", "effective"] = ANALYSIS_MODE_EFFECTIVE,
 ) -> dict[str, Any]:
     """Deterministic major-top / resistance-slope / coiling analysis.
@@ -671,6 +680,11 @@ def coil(
     """
     if as_of is not None and (len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-"):
         raise HTTPException(status_code=400, detail="as_of must be YYYY-MM-DD.")
+    if variant == ANALYSIS_VARIANT_V2_4_VALIDATION and mode != ANALYSIS_MODE_ALGORITHM_ONLY:
+        raise HTTPException(
+            status_code=400,
+            detail="v2_4_validation is available only in algorithm_only mode.",
+        )
 
     symbol = ticker.strip().upper()
     payload = get_history_payload(
