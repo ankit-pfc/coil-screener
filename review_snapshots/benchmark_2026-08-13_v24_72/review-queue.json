@@ -1,0 +1,511 @@
+{
+  "benchmark_id": "coilingview-v24-72",
+  "schema_version": 1,
+  "task_count": 84,
+  "tasks": [
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_039d08d0c4233e10abee",
+      "ticker": "SHOP.TO"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_05a4c8ae1284a41cf656",
+      "ticker": "ITC.NS"
+    },
+    {
+      "as_of": "2023-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_06be01299630117ef0f9",
+      "ticker": "DTE.DE"
+    },
+    {
+      "as_of": "2023-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_0aa25a2189004f956382",
+      "ticker": "FCX"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_1825a536893a7c3fe64d",
+      "ticker": "RELIANCE.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_1925654e45ebdb81b474",
+      "ticker": "BHP.AX"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_1ef303f495617ba62f00",
+      "ticker": "SAP.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_21a0f566a84a520751a4",
+      "ticker": "ALV.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_3063b2d61109ea29f0e4",
+      "ticker": "KOTAKBANK.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_44be01d2661149710c0e",
+      "ticker": "RY.TO"
+    },
+    {
+      "as_of": "2023-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_67d5677745f1122c3879",
+      "ticker": "EAT"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_6f79d9d3a6cb1b80fbc4",
+      "ticker": "HDFCBANK.NS"
+    },
+    {
+      "as_of": "2022-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_71db0970947d72732e9d",
+      "ticker": "VTR"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_72f0fe87011e54871c26",
+      "ticker": "UNP"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_7de32a2e10860a8a82e5",
+      "ticker": "LH"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_8684718afd9187a10c5f",
+      "ticker": "MSCI"
+    },
+    {
+      "as_of": "2023-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_8a4983f254192e2e53a6",
+      "ticker": "SBIN.NS"
+    },
+    {
+      "as_of": "2023-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_9cc8862835fe1f523040",
+      "ticker": "AZN.L"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_9d190125c97bea8593b2",
+      "ticker": "TCS.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_a177d8c511d04d2e66b6",
+      "ticker": "LT.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_a2d668481d5e31a723ee",
+      "ticker": "CF"
+    },
+    {
+      "as_of": "2022-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_a88d053888e36991fc51",
+      "ticker": "TD.TO"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_a9a50d8af00f64a454d4",
+      "ticker": "SIE.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_aba314bdcd0be204904f",
+      "ticker": "AXISBANK.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_b08ef2ab8d32b4e4c0ae",
+      "ticker": "0005.HK"
+    },
+    {
+      "as_of": "2023-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_b4dbb465833cce946abd",
+      "ticker": "BAJFINANCE.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_b51525488c3a5a3f487e",
+      "ticker": "SPG"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_cfef7ff75ad67f0e0d4b",
+      "ticker": "REG"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_d21b38fa2b78336905e6",
+      "ticker": "CNR.TO"
+    },
+    {
+      "as_of": "2022-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_d352e3c7e73cb395d536",
+      "ticker": "ICICIBANK.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_d4c6c62b04c3583d11af",
+      "ticker": "INFY.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_d927dfaec00385344e63",
+      "ticker": "HINDUNILVR.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_dafa53fd0c58e49ff515",
+      "ticker": "NUE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_ea7c75d42831404715ec",
+      "ticker": "BG"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_ec9085ad3c7b2cfcca0e",
+      "ticker": "ULVR.L"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+      "task_id": "task_ee4d92d171045bde3df5",
+      "ticker": "KN"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_4b3eaaab9a60a7431873",
+      "ticker": "ALV.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_78b42c7a83e550658e00",
+      "ticker": "0005.HK"
+    },
+    {
+      "as_of": "2022-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_83629b6cf302fda835c3",
+      "ticker": "TD.TO"
+    },
+    {
+      "as_of": "2023-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_83f9998ec4932938ae7c",
+      "ticker": "DTE.DE"
+    },
+    {
+      "as_of": "2023-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_8f8caba2a3ffc83a5a8f",
+      "ticker": "AZN.L"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_946c56201c12b80ca8ac",
+      "ticker": "SAP.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_af8c42df5d679f19ce9a",
+      "ticker": "SHOP.TO"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_b619fd6fa28024e82bdd",
+      "ticker": "CNR.TO"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_ca7f5fa53651a238aa12",
+      "ticker": "ULVR.L"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_ce148ddfd29c7b8ca197",
+      "ticker": "RY.TO"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_d54ec577ba154a620757",
+      "ticker": "BHP.AX"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+      "task_id": "task_f9326c3d5d280628eb29",
+      "ticker": "SIE.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_02c30a9fc380353f4290",
+      "ticker": "7203.T"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_2b080137798967778b86",
+      "ticker": "MC.PA"
+    },
+    {
+      "as_of": "2024-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_325bb0b060b9900aec89",
+      "ticker": "NTPC.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_53a33b332175f58bc92e",
+      "ticker": "6758.T"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_5993c3e376a70069f901",
+      "ticker": "XOM"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_894ba70b26604a1f88a3",
+      "ticker": "ONGC.NS"
+    },
+    {
+      "as_of": "2024-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_a767941f1b1164f4e6d1",
+      "ticker": "AAPL"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_a7ef8aa7a4e88a22de43",
+      "ticker": "COF"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_a92202e5f089ab97a53d",
+      "ticker": "NSC"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_abc080291265637b1b0a",
+      "ticker": "MARUTI.NS"
+    },
+    {
+      "as_of": "2024-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_acc6c9b0280c168ebc4f",
+      "ticker": "NESN.SW"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_affa884c9e9ad8c3a08b",
+      "ticker": "OR.PA"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_b742ae6009b412b1cf78",
+      "ticker": "CSX"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_be1080a33de7c71d4756",
+      "ticker": "MSFT"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_cdf929ba46c675127c78",
+      "ticker": "ASML.AS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_d5b12be514a45ea9a4e7",
+      "ticker": "SUNPHARMA.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_e2527692215803ca8bed",
+      "ticker": "POWERGRID.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+      "task_id": "task_e6ea11576622c5e0c7d4",
+      "ticker": "TITAN.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_01343e74147b2d328d36",
+      "ticker": "9984.T"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_0f120994f9d7f40f1dd2",
+      "ticker": "PG"
+    },
+    {
+      "as_of": "2024-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_19b8b09bf64d3a6ec300",
+      "ticker": "BMW.DE"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_23e630dbf5acb9465f61",
+      "ticker": "JNJ"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_2a27397454d18e971128",
+      "ticker": "BARC.L"
+    },
+    {
+      "as_of": "2025-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_33d03e9954127a768d85",
+      "ticker": "PEP"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_363d5d6c8e212b83d97e",
+      "ticker": "KO"
+    },
+    {
+      "as_of": "2024-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_4c81b60031cafb9846d5",
+      "ticker": "JPM"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_53181162b808b1484cd1",
+      "ticker": "ASIANPAINT.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_614a2992120dd508e8c0",
+      "ticker": "TECHM.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_64942e0d17330d737b84",
+      "ticker": "WIPRO.NS"
+    },
+    {
+      "as_of": "2025-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_6f2f67a72ef639948c57",
+      "ticker": "DRREDDY.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_80b334322ccf766227b2",
+      "ticker": "RIO.AX"
+    },
+    {
+      "as_of": "2025-03-31",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_96563fb3b72f9ab5a9e4",
+      "ticker": "9988.HK"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_aadbab2f63211b9ae489",
+      "ticker": "2330.TW"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_b76c81a8bb71f516383d",
+      "ticker": "ULTRACEMCO.NS"
+    },
+    {
+      "as_of": "2024-09-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_bf75a623dd4398c56ae4",
+      "ticker": "TATASTEEL.NS"
+    },
+    {
+      "as_of": "2026-06-30",
+      "source": "benchmark_2026-08-13_v24_72_batch_d.csv",
+      "task_id": "task_f539c635f0df2324f580",
+      "ticker": "AMZN"
+    }
+  ]
+}

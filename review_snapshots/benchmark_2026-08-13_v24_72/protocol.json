@@ -1,0 +1,62 @@
+{
+  "benchmark_id": "coilingview-v24-72",
+  "cohorts": {
+    "clear_negative": 18,
+    "disagreement_exception": 18,
+    "expert_positive": 18,
+    "point_in_time_lifecycle": 18
+  },
+  "configuration_policy": {
+    "default_fingerprint": "sha256:0ebc5d1f08e5c5424372ddcdffa65771f179c74ae5abeb6ce41c238616f8c190",
+    "development_grid": {
+      "max_qualifying_lid_slope_pct_per_year": [6.5, 12.0],
+      "touch_tolerance_pct": [2.5, 3.5, 5.0],
+      "zone_candidate_prominence_pct": [15.0, 18.5, 22.5],
+      "zone_similarity_pct": [3.5, 5.0, 7.5]
+    },
+    "registered_configuration_count": 54,
+    "selection": "Development-only lexicographic ordering by major-top precision, pattern precision, band agreement, then recall; one validation audit of the winner."
+  },
+  "decision_outcomes": {
+    "go": "All label-quality, integrity, point-in-time, performance, coverage, negative-control, and review-efficiency gates pass.",
+    "inconclusive": "Label stability fails or required blind labels/samples cannot be frozen.",
+    "no_go": "A hard integrity/point-in-time gate or a frozen performance threshold fails."
+  },
+  "detectors": {
+    "baseline": {"mode": "algorithm_only", "variant": "v2_3_1"},
+    "candidate": {"mode": "algorithm_only", "variant": "v2_4_validation"}
+  },
+  "gates": {
+    "accepted_hard_invalid_max": 0,
+    "automated_positive_coverage_min": 0.4,
+    "band_agreement_min": 0.7,
+    "clear_negative_false_positive_rate_max": 0.15,
+    "label_band_agreement_min": 0.75,
+    "label_pattern_agreement_min": 0.8,
+    "label_top_f1_min": 0.75,
+    "major_top_precision_min": 0.8,
+    "major_top_recall_min": 0.65,
+    "pattern_precision_min": 0.8,
+    "point_in_time_violations_max": 0,
+    "review_time_reduction_min": 0.3
+  },
+  "holdout_policy": "Holdout labels are a separate artifact and may be loaded only after manifest, protocol, code commit, detector configuration, fingerprints, and evaluation command are frozen.",
+  "evaluation_command": "python3 scripts/evaluate_v24_benchmark.py --freeze review_snapshots/benchmark_2026-08-13_v24_72/configuration-freeze.json --repeat-labels review_snapshots/benchmark_2026-08-13_v24_72/development-labels.json --holdout-labels review_snapshots/benchmark_2026-08-13_v24_72/holdout-labels.json --output review_snapshots/benchmark_2026-08-13_v24_72/decision.json",
+  "labeling": {
+    "band_agreement": "IoU >= 0.50 and projected centre difference <= 5%.",
+    "pattern_positive": "Human coil versus non-abstained high-confidence qualified detector structure.",
+    "repeat_count": 12,
+    "review_task_count": 84,
+    "review_sessions": {
+      "development": 36,
+      "development_repeat": 12,
+      "holdout_after_freeze": 18,
+      "validation": 18
+    },
+    "top_matching": "Maximum one-to-one bipartite match within one completed quarter."
+  },
+  "markets": {"global_ex_us": 24, "india": 24, "united_states": 24},
+  "partitions": {"development": 36, "holdout": 18, "validation": 18},
+  "sampling_note": "Cohorts are frozen sampling strata, pending confirmation by blind human labels; they are not ground truth and cannot satisfy a gate by themselves.",
+  "schema_version": 1
+}

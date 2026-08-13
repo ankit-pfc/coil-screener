@@ -1,0 +1,150 @@
+{
+  "benchmark_id": "coilingview-v24-72",
+  "decision": {
+    "checks": {
+      "accepted_hard_invalid": {
+        "operator": "<=",
+        "passed": true,
+        "threshold": 0,
+        "value": 0
+      },
+      "holdout_metrics_ready": {
+        "operator": "==",
+        "passed": false,
+        "threshold": 18,
+        "value": 0
+      },
+      "label_stability_ready": {
+        "operator": ">=",
+        "passed": false,
+        "threshold": 12,
+        "value": 0
+      },
+      "manifest_valid": {
+        "operator": "==",
+        "passed": true,
+        "threshold": true,
+        "value": true
+      },
+      "point_in_time_violations": {
+        "operator": "<=",
+        "passed": true,
+        "threshold": 0,
+        "value": 0
+      }
+    },
+    "outcome": "inconclusive",
+    "promotion_authorized": false,
+    "reason": "required_blind_labels_or_repeats_are_not_complete"
+  },
+  "generated_at": "2026-08-13T14:37:53.772028Z",
+  "guardrails": {
+    "advanced_ml_added": false,
+    "production_default_unchanged": true,
+    "production_trading_logic_added": false
+  },
+  "holdout_state": "not_requested",
+  "kind": "coilingview.v24-benchmark-decision",
+  "label_stability": null,
+  "manifest_sha256": "115cbb55873fe51784e3201f68d4af9a57769591cfe5bf5a9a9ede9f3294874f",
+  "manifest_validation": {
+    "canonical_count": 72,
+    "cohort_counts": {
+      "clear_negative": 18,
+      "disagreement_exception": 18,
+      "expert_positive": 18,
+      "point_in_time_lifecycle": 18
+    },
+    "errors": [],
+    "market_counts": {
+      "global_ex_us": 24,
+      "india": 24,
+      "united_states": 24
+    },
+    "new_or_remediated_count": 72,
+    "partition_counts": {
+      "development": 36,
+      "holdout": 18,
+      "validation": 18
+    },
+    "reviewable_count": 72,
+    "sample_count": 72,
+    "unique_ticker_count": 72,
+    "valid": true
+  },
+  "metrics": {
+    "v2_3_1": null,
+    "v2_4_validation": null
+  },
+  "paired_operating_behavior": {
+    "paired": {
+      "both_non_positive": 52,
+      "both_positive": 2,
+      "v2_3_1_only_positive": 4,
+      "v2_4_only_positive": 14
+    },
+    "v2_3_1": {
+      "abstention_count": 0,
+      "accepted_top_count": 0,
+      "band_count": 39,
+      "by_partition": {
+        "development": {
+          "non_positive_count": 32,
+          "positive_count": 4,
+          "sample_count": 36
+        },
+        "holdout": {
+          "non_positive_count": 17,
+          "positive_count": 1,
+          "sample_count": 18
+        },
+        "validation": {
+          "non_positive_count": 17,
+          "positive_count": 1,
+          "sample_count": 18
+        }
+      },
+      "classification_blocked_count": 0,
+      "positive_count": 6,
+      "positive_rate": 0.08333333333333333,
+      "sample_count": 72
+    },
+    "v2_4_validation": {
+      "abstention_count": 25,
+      "accepted_top_count": 39,
+      "band_count": 31,
+      "by_partition": {
+        "development": {
+          "non_positive_count": 28,
+          "positive_count": 8,
+          "sample_count": 36
+        },
+        "holdout": {
+          "non_positive_count": 14,
+          "positive_count": 4,
+          "sample_count": 18
+        },
+        "validation": {
+          "non_positive_count": 14,
+          "positive_count": 4,
+          "sample_count": 18
+        }
+      },
+      "classification_blocked_count": 0,
+      "positive_count": 16,
+      "positive_rate": 0.2222222222222222,
+      "sample_count": 72
+    },
+    "warning": "Unlabeled operating behavior is not precision, recall, or ground truth."
+  },
+  "point_in_time": {
+    "prefixes_checked": 4264,
+    "prefixes_checked_by_variant": {
+      "v2_3_1": 2132,
+      "v2_4_validation": 2132
+    },
+    "violation_count": 0,
+    "violations": []
+  },
+  "schema_version": 1
+}

@@ -15,6 +15,7 @@ import app as app_module
 import review_snapshots
 import reviews as reviews_module
 from coil_analysis import ALGORITHM_VERSION, _aggregate_quarterly_display_bars
+from coil_validation_v24 import ValidationConfig, config_fingerprint
 from review_capture import (
     BlindAssessment,
     distinct_quarter_matches,
@@ -393,7 +394,7 @@ def _finalize_payload(
             "lifecycleLabel": detector.get("readiness", "forming"),
             "confidence": detector.get("confidence", "low"),
             "reasonCodes": ["reviewed_detector_output"],
-            "timing": {},
+            "timing": {"reviewOrder": "blind_first"},
         },
         "reviewedHighs": [],
         "createdAt": "2026-07-28T00:00:00Z",
@@ -420,7 +421,7 @@ def _nested_keys(value) -> set[str]:
 
 
 def test_token_scope_and_new_capability_create_distinct_session(fresh_client):
-    client, _, root = fresh_client
+    client, store, root = fresh_client
     source = "protected.csv"
     _make_corpus(root, source, ["AAA"])
     first = _create(client, source, ["AAA"])
@@ -639,6 +640,11 @@ def test_detector_review_is_validated_and_exported_append_only(fresh_client):
     client, _, root = fresh_client
     source = "detector-review.csv"
     _make_corpus(root, source, ["AAA"])
+    snapshot_path = root / Path(source).stem / "AAA.json"
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot["corpus_labels"]["benchmark_attempt"] = 2
+    snapshot["corpus_labels"]["benchmark_timing_order"] = "blind_first"
+    snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
     session = _create(client, source, ["AAA"])["session"]
     capture = _base_learning_capture()
     blind_assessment = _blind_assessment_for()
@@ -688,6 +694,13 @@ def test_detector_review_is_validated_and_exported_append_only(fresh_client):
             "firstChartDisplayedAt": "2026-07-27T23:55:00Z",
             "blindActiveSeconds": 300,
             "assistedActiveSeconds": 120,
+            "reviewOrder": "blind_first",
+            "manualPatternLabel": "coil",
+            "manualLifecycleLabel": "forming",
+            "manualConfidence": "high",
+            "assistedPatternLabel": "coil",
+            "assistedLifecycleLabel": detector["readiness"],
+            "assistedConfidence": detector["confidence"],
         },
     }
 
@@ -700,6 +713,28 @@ def test_detector_review_is_validated_and_exported_append_only(fresh_client):
             json=incomplete,
         ).status_code
         == 400
+    )
+
+    wrong_order = json.loads(json.dumps(payload))
+    wrong_order["detectorReview"]["timing"]["reviewOrder"] = "assisted_first"
+    wrong_order_response = client.post(
+        f"/api/review-sessions/{session['id']}/items/AAA/finalize",
+        headers=_headers(),
+        json=wrong_order,
+    )
+    assert wrong_order_response.status_code == 400
+    assert "frozen benchmark assignment" in wrong_order_response.json()["detail"]
+
+    missing_judgment = json.loads(json.dumps(payload))
+    del missing_judgment["detectorReview"]["timing"]["assistedConfidence"]
+    missing_judgment_response = client.post(
+        f"/api/review-sessions/{session['id']}/items/AAA/finalize",
+        headers=_headers(),
+        json=missing_judgment,
+    )
+    assert missing_judgment_response.status_code == 400
+    assert "complete manual and assisted judgments" in (
+        missing_judgment_response.json()["detail"]
     )
 
     response = client.post(
@@ -724,6 +759,7 @@ def test_detector_review_is_validated_and_exported_append_only(fresh_client):
     )
     assert export_record["detectorReview"]["timing"]["blindActiveSeconds"] == 300
     assert export_record["detectorReview"]["timing"]["assistedActiveSeconds"] == 120
+    assert export_record["detectorReview"]["timing"]["reviewOrder"] == "blind_first"
     assert set(export_record["detectorOutputs"]) == {
         "v2_3_1",
         "v2_4_validation",
@@ -916,6 +952,140 @@ def test_fresh_create_requires_complete_exact_manifest_order(fresh_client):
     assert attempt(["BBB", "AAA", "CCC"]).status_code == 400
     assert attempt(["AAA", "BBB", "BBB"]).status_code == 400
     assert attempt(tickers).status_code == 200
+
+
+def test_v24_holdout_session_is_sealed_until_freeze_is_configured(
+    fresh_client, monkeypatch
+):
+    client, _, root = fresh_client
+    source = "benchmark_2026-08-13_v24_72_holdout.csv"
+    _make_corpus(root, source, ["AAA"])
+    manifest_path = root / Path(source).stem / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["benchmark_id"] = "coilingview-v24-72"
+    manifest["benchmark_partition"] = "holdout"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.delenv("COILINGVIEW_V24_BENCHMARK_FREEZE", raising=False)
+    monkeypatch.delenv("COILINGVIEW_CODE_COMMIT", raising=False)
+
+    response = client.post(
+        "/api/review-sessions",
+        json={
+            "source": source,
+            "reviewerName": "Amrut",
+            "accessToken": TOKEN,
+            "requireFreshReview": True,
+            "items": [{"ticker": "AAA"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "holdout review is sealed" in response.json()["detail"]
+
+
+def test_v24_holdout_session_uses_only_the_verified_frozen_config(
+    fresh_client, monkeypatch, tmp_path
+):
+    client, store, root = fresh_client
+    source = "benchmark_2026-08-13_v24_72_batch_d.csv"
+    _make_corpus(root, source, ["AAA"])
+    manifest_path = root / Path(source).stem / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["benchmark_id"] = "coilingview-v24-72"
+    manifest["benchmark_partition"] = "holdout"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    selected_config = ValidationConfig(
+        zone_candidate_prominence_pct=15.0,
+        zone_similarity_pct=3.5,
+        touch_tolerance_pct=2.5,
+        max_qualifying_lid_slope_pct_per_year=6.5,
+    )
+    freeze_path = tmp_path / "configuration-freeze.json"
+    freeze_path.write_text(
+        json.dumps(
+            {
+                "detectors": {
+                    "v2_4_validation": {
+                        "config": app_module.asdict(selected_config),
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("COILINGVIEW_V24_BENCHMARK_FREEZE", str(freeze_path))
+    monkeypatch.setenv("COILINGVIEW_CODE_COMMIT", "frozen-code-commit")
+    verified: dict[str, object] = {}
+
+    def verify_stub(freeze, **kwargs):
+        verified["freeze"] = freeze
+        verified.update(kwargs)
+
+    monkeypatch.setattr(app_module, "verify_freeze", verify_stub)
+
+    session = _create(client, source, ["AAA"])["session"]
+    assert verified["current_code_commit"] == "frozen-code-commit"
+    assert verified["config"] == selected_config
+    assert verified["recompute_selection_metrics"] is False
+    stored_snapshot = store.get_session_snapshot(session["id"])
+    assert stored_snapshot is not None
+    assert stored_snapshot["v24_validation_config"] == app_module.asdict(
+        selected_config
+    )
+
+    _, context = _lock_base(client, session, "AAA")
+    detector = context["detector_outputs"]["v2_4_validation"]
+    assert detector["analysis_metadata"]["config_fingerprint"] == (
+        config_fingerprint(selected_config)
+    )
+
+
+def test_v24_holdout_session_rejects_a_tampered_freeze(
+    fresh_client, monkeypatch, tmp_path
+):
+    client, _, root = fresh_client
+    source = "benchmark_2026-08-13_v24_72_batch_d.csv"
+    _make_corpus(root, source, ["AAA"])
+    manifest_path = root / Path(source).stem / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["benchmark_id"] = "coilingview-v24-72"
+    manifest["benchmark_partition"] = "holdout"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    freeze_path = tmp_path / "configuration-freeze.json"
+    freeze_path.write_text(
+        json.dumps(
+            {
+                "detectors": {
+                    "v2_4_validation": {
+                        "config": app_module.asdict(app_module.V24_DEFAULT_CONFIG),
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("COILINGVIEW_V24_BENCHMARK_FREEZE", str(freeze_path))
+    monkeypatch.setenv("COILINGVIEW_CODE_COMMIT", "frozen-code-commit")
+
+    def reject_tampered_freeze(*_args, **_kwargs):
+        raise app_module.BenchmarkError("selection receipt hash mismatch")
+
+    monkeypatch.setattr(app_module, "verify_freeze", reject_tampered_freeze)
+    response = client.post(
+        "/api/review-sessions",
+        json={
+            "source": source,
+            "reviewerName": "Amrut",
+            "accessToken": TOKEN,
+            "requireFreshReview": True,
+            "items": [{"ticker": "AAA"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "holdout review is sealed" in response.json()["detail"]
 
 
 def test_admin_can_rotate_and_revoke_reviewer_capability(

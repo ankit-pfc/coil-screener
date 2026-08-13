@@ -1327,6 +1327,25 @@ class ReviewStore:
             "token_revoked_at": row[7],
         }
 
+    def get_session_snapshot(self, session_id: int) -> Optional[dict[str, Any]]:
+        """Return the server-owned session snapshot for internal analysis wiring.
+
+        Fresh-session API responses intentionally expose only a redacted view of
+        this object. Detector configuration must nevertheless be loaded from the
+        immutable persisted snapshot rather than silently falling back to a
+        process default.
+        """
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT snapshot FROM review_sessions WHERE id = {self._ph}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0]) if row[0] else {}
+
     def authorize_session(
         self, session_id: int, access_token: Optional[str]
     ) -> Optional[dict[str, Any]]:

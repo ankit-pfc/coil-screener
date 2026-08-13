@@ -121,6 +121,45 @@ class DetectorReviewTiming(BaseModel):
     assisted_active_seconds: int | None = Field(
         default=None, ge=0, alias="assistedActiveSeconds"
     )
+    review_order: Literal["blind_first", "assisted_first"] = Field(
+        alias="reviewOrder"
+    )
+    manual_pattern_label: Literal["coil", "not_coil", "uncertain"] | None = Field(
+        default=None, alias="manualPatternLabel"
+    )
+    manual_lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] | None = Field(default=None, alias="manualLifecycleLabel")
+    manual_confidence: Literal["high", "medium", "low"] | None = Field(
+        default=None, alias="manualConfidence"
+    )
+    assisted_pattern_label: Literal["coil", "not_coil", "uncertain"] | None = Field(
+        default=None, alias="assistedPatternLabel"
+    )
+    assisted_lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] | None = Field(default=None, alias="assistedLifecycleLabel")
+    assisted_confidence: Literal["high", "medium", "low"] | None = Field(
+        default=None, alias="assistedConfidence"
+    )
 
     @field_validator(
         "first_chart_displayed_at",
@@ -689,6 +728,32 @@ def validate_capture_against_context(
             "config_fingerprint"
         ):
             raise ValueError("detectorReview configFingerprint does not match the output")
+        corpus_labels = context.get("corpus_labels") or {}
+        if corpus_labels.get("benchmark_attempt") == 2:
+            timing = request.detector_review.timing
+            assigned_order = corpus_labels.get("benchmark_timing_order")
+            if timing.review_order != assigned_order:
+                raise ValueError(
+                    "detectorReview reviewOrder does not match the frozen benchmark assignment"
+                )
+            if not timing.blind_active_seconds or not timing.assisted_active_seconds:
+                raise ValueError(
+                    "repeat benchmark reviews require positive manual and assisted active seconds"
+                )
+            if any(
+                value is None
+                for value in (
+                    timing.manual_pattern_label,
+                    timing.manual_lifecycle_label,
+                    timing.manual_confidence,
+                    timing.assisted_pattern_label,
+                    timing.assisted_lifecycle_label,
+                    timing.assisted_confidence,
+                )
+            ):
+                raise ValueError(
+                    "repeat benchmark reviews require complete manual and assisted judgments"
+                )
         known_top_ids = {
             str(item.get("id"))
             for item in detector.get("top_candidates", [])

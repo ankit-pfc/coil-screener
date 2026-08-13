@@ -1,0 +1,13 @@
+ticker,data_date,partition,cohort,task_id
+0005.HK,2026-06-01,development_repeat,expert_positive,task_78b42c7a83e550658e00
+ALV.DE,2026-06-01,development_repeat,clear_negative,task_4b3eaaab9a60a7431873
+ULVR.L,2026-06-01,development_repeat,disagreement_exception,task_ca7f5fa53651a238aa12
+TD.TO,2022-09-01,development_repeat,point_in_time_lifecycle,task_83629b6cf302fda835c3
+CNR.TO,2026-06-01,development_repeat,expert_positive,task_b619fd6fa28024e82bdd
+SHOP.TO,2026-06-01,development_repeat,clear_negative,task_af8c42df5d679f19ce9a
+RY.TO,2026-06-01,development_repeat,disagreement_exception,task_ce148ddfd29c7b8ca197
+AZN.L,2023-03-01,development_repeat,point_in_time_lifecycle,task_8f8caba2a3ffc83a5a8f
+BHP.AX,2026-06-01,development_repeat,expert_positive,task_d54ec577ba154a620757
+SAP.DE,2026-06-01,development_repeat,clear_negative,task_946c56201c12b80ca8ac
+SIE.DE,2026-06-01,development_repeat,disagreement_exception,task_f9326c3d5d280628eb29
+DTE.DE,2023-09-01,development_repeat,point_in_time_lifecycle,task_83f9998ec4932938ae7c

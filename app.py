@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -9,6 +10,7 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
+from dataclasses import asdict
 from typing import Any, Literal
 
 import numpy as np
@@ -26,6 +28,8 @@ from coil_analysis import (
     ANALYSIS_VARIANT_V2_4_VALIDATION,
     analyze_coil,
 )
+from benchmark_v24 import BenchmarkError, verify_freeze
+from coil_validation_v24 import DEFAULT_CONFIG as V24_DEFAULT_CONFIG, ValidationConfig
 from history_cache import get_history_payload, read_cache
 from review_capture import (
     BaseClassificationLockRequest,
@@ -900,6 +904,16 @@ def require_review_admin_access(
     return True
 
 
+def _session_review_context(
+    session_id: int, source: str, ticker: str
+) -> dict[str, Any]:
+    """Load frozen context with the v2.4 config persisted at session creation."""
+    session_snapshot = get_review_store().get_session_snapshot(session_id)
+    raw_config = (session_snapshot or {}).get("v24_validation_config")
+    config = ValidationConfig(**raw_config) if isinstance(raw_config, dict) else None
+    return load_review_context(source, ticker, validation_config=config)
+
+
 @app.post("/api/review-sessions")
 def create_review_session(
     request: ReviewSessionCreateRequest,
@@ -944,6 +958,44 @@ def create_review_session(
                     "fresh review sessions require a capability accessToken"
                 )
             manifest = load_review_manifest(request.source)
+            benchmark_validation_config: ValidationConfig | None = None
+            if manifest.get("benchmark_id") == "coilingview-v24-72":
+                benchmark_validation_config = V24_DEFAULT_CONFIG
+            if (
+                manifest.get("benchmark_id") == "coilingview-v24-72"
+                and manifest.get("benchmark_partition") == "holdout"
+            ):
+                freeze_path = os.environ.get("COILINGVIEW_V24_BENCHMARK_FREEZE")
+                deployed_commit = os.environ.get("COILINGVIEW_CODE_COMMIT", "")
+                if not freeze_path or not deployed_commit:
+                    raise ValueError(
+                        "holdout review is sealed until the benchmark freeze and deployed commit are configured"
+                    )
+                benchmark_root = (
+                    PROJECT_ROOT
+                    / "review_snapshots"
+                    / "benchmark_2026-08-13_v24_72"
+                )
+                try:
+                    freeze = json.loads(Path(freeze_path).read_text(encoding="utf-8"))
+                    config = ValidationConfig(
+                        **freeze["detectors"]["v2_4_validation"]["config"]
+                    )
+                    verify_freeze(
+                        freeze,
+                        manifest_path=benchmark_root / "manifest.json",
+                        protocol_path=benchmark_root / "protocol.json",
+                        selection_report_path=benchmark_root
+                        / "validation-selection.json",
+                        current_code_commit=deployed_commit,
+                        config=config,
+                        recompute_selection_metrics=False,
+                    )
+                    benchmark_validation_config = config
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, BenchmarkError) as exc:
+                    raise ValueError(
+                        "holdout review is sealed because the benchmark freeze is invalid"
+                    ) from exc
             manifest_algorithm_version = str(
                 (manifest.get("source_run") or {}).get("algorithm_version", "")
             ).strip()
@@ -1034,6 +1086,15 @@ def create_review_session(
                         "generator": manifest.get("generator"),
                     },
                     "frozen_source": request.source,
+                    **(
+                        {
+                            "v24_validation_config": asdict(
+                                benchmark_validation_config
+                            )
+                        }
+                        if benchmark_validation_config is not None
+                        else {}
+                    ),
                     "frozen_item_count": len(items),
                     "frozen_manifest": {
                         "schema_version": manifest.get("schema_version"),
@@ -1348,7 +1409,9 @@ def review_session_item_context(
         raise HTTPException(status_code=404, detail="Review session item not found.")
     try:
         if item.get("base_classification_locked"):
-            context = load_review_context(security["source"], ticker)
+            context = _session_review_context(
+                session_id, security["source"], ticker
+            )
         else:
             context = load_blind_review_context(security["source"], ticker)
     except ReviewSnapshotError as exc:
@@ -1409,7 +1472,9 @@ def lock_review_session_item_base_classification(
         classification = request.base_classification.model_dump(
             mode="json", by_alias=True
         )
-        context = load_review_context(_security["source"], ticker)
+        context = _session_review_context(
+            session_id, _security["source"], ticker
+        )
         validate_blind_assessment_against_context(
             request.base_classification.blind_assessment, context
         )
@@ -1497,7 +1562,9 @@ def finalize_review_session_item(
         )
         return {**prior["response"], "session_item": item}
     try:
-        context = load_review_context(security["source"], symbol)
+        context = _session_review_context(
+            session_id, security["source"], symbol
+        )
     except ReviewSnapshotError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if request.sample_id != context["sample_id"]:
