@@ -76,6 +76,7 @@ ANALYSIS_INTERVAL = "3M"  # classification is quarterly-native regardless of vie
 SOURCE = "timeseries"
 BARS_PER_YEAR = 12.0  # module operates on monthly bars
 ANALYSIS_VARIANT_V2_3_1 = "v2_3_1"
+ANALYSIS_VARIANT_V2_4_VALIDATION = "v2_4_validation"
 ANALYSIS_MODE_ALGORITHM_ONLY = "algorithm_only"
 ANALYSIS_MODE_EFFECTIVE = "effective"
 
@@ -2209,6 +2210,15 @@ def analyze_coil(
     returned for diagnosis but never graded. The obsolete pair search is
     reported under ``diagnostics`` only.
     """
+    if variant == ANALYSIS_VARIANT_V2_4_VALIDATION:
+        from coil_validation_v24 import analyze_coil_v24
+
+        return analyze_coil_v24(
+            list(bars),
+            as_of=as_of,
+            adjustment_mode=adjustment_mode,
+            mode=mode,
+        )
     if variant != ANALYSIS_VARIANT_V2_3_1:
         raise ValueError(f"unsupported analysis variant: {variant}")
     if mode not in {ANALYSIS_MODE_ALGORITHM_ONLY, ANALYSIS_MODE_EFFECTIVE}:

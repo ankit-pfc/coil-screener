@@ -515,6 +515,7 @@ def run_lifecycle_screen(
         ANALYSIS_MODE_ALGORITHM_ONLY,
         ANALYSIS_MODE_EFFECTIVE,
         ANALYSIS_VARIANT_V2_3_1,
+        ANALYSIS_VARIANT_V2_4_VALIDATION,
         DEFAULT_CONFIG,
         analyze_coil,
     )
@@ -522,13 +523,21 @@ def run_lifecycle_screen(
     from reviews import annotate_review
 
     symbols = normalize_tickers(tickers)
-    if analysis_variant != ANALYSIS_VARIANT_V2_3_1:
+    if analysis_variant not in {
+        ANALYSIS_VARIANT_V2_3_1,
+        ANALYSIS_VARIANT_V2_4_VALIDATION,
+    }:
         raise ValueError(f"unsupported analysis variant: {analysis_variant}")
     if analysis_mode not in {
         ANALYSIS_MODE_ALGORITHM_ONLY,
         ANALYSIS_MODE_EFFECTIVE,
     }:
         raise ValueError(f"unsupported analysis mode: {analysis_mode}")
+    if (
+        analysis_variant == ANALYSIS_VARIANT_V2_4_VALIDATION
+        and analysis_mode != ANALYSIS_MODE_ALGORITHM_ONLY
+    ):
+        raise ValueError("v2_4_validation is available only in algorithm_only mode")
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     for ticker in symbols:
@@ -601,7 +610,11 @@ def run_lifecycle_screen(
         "results": results,
         "bucket_counts": bucket_counts,
         "failures": failures,
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_version": (
+            "2.4.0-validation"
+            if analysis_variant == ANALYSIS_VARIANT_V2_4_VALIDATION
+            else ALGORITHM_VERSION
+        ),
         "analysis_variant": analysis_variant,
         "analysis_mode": analysis_mode,
         "screened_at": screened_at,
