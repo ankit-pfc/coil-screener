@@ -8,7 +8,12 @@ import pytest
 
 from benchmark_v24 import BENCHMARK_ID, BenchmarkError
 from review_snapshots import REVIEW_CORPUS_MANIFEST_KIND
-from scripts.create_v24_review_session import create_session, load_batch, review_link
+from scripts.create_v24_review_session import (
+    _RejectRedirects,
+    create_session,
+    load_batch,
+    review_link,
+)
 
 
 class _Response:
@@ -153,3 +158,18 @@ def test_remote_session_creation_requires_https():
             admin_key=None,
             opener=lambda *_args, **_kwargs: None,
         )
+
+
+def test_session_creation_refuses_all_http_redirects():
+    handler = _RejectRedirects()
+    assert (
+        handler.redirect_request(
+            None,
+            None,
+            302,
+            "Found",
+            {},
+            "https://other.example.com/capture-admin-secret",
+        )
+        is None
+    )

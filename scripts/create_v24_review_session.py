@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -37,6 +37,13 @@ BATCHES = {
         "partition": "holdout",
     },
 }
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    """Never forward the admin capability to an implicit redirect target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -133,7 +140,7 @@ def create_session(
     capability_token: str,
     admin_key: str | None,
     timeout: float = 30.0,
-    opener: Callable[..., Any] = urlopen,
+    opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """POST one exact protected queue to the existing review-session API."""
     base = _validated_base_url(api_base_url, label="API base URL")
@@ -161,8 +168,9 @@ def create_session(
         headers=headers,
         method="POST",
     )
+    request_open = opener or build_opener(_RejectRedirects()).open
     try:
-        with opener(request, timeout=timeout) as response:
+        with request_open(request, timeout=timeout) as response:
             body = json.loads(response.read())
     except HTTPError as exc:
         try:
