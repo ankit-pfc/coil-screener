@@ -245,6 +245,7 @@ def test_algorithm_only_screen_skips_review_callbacks(monkeypatch):
     assert len(run["results"]) == 1
     assert run["analysis_variant"] == "v2_3_1"
     assert run["analysis_mode"] == "algorithm_only"
+    assert seen["ticker"] == "PURE"
     assert seen["variant"] == "v2_3_1"
     assert seen["mode"] == "algorithm_only"
 

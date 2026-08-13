@@ -2191,6 +2191,7 @@ def analyze_coil(
     as_of: Optional[str] = None,
     review_override: Optional[dict[str, Any]] = None,
     *,
+    ticker: str = "UNKNOWN",
     variant: str = ANALYSIS_VARIANT_V2_3_1,
     mode: str = ANALYSIS_MODE_EFFECTIVE,
     adjustment_mode: str = ADJUSTMENT_UNKNOWN,
@@ -2215,6 +2216,7 @@ def analyze_coil(
 
         return analyze_coil_v24(
             list(bars),
+            ticker=ticker,
             as_of=as_of,
             adjustment_mode=adjustment_mode,
             mode=mode,

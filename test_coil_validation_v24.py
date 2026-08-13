@@ -561,3 +561,34 @@ def test_future_bars_do_not_backfill_v24_top_confirmation():
             for item in prefix["top_candidates"]
         ]
         assert direct_events == prefix_events
+
+
+def test_review_ids_are_sample_scoped_and_compatibility_refs_resolve():
+    bars = mature_coil_bars()
+    first = analyze_coil(
+        bars,
+        ticker="AAA",
+        variant=ANALYSIS_VARIANT_V2_4_VALIDATION,
+        mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+        adjustment_mode="split_adjusted",
+    )
+    other_ticker = analyze_coil(
+        bars,
+        ticker="BBB",
+        variant=ANALYSIS_VARIANT_V2_4_VALIDATION,
+        mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+        adjustment_mode="split_adjusted",
+    )
+    top_ids = {item["id"] for item in first["top_candidates"]}
+
+    assert top_ids
+    assert top_ids.isdisjoint({item["id"] for item in other_ticker["top_candidates"]})
+    assert all(
+        point["evidence"]["top_candidate_id"] in top_ids
+        for point in first["major_highs"]
+    )
+    assert all(
+        contact_id in top_ids
+        for hypothesis in first["lid_hypotheses"]
+        for contact_id in hypothesis["contact_ids"]
+    )

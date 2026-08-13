@@ -20,6 +20,8 @@ from typing import Any
 from coil_analysis import (
     ALGORITHM_VERSION,
     ANALYSIS_MODE_ALGORITHM_ONLY,
+    ANALYSIS_VARIANT_V2_3_1,
+    ANALYSIS_VARIANT_V2_4_VALIDATION,
     _aggregate_quarterly_display_bars,
     analyze_coil,
 )
@@ -462,20 +464,20 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
     analysis = snapshot.get("_frozen_analysis")
     run_algorithm_version = str(snapshot["run"]["algorithm_version"])
     quarterly_bars: list[dict[str, Any]] = []
+    detector_outputs: dict[str, Any] = {}
     analysis_status = "quarantined_unavailable"
     if snapshot["reviewable"]:
+        adjustment_mode = str(
+            (snapshot.get("source_cache_metadata") or {}).get("adjustment_mode")
+            or "unknown"
+        )
         if analysis is None:
             if run_algorithm_version == ALGORITHM_VERSION:
                 analysis = analyze_coil(
                     snapshot["_analysis_bars"],
                     review_override=None,
                     mode=ANALYSIS_MODE_ALGORITHM_ONLY,
-                    adjustment_mode=str(
-                        (snapshot.get("source_cache_metadata") or {}).get(
-                            "adjustment_mode"
-                        )
-                        or "unknown"
-                    ),
+                    adjustment_mode=adjustment_mode,
                 )
                 analysis_status = "frozen_algorithm_only"
             else:
@@ -491,6 +493,21 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
                 snapshot["_analysis_bars"]
             )
         ]
+        detector_outputs = {
+            ANALYSIS_VARIANT_V2_3_1: analyze_coil(
+                snapshot["_analysis_bars"],
+                variant=ANALYSIS_VARIANT_V2_3_1,
+                mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+                adjustment_mode=adjustment_mode,
+            ),
+            ANALYSIS_VARIANT_V2_4_VALIDATION: analyze_coil(
+                snapshot["_analysis_bars"],
+                ticker=snapshot["ticker"],
+                variant=ANALYSIS_VARIANT_V2_4_VALIDATION,
+                mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+                adjustment_mode=adjustment_mode,
+            ),
+        }
     snapshot.pop("_analysis_bars", None)
     snapshot.pop("_frozen_analysis", None)
     return {
@@ -499,6 +516,7 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
         "quarterly_bars": quarterly_bars,
         "analysis": analysis,
         "analysis_status": analysis_status,
+        "detector_outputs": detector_outputs,
         "model_snapshot": {
             "screen_snapshot": snapshot["screen_snapshot"],
             "analysis": analysis,
