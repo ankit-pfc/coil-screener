@@ -391,16 +391,26 @@ def _calendar_quarter(moment: date) -> tuple[int, int]:
     return moment.year, (moment.month - 1) // 3 + 1
 
 
-def incomplete_final_quarter(last_bar_date: Optional[str]) -> Optional[tuple[int, int]]:
+def incomplete_final_quarter(
+    last_bar_date: Optional[str], *, today: Optional[date] = None
+) -> Optional[tuple[int, int]]:
     """Calendar (year, quarter) of a trailing incomplete quarter, else ``None``.
 
     Mirrors ``coil_analysis._quarter_is_complete``: the last quarter of a
-    monthly series is complete only once the series reaches that quarter's
-    calendar-final month (``month % 3 == 0``). An unknown or unparseable data
-    date yields ``None`` — there is nothing to measure against.
+    monthly series is complete only once its calendar-final monthly candle has
+    actually closed. Reaching March / June / September / December is not
+    enough while that same calendar month is still in progress. An unknown or
+    unparseable data date yields ``None`` — there is nothing to measure against.
     """
     parsed = _parse_iso_month(last_bar_date)
-    if parsed is None or parsed.month % 3 == 0:
+    if parsed is None:
+        return None
+    live_date = today or date.today()
+    month_is_still_open = (parsed.year, parsed.month) >= (
+        live_date.year,
+        live_date.month,
+    )
+    if parsed.month % 3 == 0 and not month_is_still_open:
         return None
     return _calendar_quarter(parsed)
 

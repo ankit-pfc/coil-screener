@@ -1,12 +1,99 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 import coil_analysis
 import history_cache
 import reviews as reviews_module
 import screen_monthly
 from screen_monthly import run_lifecycle_screen
+
+
+def test_split_only_adjustment_uses_reported_events_not_adj_close():
+    daily = pd.DataFrame(
+        {
+            "Open": [98.0, 50.0, 54.0],
+            "High": [102.0, 53.0, 57.0],
+            "Low": [97.0, 49.0, 53.0],
+            "Close": [100.0, 52.0, 55.0],
+            "Adj Close": [80.0, 40.0, 43.0],
+            "Volume": [1_000.0, 2_000.0, 2_200.0],
+            "Stock Splits": [0.0, 2.0, 0.0],
+        },
+        index=pd.to_datetime(["2020-01-31", "2020-02-03", "2020-02-04"]),
+    )
+
+    monthly = screen_monthly._split_adjust_and_aggregate_monthly(daily)
+
+    assert monthly.attrs["adjustment_mode"] == "split_adjusted"
+    assert monthly.loc["2020-01-01", "Close"] == 50.0
+    assert monthly.loc["2020-01-01", "Volume"] == 2_000.0
+    assert monthly.loc["2020-02-01", "Open"] == 50.0
+    assert monthly.loc["2020-02-01", "Close"] == 55.0
+
+
+def test_split_adjustment_fails_closed_without_event_provenance():
+    daily = pd.DataFrame(
+        {
+            "Open": [10.0],
+            "High": [11.0],
+            "Low": [9.0],
+            "Close": [10.0],
+        },
+        index=pd.to_datetime(["2020-01-02"]),
+    )
+
+    with pytest.raises(ValueError, match="missing Stock Splits"):
+        screen_monthly._split_adjust_and_aggregate_monthly(daily)
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), "bad", -2.0])
+def test_split_adjustment_rejects_invalid_action_values(invalid):
+    daily = pd.DataFrame(
+        {
+            "Open": [10.0],
+            "High": [11.0],
+            "Low": [9.0],
+            "Close": [10.0],
+            "Stock Splits": [invalid],
+        },
+        index=pd.to_datetime(["2020-01-02"]),
+    )
+
+    with pytest.raises(ValueError, match="invalid split factor"):
+        screen_monthly._split_adjust_and_aggregate_monthly(daily)
+
+
+def test_monthly_fetch_requests_raw_daily_actions_and_marks_provenance(monkeypatch):
+    seen = {}
+    daily = pd.DataFrame(
+        {
+            "Open": [10.0],
+            "High": [11.0],
+            "Low": [9.0],
+            "Close": [10.5],
+            "Volume": [1_000.0],
+            "Stock Splits": [0.0],
+        },
+        index=pd.to_datetime(["2020-01-02"]),
+    )
+
+    def download(ticker, **kwargs):
+        seen["ticker"] = ticker
+        seen.update(kwargs)
+        return daily
+
+    monkeypatch.setattr(screen_monthly.yf, "download", download)
+
+    monthly = screen_monthly.fetch_monthly_history("TEST")
+
+    assert seen["ticker"] == "TEST"
+    assert seen["interval"] == "1d"
+    assert seen["auto_adjust"] is False
+    assert seen["actions"] is True
+    assert monthly is not None
+    assert monthly.attrs["adjustment_mode"] == "split_adjusted"
 
 
 def _analysis(
@@ -94,7 +181,7 @@ def test_lifecycle_screen_groups_ranks_reviews_and_reports_failures(monkeypatch)
             },
         }
 
-    def analyze(bars, review_override=None):
+    def analyze(bars, review_override=None, **kwargs):
         symbol = bars[0]["ticker"]
         seen_overrides.append((symbol, review_override))
         return analyses[symbol]
@@ -129,6 +216,105 @@ def test_lifecycle_screen_groups_ranks_reviews_and_reports_failures(monkeypatch)
     ]
     assert run["algorithm_version"] == coil_analysis.ALGORITHM_VERSION
     assert run["screened_at"].endswith("Z")
+
+
+def test_algorithm_only_screen_skips_review_callbacks(monkeypatch):
+    seen = {}
+
+    monkeypatch.setattr(
+        history_cache, "get_history_payload", lambda symbol, *a, **k: _payload(symbol)
+    )
+
+    def analyze(bars, **kwargs):
+        seen.update(kwargs)
+        return _analysis("forming", 40.0)
+
+    monkeypatch.setattr(coil_analysis, "analyze_coil", analyze)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("algorithm_only must not read review state")
+
+    run = run_lifecycle_screen(
+        ["PURE"],
+        fetch_monthly=lambda _: None,
+        review_override_for=forbidden,
+        review_state_for=forbidden,
+        analysis_mode="algorithm_only",
+    )
+
+    assert len(run["results"]) == 1
+    assert run["analysis_variant"] == "v2_3_1"
+    assert run["analysis_mode"] == "algorithm_only"
+    assert seen["variant"] == "v2_3_1"
+    assert seen["mode"] == "algorithm_only"
+
+
+def test_algorithm_only_dataframe_wrapper_never_opens_review_store(monkeypatch):
+    seen = {}
+
+    monkeypatch.setattr(
+        reviews_module,
+        "get_review_store",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("algorithm_only must not open the review store")
+        ),
+    )
+
+    def fake_run(tickers, **kwargs):
+        seen.update(kwargs)
+        return {
+            "results": [],
+            "bucket_counts": {},
+            "failures": [],
+            "algorithm_version": "test",
+            "analysis_variant": kwargs["analysis_variant"],
+            "analysis_mode": kwargs["analysis_mode"],
+            "screened_at": "2026-01-01T00:00:00.000Z",
+        }
+
+    monkeypatch.setattr(screen_monthly, "run_lifecycle_screen", fake_run)
+
+    result = screen_monthly.run_screen(["PURE"], analysis_mode="algorithm_only")
+
+    assert result.empty
+    assert seen["review_override_for"] is None
+    assert seen["analysis_mode"] == "algorithm_only"
+
+
+def test_blocked_screen_failure_retains_complete_integrity_report(monkeypatch):
+    quality = {
+        "status": "blocked",
+        "blocked": True,
+        "bar_fingerprint": "sha256:test",
+        "adjustment_mode": "unknown",
+        "issues": [
+            {
+                "severity": "error",
+                "code": "low_above_high",
+                "date": "2020-01-01",
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        history_cache, "get_history_payload", lambda symbol, *a, **k: _payload(symbol)
+    )
+    monkeypatch.setattr(
+        coil_analysis,
+        "analyze_coil",
+        lambda bars, **kwargs: {
+            "analysis_metadata": {"data_quality": quality},
+            "review": {"reviewed": False},
+        },
+    )
+
+    run = run_lifecycle_screen(
+        ["BAD"],
+        fetch_monthly=lambda _: None,
+        analysis_mode="algorithm_only",
+    )
+
+    assert run["results"] == []
+    assert run["failures"][0]["data_quality"] == quality
 
 
 def test_rows_carry_the_lid_band_position_next_to_the_raw_ratio(monkeypatch):

@@ -19,6 +19,7 @@ from typing import Any
 
 from coil_analysis import (
     ALGORITHM_VERSION,
+    ANALYSIS_MODE_ALGORITHM_ONLY,
     _aggregate_quarterly_display_bars,
     analyze_coil,
 )
@@ -466,7 +467,15 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
         if analysis is None:
             if run_algorithm_version == ALGORITHM_VERSION:
                 analysis = analyze_coil(
-                    snapshot["_analysis_bars"], review_override=None
+                    snapshot["_analysis_bars"],
+                    review_override=None,
+                    mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+                    adjustment_mode=str(
+                        (snapshot.get("source_cache_metadata") or {}).get(
+                            "adjustment_mode"
+                        )
+                        or "unknown"
+                    ),
                 )
                 analysis_status = "frozen_algorithm_only"
             else:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -499,7 +500,9 @@ def test_corpus_lid_anchors_are_one_repeated_ceiling(ticker):
     """
     result = analyze_coil(_cached_bars(ticker))
     if result["resistance"] is None:
-        assert result["status"] == "no_structure"
+        assert result["status"] in {"no_structure", "invalid_data"}
+        if result["status"] == "invalid_data":
+            assert result["analysis_metadata"]["data_quality"]["blocked"] is True
         return
     anchors = result["resistance"]["classification_lid"]["points"]
     assert len(anchors) == 2
@@ -573,6 +576,11 @@ def test_enb_lid_stays_on_the_sixty_dollar_ceiling():
     """
     result = analyze_coil(_cached_bars("ENB.TO"))
 
+    if result["status"] == "invalid_data":
+        assert result["resistance"] is None
+        assert result["analysis_metadata"]["data_quality"]["blocked"] is True
+        return
+
     lid = result["resistance"]["classification_lid"]
     assert lid["value_at_last_bar"] == pytest.approx(60.0, abs=0.5)
     assert [(point["date"], point["price"]) for point in lid["points"]] == [
@@ -619,7 +627,7 @@ def test_bg_lifetime_ceiling_is_the_repeated_135_level():
 def test_algorithm_version_is_reported():
     result = analyze_coil(make_coil_bars())
 
-    assert ALGORITHM_VERSION == "2.3.0"
+    assert ALGORITHM_VERSION == "2.3.1"
     assert result["algorithm_version"] == ALGORITHM_VERSION
     assert result["analysis_metadata"]["algorithm_version"] == ALGORITHM_VERSION
 
@@ -838,7 +846,7 @@ def test_broken_out_lid():
 def test_breaking_out_now_keeps_grade():
     bars = make_coil_bars()
     for idx in (118, 119):
-        bars[idx].update(close=110.0, high=110.5, low=108.0)
+        bars[idx].update(open=109.0, close=110.0, high=110.5, low=108.0)
     result = analyze_coil(bars)
 
     assert result["status"] == "breaking_out"
@@ -854,7 +862,7 @@ def test_as_of_truncation_restores_pre_breakout_coil():
         )
 
     full = analyze_coil(bars)
-    truncated = analyze_coil(bars, as_of=dates[119])
+    truncated = analyze_coil(bars, as_of="2019-12-31")
 
     assert full["status"] == "broken_out"
     assert truncated["status"] == "coiling"
@@ -899,7 +907,7 @@ def test_insufficient_history_notes():
     assert any("insufficient history" in note for note in result["notes"])
 
 
-def test_unsorted_and_null_bars_are_handled():
+def test_unsorted_input_is_sorted_but_invalid_rows_block_analysis():
     bars = make_coil_bars()
     clean_expected = analyze_coil(bars)
 
@@ -908,9 +916,13 @@ def test_unsorted_and_null_bars_are_handled():
     result = analyze_coil(shuffled)
 
     assert result["bar_count"] == clean_expected["bar_count"]
-    assert result["status"] == clean_expected["status"]
-    assert result["grade"] == clean_expected["grade"]
-    assert result["resistance"]["slope_pct_per_year"] == clean_expected["resistance"]["slope_pct_per_year"]
+    assert result["status"] == "invalid_data"
+    quality = result["analysis_metadata"]["data_quality"]
+    assert quality["blocked"] is True
+    assert {issue["code"] for issue in quality["issues"]} >= {
+        "out_of_order",
+        "missing_or_nonfinite_ohlc",
+    }
 
 
 def test_volume_contraction_ratio():
@@ -941,7 +953,16 @@ def test_seed_cache_fixture_end_to_end():
     assert result["bar_count"] > 100
     assert isinstance(result["major_highs"], list)
     for high in result["major_highs"]:
-        assert set(high) == {"idx", "date", "price", "prominence_pct", "source"}
+        assert set(high) == {
+            "idx",
+            "date",
+            "peak_date",
+            "confirmed_at_idx",
+            "confirmed_at",
+            "price",
+            "prominence_pct",
+            "source",
+        }
 
 
 def test_lh_above_the_band_keeps_the_lid_and_drops_the_grade():
@@ -994,16 +1015,26 @@ def test_msci_unconfirmed_retest_cannot_manufacture_a_zone():
 # ---------------------------------------------------------------------------
 
 
-def test_completed_quarters_drops_only_a_trailing_partial_quarter():
+def test_completed_quarters_excludes_every_incomplete_quarter():
     full = quarterly_bars([10.0, 11.0, 12.0], last_month=12)
     partial = quarterly_bars([10.0, 11.0, 12.0], last_month=10)
 
     assert len(_completed_quarters(full)) == 3
     assert [bar["high"] for bar in _completed_quarters(partial)] == [10.0, 11.0]
-    # An interior quarter is never dropped, only the trailing one.
+    # Incomplete historical quarters remain display warnings, never structure.
     partial[1]["_last_month"] = 11
-    assert len(_completed_quarters(partial)) == 2
+    assert len(_completed_quarters(partial)) == 1
     assert _completed_quarters([]) == []
+
+
+def test_quarter_end_month_is_not_complete_while_its_candle_is_live():
+    quarters = quarterly_bars([10.0, 11.0], last_month=9)
+    quarters[-1]["date"] = "2026-09-01"
+
+    assert _completed_quarters(quarters, today=date(2026, 9, 15)) == quarters[:-1]
+    assert _completed_quarters(quarters, today=date(2026, 10, 1)) == quarters
+    assert _completed_quarters(quarters, as_of="2026-09-15") == quarters[:-1]
+    assert _completed_quarters(quarters, as_of="2026-09-30") == quarters
 
 
 def test_cluster_price_zones_handles_empty_and_single_candidates():
@@ -1213,6 +1244,54 @@ def _with_partial_quarter(bars: list[dict]) -> list[dict]:
     ]
 
 
+def _with_ongoing_quarter_end_month(bars: list[dict]) -> list[dict]:
+    """Append a still-open July/August/September quarter with a live spike."""
+    return [dict(bar) for bar in bars] + [
+        {
+            "date": "2026-07-01",
+            "open": 100.0,
+            "high": 120.0,
+            "low": 98.0,
+            "close": 115.0,
+            "volume": 1e6,
+        },
+        {
+            "date": "2026-08-01",
+            "open": 115.0,
+            "high": 130.0,
+            "low": 110.0,
+            "close": 125.0,
+            "volume": 1e6,
+        },
+        {
+            "date": "2026-09-01",
+            "open": 125.0,
+            "high": 140.0,
+            "low": 120.0,
+            "close": 138.0,
+            "volume": 1e6,
+        },
+    ]
+
+
+def test_ongoing_quarter_end_month_never_becomes_a_top():
+    result = analyze_coil(
+        _with_ongoing_quarter_end_month(make_coil_bars()),
+        as_of="2026-09-15",
+    )
+
+    assert (
+        result["analysis_metadata"]["data_freshness"]["incomplete_last_quarter"]
+        is True
+    )
+    assert all(point["date"] < "2026-07-01" for point in result["points"])
+    assert all(high["date"] < "2026-07-01" for high in result["major_highs"])
+    assert all(
+        touch["date"] < "2026-07-01"
+        for touch in result["resistance"]["touches"]
+    )
+
+
 def test_incomplete_final_quarter_never_becomes_structure():
     """A 40% spike in the partial quarter must not move a single point.
 
@@ -1292,7 +1371,9 @@ def test_reviewed_charts_never_regress_to_a_live_price_anchor(ticker):
     assert all(point["role"] != ROLE_PROVISIONAL_TOP for point in result["points"])
     assert all(point["date"] <= last_structural_month for point in result["points"])
     if result["resistance"] is None:
-        assert result["status"] == "no_structure"
+        assert result["status"] in {"no_structure", "invalid_data"}
+        if result["status"] == "invalid_data":
+            assert result["analysis_metadata"]["data_quality"]["blocked"] is True
         return
     anchors = result["resistance"]["classification_lid"]["points"]
     assert len(anchors) == 2

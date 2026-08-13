@@ -24,8 +24,13 @@ def isolated_cache(tmp_path, monkeypatch):
     return writable, seed
 
 
-def frame(dates: list[str], closes: list[float]) -> pd.DataFrame:
-    return pd.DataFrame(
+def frame(
+    dates: list[str],
+    closes: list[float],
+    *,
+    adjustment_mode: str = "split_adjusted",
+) -> pd.DataFrame:
+    result = pd.DataFrame(
         {
             "Open": closes,
             "High": [v + 1 for v in closes],
@@ -35,6 +40,14 @@ def frame(dates: list[str], closes: list[float]) -> pd.DataFrame:
         },
         index=pd.to_datetime(dates),
     )
+    result.attrs["adjustment_mode"] = adjustment_mode
+    if adjustment_mode == "split_adjusted":
+        result.attrs["adjustment_source"] = "yfinance_stock_splits"
+        result.attrs["source_interval"] = "1d"
+        result.attrs["adjustment_transform_version"] = (
+            "yfinance-stock-splits-v1"
+        )
+    return result
 
 
 def feature(symbol: str, monthly: pd.DataFrame):
@@ -47,6 +60,10 @@ def test_fresh_writable_cache_is_reused_for_24_hours(isolated_cache):
         history_cache._bars_from_frame(frame(["2026-06-01"], [10.0])),
         {"ticker": "FRESH"},
         fetched_at=NOW - timedelta(hours=23, minutes=59),
+        adjustment_mode="split_adjusted",
+        adjustment_source="yfinance_stock_splits",
+        source_interval="1d",
+        adjustment_transform_version="yfinance-stock-splits-v1",
     )
 
     def unexpected(_: str):
@@ -57,7 +74,9 @@ def test_fresh_writable_cache_is_reused_for_24_hours(isolated_cache):
     assert payload["freshness"]["origin"] == "writable_cache"
 
 
-def test_legacy_cache_refresh_merges_by_calendar_month_live_wins(isolated_cache):
+def test_legacy_unknown_cache_is_not_mixed_into_split_adjusted_refresh(
+    isolated_cache,
+):
     writable, _ = isolated_cache
     writable.mkdir()
     legacy = {
@@ -73,17 +92,20 @@ def test_legacy_cache_refresh_merges_by_calendar_month_live_wins(isolated_cache)
     payload = history_cache.get_history_payload("MERGE", lambda _: live, feature)
 
     assert [b["date"] for b in payload["bars"]] == [
-        "2020-01-01",
         "2020-02-01",
         "2020-03-01",
     ]
-    assert [b["close"] for b in payload["bars"]] == [10.0, 22.0, 30.0]
+    assert [b["close"] for b in payload["bars"]] == [22.0, 30.0]
     assert payload["features"]["last_close"] == 30.0
     assert payload["cache_metadata"] == {
         "schema_version": history_cache.CACHE_SCHEMA_VERSION,
         "fetched_at": "2026-07-11T06:00:00.000Z",
-        "last_bar_date": "2020-03-01",
-        "source": "yfinance",
+            "last_bar_date": "2020-03-01",
+            "source": "yfinance",
+            "adjustment_mode": "split_adjusted",
+            "adjustment_source": "yfinance_stock_splits",
+            "source_interval": "1d",
+            "adjustment_transform_version": "yfinance-stock-splits-v1",
     }
     assert not (writable / "MERGE.json.tmp").exists()
 
@@ -107,7 +129,11 @@ def test_seed_refresh_failure_returns_stale_fallback(isolated_cache):
         "schema_version": None,
         "fetched_at": None,
         "last_bar_date": "2010-01-01",
-        "source": "seed_cache",
+            "source": "seed_cache",
+            "adjustment_mode": "unknown",
+            "adjustment_source": None,
+            "source_interval": None,
+            "adjustment_transform_version": None,
         "origin": "seed_cache",
         "refresh_error": "offline",
     }
@@ -120,6 +146,10 @@ def test_force_refresh_bypasses_fresh_cache_and_merges(isolated_cache):
         history_cache._bars_from_frame(frame(["2025-01-01"], [10.0])),
         None,
         fetched_at=NOW,
+        adjustment_mode="split_adjusted",
+        adjustment_source="yfinance_stock_splits",
+        source_interval="1d",
+        adjustment_transform_version="yfinance-stock-splits-v1",
     )
 
     def fetch(_: str):
@@ -130,7 +160,8 @@ def test_force_refresh_bypasses_fresh_cache_and_merges(isolated_cache):
         "FORCE", fetch, feature, force_refresh=True
     )
     assert calls["count"] == 1
-    assert len(result["bars"]) == 2
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == 11.0
     assert result["freshness"]["status"] == "fresh"
 
 

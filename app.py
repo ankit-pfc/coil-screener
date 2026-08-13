@@ -18,7 +18,13 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from coil_analysis import ALGORITHM_VERSION, analyze_coil
+from coil_analysis import (
+    ALGORITHM_VERSION,
+    ANALYSIS_MODE_ALGORITHM_ONLY,
+    ANALYSIS_MODE_EFFECTIVE,
+    ANALYSIS_VARIANT_V2_3_1,
+    analyze_coil,
+)
 from history_cache import get_history_payload, read_cache
 from review_capture import (
     BaseClassificationLockRequest,
@@ -309,10 +315,20 @@ def enforce_capture_persistence_on_startup() -> None:
 
 
 class ScreenRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     tickers: list[str] = []
     universe: Literal["sp500", "international"] | None = None
     limit: int | None = None
     force_refresh: bool = False
+    analysis_variant: Literal["v2_3_1"] = Field(
+        default=ANALYSIS_VARIANT_V2_3_1,
+        alias="analysisVariant",
+    )
+    analysis_mode: Literal["algorithm_only", "effective"] = Field(
+        default=ANALYSIS_MODE_EFFECTIVE,
+        alias="analysisMode",
+    )
 
 
 class CorrectionPoint(BaseModel):
@@ -601,6 +617,8 @@ def screen(request: ScreenRequest) -> dict[str, Any]:
         review_override_for=lambda ticker: get_review_store().get_override(ticker, "3M"),
         review_state_for=lambda ticker: get_review_store().get_review_state(ticker, "3M"),
         force_refresh=request.force_refresh,
+        analysis_variant=request.analysis_variant,
+        analysis_mode=request.analysis_mode,
     )
     return {
         "count": len(run["results"]),
@@ -641,13 +659,15 @@ def coil(
     ticker: str,
     as_of: str | None = None,
     force_refresh: bool = False,
+    variant: Literal["v2_3_1"] = ANALYSIS_VARIANT_V2_3_1,
+    mode: Literal["algorithm_only", "effective"] = ANALYSIS_MODE_EFFECTIVE,
 ) -> dict[str, Any]:
     """Deterministic major-top / resistance-slope / coiling analysis.
 
     ``as_of`` truncates the history first (YYYY-MM-DD, inclusive), which lets
     the UI and validation scripts replay the pre-breakout state of a chart.
-    An approved human review for the ticker overrides the algorithm's
-    structure; the raw algorithm output is retained under ``review``.
+    The default remains ``v2_3_1/effective``.  ``algorithm_only`` is a strict
+    research boundary: the route does not load review state or corrections.
     """
     if as_of is not None and (len(as_of) != 10 or as_of[4] != "-" or as_of[7] != "-"):
         raise HTTPException(status_code=400, detail="as_of must be YYYY-MM-DD.")
@@ -662,10 +682,27 @@ def coil(
     if payload is None:
         raise HTTPException(status_code=404, detail="No monthly history found.")
 
-    store = get_review_store()
-    override = store.get_override(symbol)
-    analysis = analyze_coil(payload["bars"], as_of=as_of, review_override=override)
-    annotate_review(analysis, store.get_review_state(symbol), algorithm_version=ALGORITHM_VERSION)
+    freshness = payload.get("freshness") or {}
+    if mode == ANALYSIS_MODE_EFFECTIVE:
+        store = get_review_store()
+        override = store.get_override(symbol)
+    else:
+        store = None
+        override = None
+    analysis = analyze_coil(
+        payload["bars"],
+        as_of=as_of,
+        review_override=override,
+        variant=variant,
+        mode=mode,
+        adjustment_mode=str(freshness.get("adjustment_mode") or "unknown"),
+    )
+    if store is not None:
+        annotate_review(
+            analysis,
+            store.get_review_state(symbol),
+            algorithm_version=ALGORITHM_VERSION,
+        )
     analysis["analysis_metadata"]["data_freshness"].update(payload["freshness"])
     return {
         "ticker": symbol,
@@ -773,7 +810,13 @@ def submit_review_decision(request: ReviewDecisionRequest) -> dict[str, Any]:
     payload = get_history_payload(symbol, fetch_monthly_history, compute_features)
     if payload is not None:
         analysis = analyze_coil(
-            payload["bars"], review_override=store.get_override(symbol)
+            payload["bars"],
+            review_override=store.get_override(symbol),
+            mode=ANALYSIS_MODE_EFFECTIVE,
+            adjustment_mode=str(
+                (payload.get("freshness") or {}).get("adjustment_mode")
+                or "unknown"
+            ),
         )
         annotate_review(
             analysis, store.get_review_state(symbol), algorithm_version=ALGORITHM_VERSION
@@ -885,6 +928,15 @@ def create_review_session(
                     "fresh review sessions require a capability accessToken"
                 )
             manifest = load_review_manifest(request.source)
+            manifest_algorithm_version = str(
+                (manifest.get("source_run") or {}).get("algorithm_version", "")
+            ).strip()
+            if manifest_algorithm_version != ALGORITHM_VERSION:
+                raise ValueError(
+                    "fresh review manifest algorithm version "
+                    f"{manifest_algorithm_version or 'unknown'} does not match "
+                    f"the active algorithm version {ALGORITHM_VERSION}"
+                )
             manifest_order = [
                 str(ticker).strip().upper()
                 for ticker in (

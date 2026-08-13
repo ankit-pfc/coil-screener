@@ -8,6 +8,7 @@ from the reviewed anchors (including under ``as_of`` replay).
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -268,6 +269,18 @@ def test_delete_correction_revokes_effective_override_and_keeps_history(client):
 )
 def test_incomplete_final_quarter_follows_the_analyzer_rule(last_bar_date, expected):
     assert reviews_module.incomplete_final_quarter(last_bar_date) == expected
+
+
+def test_calendar_final_month_stays_open_until_the_next_month():
+    assert reviews_module.incomplete_final_quarter(
+        "2026-09-01", today=date(2026, 9, 15)
+    ) == (2026, 3)
+    assert (
+        reviews_module.incomplete_final_quarter(
+            "2026-09-01", today=date(2026, 10, 1)
+        )
+        is None
+    )
 
 
 def test_points_in_completed_quarters_are_accepted():
