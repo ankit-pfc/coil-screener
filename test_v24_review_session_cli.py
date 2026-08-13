@@ -75,6 +75,9 @@ def test_create_session_posts_a_protected_exact_queue_without_logging_secrets():
                 "session": {
                     "id": 41,
                     "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+                    "reviewer_name": "Amrut",
+                    "require_fresh_review": True,
+                    "items": [{"ticker": "AAA"}, {"ticker": "BBB"}],
                 },
             }
         )
@@ -95,6 +98,34 @@ def test_create_session_posts_a_protected_exact_queue_without_logging_secrets():
     assert captured["payload"]["requireFreshReview"] is True
     assert captured["payload"]["accessToken"] == "stable-secret-capability-token-0001"
     assert captured["payload"]["items"] == [{"ticker": "AAA"}, {"ticker": "BBB"}]
+
+
+def test_create_session_rejects_a_server_response_with_the_wrong_queue():
+    def opener(_request, *, timeout):
+        assert timeout == 30.0
+        return _Response(
+            {
+                "created": True,
+                "session": {
+                    "id": 41,
+                    "source": "benchmark_2026-08-13_v24_72_batch_a.csv",
+                    "reviewer_name": "Amrut",
+                    "require_fresh_review": True,
+                    "items": [{"ticker": "BBB"}, {"ticker": "AAA"}],
+                },
+            }
+        )
+
+    with pytest.raises(BenchmarkError, match="wrong queue"):
+        create_session(
+            api_base_url="https://review-api.example.com",
+            source="benchmark_2026-08-13_v24_72_batch_a.csv",
+            tickers=["AAA", "BBB"],
+            reviewer="Amrut",
+            capability_token="stable-secret-capability-token-0001",
+            admin_key=None,
+            opener=opener,
+        )
 
 
 def test_review_link_keeps_capability_out_of_the_http_request():

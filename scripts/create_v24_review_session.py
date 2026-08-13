@@ -69,10 +69,11 @@ def load_batch(root: Path, batch: str) -> tuple[str, list[str]]:
     items = manifest.get("items")
     if not isinstance(items, list) or not items:
         raise BenchmarkError("benchmark batch has no workbench items")
+    if not all(isinstance(item, dict) for item in items):
+        raise BenchmarkError("benchmark batch contains an invalid workbench item")
     item_order = [
         str(item.get("ticker") or "").strip().upper()
         for item in items
-        if isinstance(item, dict)
     ]
     explicit_order = manifest.get("ordered_universe")
     ordered = (
@@ -80,7 +81,12 @@ def load_batch(root: Path, batch: str) -> tuple[str, list[str]]:
         if isinstance(explicit_order, list) and explicit_order
         else item_order
     )
-    if not ordered or ordered != item_order or len(set(ordered)) != len(ordered):
+    if (
+        not ordered
+        or any(not ticker for ticker in ordered)
+        or ordered != item_order
+        or len(set(ordered)) != len(ordered)
+    ):
         raise BenchmarkError("benchmark batch ordered universe is invalid")
     return source, ordered
 
@@ -173,6 +179,17 @@ def create_session(
         raise BenchmarkError("review-session API returned an invalid session")
     if session.get("source") != source:
         raise BenchmarkError("review-session API returned the wrong source")
+    returned_tickers = [
+        str(item.get("ticker") or "").strip().upper()
+        for item in session.get("items") or []
+        if isinstance(item, dict)
+    ]
+    if returned_tickers != tickers:
+        raise BenchmarkError("review-session API returned the wrong queue")
+    if session.get("require_fresh_review") is not True:
+        raise BenchmarkError("review-session API did not protect the benchmark queue")
+    if session.get("reviewer_name") != reviewer.strip():
+        raise BenchmarkError("review-session API returned the wrong reviewer")
     return body
 
 
