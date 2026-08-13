@@ -126,9 +126,16 @@ def _draft_matches_base_classification(
         return False
     if raw_failed != classification.get("failedBaseRules"):
         return False
-    return str(capture.get("baseRationale", "")).strip() == str(
+    if str(capture.get("baseRationale", "")).strip() != str(
         classification.get("rationale", "")
-    ).strip()
+    ).strip():
+        return False
+    blind_assessment = classification.get("blindAssessment")
+    if blind_assessment is not None:
+        payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else draft
+        if payload.get("blindAssessment") != blind_assessment:
+            return False
+    return True
 
 
 def _redacted_prelock_snapshot(
@@ -157,6 +164,7 @@ def _redacted_prelock_draft(draft: Any) -> Optional[dict[str, Any]]:
     capture = _draft_learning_capture(draft)
     if capture is None:
         return None
+    payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else draft
     return {
         "schemaVersion": 5,
         "learningCapture": {
@@ -171,6 +179,8 @@ def _redacted_prelock_draft(draft: Any) -> Optional[dict[str, Any]]:
                 "commentary",
             )
         },
+        "blindAssessment": payload.get("blindAssessment"),
+        "reviewedHighs": payload.get("reviewedHighs", []),
     }
 
 
@@ -2083,7 +2093,7 @@ class ReviewStore:
         ]
         session_snapshot = json.loads(session_row[4]) if session_row[4] else {}
         return {
-            "schema_version": 4,
+            "schema_version": 5,
             "kind": "coilingview.fresh-review-session-feedback",
             "exported_at": exported_at,
             "algorithm_version": algorithm_version,
@@ -2447,6 +2457,27 @@ class ReviewStore:
             session_id, symbol, algorithm_version=algorithm_version
         )
 
+    def get_capture_idempotency(
+        self, session_id: int, ticker: str, idempotency_key: str
+    ) -> Optional[dict[str, Any]]:
+        """Return the stored client request hash and response for retry validation."""
+        symbol = ticker.strip().upper()
+        key = str(idempotency_key or "").strip()
+        if not key:
+            return None
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT request_hash, response FROM review_capture_idempotency "
+                f"WHERE session_id = {self._ph} AND ticker = {self._ph} "
+                f"AND idempotency_key = {self._ph}",
+                (session_id, symbol, key),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return {"request_hash": str(row[0]), "response": json.loads(row[1])}
+
     def capture_decision(
         self,
         session_id: int,
@@ -2456,6 +2487,7 @@ class ReviewStore:
         sample_id: str,
         idempotency_key: str,
         record: dict[str, Any],
+        request_hash: str | None = None,
     ) -> Optional[dict[str, Any]]:
         """Append one capture-only schema-v5 event and link it to its item.
 
@@ -2474,7 +2506,7 @@ class ReviewStore:
             "sample_id": sample_id,
             "record": record,
         }
-        request_hash = hashlib.sha256(
+        request_hash = request_hash or hashlib.sha256(
             _canonical_json(request_basis).encode("utf-8")
         ).hexdigest()
 

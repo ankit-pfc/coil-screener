@@ -37,6 +37,185 @@ class CaptureReviewedHigh(BaseModel):
         return value
 
 
+class BlindResistanceBand(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    lower: float = Field(gt=0)
+    upper: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def ordered_band(self) -> "BlindResistanceBand":
+        if not math.isfinite(self.lower) or not math.isfinite(self.upper):
+            raise ValueError("blind resistance-band values must be finite")
+        if self.lower > self.upper:
+            raise ValueError("blind resistance-band lower must not exceed upper")
+        return self
+
+
+class BlindAssessment(BaseModel):
+    """Complete human chart judgment frozen before either detector is shown."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    pattern_label: Literal["coil", "not_coil", "uncertain"] = Field(
+        alias="patternLabel"
+    )
+    lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] = Field(alias="lifecycleLabel")
+    human_tops: list[CaptureReviewedHigh] = Field(
+        default_factory=list, max_length=100, alias="humanTops"
+    )
+    resistance_band: BlindResistanceBand | None = Field(
+        default=None, alias="resistanceBand"
+    )
+    first_chart_displayed_at: datetime = Field(alias="firstChartDisplayedAt")
+
+    @field_validator("first_chart_displayed_at")
+    @classmethod
+    def timezone_aware_first_display(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("firstChartDisplayedAt must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def complete_blind_geometry(self) -> "BlindAssessment":
+        dates = [point.date for point in self.human_tops]
+        if len(set(dates)) != len(dates):
+            raise ValueError("blind human-top dates must be unique")
+        if dates != sorted(dates):
+            raise ValueError("blind human tops must be chronological")
+        if self.pattern_label == "coil":
+            if not self.human_tops:
+                raise ValueError("blind coil assessments require a human top")
+            if self.resistance_band is None:
+                raise ValueError("blind coil assessments require a resistance band")
+        return self
+
+
+class DetectorReviewTiming(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    first_chart_displayed_at: datetime | None = Field(
+        default=None, alias="firstChartDisplayedAt"
+    )
+    blind_assessment_locked_at: datetime | None = Field(
+        default=None, alias="blindAssessmentLockedAt"
+    )
+    detectors_revealed_at: datetime | None = Field(
+        default=None, alias="detectorsRevealedAt"
+    )
+    finalized_at: datetime | None = Field(default=None, alias="finalizedAt")
+    blind_active_seconds: int | None = Field(
+        default=None, ge=0, alias="blindActiveSeconds"
+    )
+    assisted_active_seconds: int | None = Field(
+        default=None, ge=0, alias="assistedActiveSeconds"
+    )
+
+    @field_validator(
+        "first_chart_displayed_at",
+        "blind_assessment_locked_at",
+        "detectors_revealed_at",
+        "finalized_at",
+    )
+    @classmethod
+    def timezone_aware_timing(
+        cls, value: datetime | None
+    ) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("detector timing timestamps must include a timezone")
+        return value
+
+
+class DetectorReview(BaseModel):
+    """Append-only judgment of the isolated v2.4 validation detector."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    algorithm_variant: Literal["v2_4_validation"] = Field(alias="algorithmVariant")
+    config_fingerprint: str = Field(
+        min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$",
+        alias="configFingerprint",
+    )
+    algorithm_mode: Literal["algorithm_only"] = Field(alias="algorithmMode")
+    accepted_top_ids: list[str] = Field(default_factory=list, alias="acceptedTopIds")
+    rejected_top_ids: list[str] = Field(default_factory=list, alias="rejectedTopIds")
+    missing_human_tops: list[str] = Field(
+        default_factory=list, alias="missingHumanTops"
+    )
+    matched_human_tops: list[str] = Field(
+        default_factory=list, alias="matchedHumanTops"
+    )
+    acceptable_hypothesis_ids: list[str] = Field(
+        default_factory=list, alias="acceptableHypothesisIds"
+    )
+    rejected_hypothesis_ids: list[str] = Field(
+        default_factory=list, alias="rejectedHypothesisIds"
+    )
+    pattern_label: Literal["coil", "not_coil", "uncertain"] = Field(
+        alias="patternLabel"
+    )
+    lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] = Field(alias="lifecycleLabel")
+    confidence: Literal["high", "medium", "low"]
+    reason_codes: list[str] = Field(min_length=1, max_length=20, alias="reasonCodes")
+    timing: DetectorReviewTiming = Field(default_factory=DetectorReviewTiming)
+
+    @field_validator("missing_human_tops", "matched_human_tops")
+    @classmethod
+    def valid_missing_human_top_dates(cls, values: list[str]) -> list[str]:
+        if len(set(values)) != len(values):
+            raise ValueError("human-top decisions cannot contain duplicates")
+        for value in values:
+            parsed = date.fromisoformat(value)
+            if parsed.isoformat() != value:
+                raise ValueError("human-top decisions must use YYYY-MM-DD dates")
+        if values != sorted(values):
+            raise ValueError("human-top decisions must be chronological")
+        return values
+
+    @model_validator(mode="after")
+    def disjoint_decisions(self) -> "DetectorReview":
+        pairs = (
+            (self.accepted_top_ids, self.rejected_top_ids, "top"),
+            (
+                self.acceptable_hypothesis_ids,
+                self.rejected_hypothesis_ids,
+                "hypothesis",
+            ),
+        )
+        for accepted, rejected, name in pairs:
+            if len(set(accepted)) != len(accepted) or len(set(rejected)) != len(rejected):
+                raise ValueError(f"{name} decision ids must be unique")
+            if set(accepted) & set(rejected):
+                raise ValueError(f"accepted and rejected {name} ids must be disjoint")
+        if len(set(self.reason_codes)) != len(self.reason_codes):
+            raise ValueError("reasonCodes cannot contain duplicates")
+        if set(self.missing_human_tops) & set(self.matched_human_tops):
+            raise ValueError("matched and missing human tops must be disjoint")
+        return self
+
+
 class CaptureEvidencePoint(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -268,6 +447,7 @@ class CaptureFinalizeRequest(BaseModel):
     confidence: Literal["high", "low"]
     note: str | None = Field(default=None, max_length=2000)
     learning_capture: ReviewLearningCaptureV5 = Field(alias="learningCapture")
+    detector_review: DetectorReview = Field(alias="detectorReview")
     algorithm: dict[str, Any] | None = None
     provenance: dict[str, Any] | None = None
     reviewed_highs: list[CaptureReviewedHigh] = Field(
@@ -382,6 +562,7 @@ class BaseClassification(BaseModel):
         ]
     ] = Field(default_factory=list, max_length=9, alias="failedBaseRules")
     rationale: str = Field(min_length=20, max_length=5000)
+    blind_assessment: BlindAssessment = Field(alias="blindAssessment")
 
     @field_validator("rationale")
     @classmethod
@@ -401,6 +582,18 @@ class BaseClassification(BaseModel):
             raise ValueError(
                 "exception-territory locks require at least one failed base rule"
             )
+        expected_pattern = {
+            "base_pattern": "coil",
+            "exception_territory": "not_coil",
+            "uncertain": "uncertain",
+        }[self.base_path]
+        if (
+            self.blind_assessment is not None
+            and self.blind_assessment.pattern_label != expected_pattern
+        ):
+            raise ValueError(
+                "blindAssessment patternLabel must match the locked base path"
+            )
         return self
 
 
@@ -411,9 +604,64 @@ class BaseClassificationLockRequest(BaseModel):
     base_classification: BaseClassification = Field(alias="baseClassification")
 
 
+def distinct_quarter_matches(
+    human_quarters: list[int], candidate_quarters: list[int]
+) -> bool:
+    """Maximum one-to-one matching for sorted ±1-quarter interval edges."""
+    candidates = sorted(candidate_quarters)
+    candidate_index = 0
+    for human in sorted(human_quarters):
+        while (
+            candidate_index < len(candidates)
+            and candidates[candidate_index] < human - 1
+        ):
+            candidate_index += 1
+        if (
+            candidate_index >= len(candidates)
+            or candidates[candidate_index] > human + 1
+        ):
+            return False
+        candidate_index += 1
+    return True
+
+
+def validate_blind_assessment_against_context(
+    assessment: BlindAssessment | None, context: dict[str, Any]
+) -> None:
+    if assessment is None:
+        return
+    bars = {str(bar["date"]): bar for bar in context.get("quarterly_bars", [])}
+    monthly_bars = context.get("monthly_bars", [])
+    quarterly_bars = context.get("quarterly_bars", [])
+    incomplete_quarter_date = None
+    if monthly_bars and quarterly_bars:
+        last_month = date.fromisoformat(str(monthly_bars[-1]["date"]))
+        if last_month.month % 3 != 0:
+            incomplete_quarter_date = str(quarterly_bars[-1]["date"])
+    for point in assessment.human_tops:
+        bar = bars.get(point.date)
+        if bar is None:
+            raise ValueError(
+                f"blind human top {point.date} is not a frozen 3M candle"
+            )
+        if point.date == incomplete_quarter_date:
+            raise ValueError(
+                "blind human tops cannot use the incomplete final quarter"
+            )
+        expected = float(bar["high"])
+        tolerance = max(1e-8, abs(expected) * 1e-8)
+        if abs(float(point.price) - expected) > tolerance:
+            raise ValueError(
+                f"blind human top {point.date} price must equal the frozen "
+                f"candle high ({expected})"
+            )
+
+
 def validate_capture_against_context(
     request: CaptureFinalizeRequest,
     context: dict[str, Any],
+    *,
+    base_classification: dict[str, Any] | None = None,
 ) -> None:
     """Verify server-owned sample identity and candle-snapped evidence."""
     if not context.get("reviewable"):
@@ -427,6 +675,79 @@ def validate_capture_against_context(
         raise ValueError("algorithmVersion does not match the frozen analysis")
     if request.as_of != context["monthly_bars"][-1]["date"]:
         raise ValueError("asOf does not match the frozen data date")
+
+    if request.detector_review is not None:
+        detector = (context.get("detector_outputs") or {}).get(
+            request.detector_review.algorithm_variant
+        )
+        if not isinstance(detector, dict):
+            raise ValueError("validation detector output is unavailable")
+        metadata = detector.get("analysis_metadata") or {}
+        if request.detector_review.algorithm_mode != metadata.get("mode"):
+            raise ValueError("detectorReview algorithmMode does not match the output")
+        if request.detector_review.config_fingerprint != metadata.get(
+            "config_fingerprint"
+        ):
+            raise ValueError("detectorReview configFingerprint does not match the output")
+        known_top_ids = {
+            str(item.get("id"))
+            for item in detector.get("top_candidates", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        reviewed_top_ids = set(request.detector_review.accepted_top_ids) | set(
+            request.detector_review.rejected_top_ids
+        )
+        if reviewed_top_ids != known_top_ids:
+            raise ValueError(
+                "detectorReview must accept or reject every validation top exactly once"
+            )
+        known_hypothesis_ids = {
+            str(item.get("id"))
+            for item in detector.get("lid_hypotheses", [])
+            if isinstance(item, dict) and item.get("id")
+        }
+        reviewed_hypothesis_ids = set(
+            request.detector_review.acceptable_hypothesis_ids
+        ) | set(request.detector_review.rejected_hypothesis_ids)
+        if reviewed_hypothesis_ids != known_hypothesis_ids:
+            raise ValueError(
+                "detectorReview must accept or reject every lid hypothesis exactly once"
+            )
+        blind = (base_classification or {}).get("blindAssessment") or {}
+        human_dates = {
+            str(point.get("date"))
+            for point in blind.get("humanTops", [])
+            if isinstance(point, dict) and point.get("date")
+        }
+        candidate_dates = {
+            str(item.get("peak_date"))
+            for item in detector.get("top_candidates", [])
+            if isinstance(item, dict)
+            and item.get("peak_date")
+            and str(item.get("id")) in request.detector_review.accepted_top_ids
+        }
+        reviewed_human_dates = set(request.detector_review.missing_human_tops) | set(
+            request.detector_review.matched_human_tops
+        )
+        if reviewed_human_dates != human_dates:
+            raise ValueError(
+                "detectorReview must mark every locked human top matched or missing"
+            )
+        def quarter_ordinal(value: str) -> int:
+            parsed = date.fromisoformat(value)
+            return parsed.year * 4 + (parsed.month - 1) // 3
+
+        candidate_quarters = sorted(quarter_ordinal(value) for value in candidate_dates)
+        human_quarters = [
+            quarter_ordinal(value)
+            for value in request.detector_review.matched_human_tops
+        ]
+
+        if not distinct_quarter_matches(human_quarters, candidate_quarters):
+            raise ValueError(
+                "matchedHumanTops require distinct accepted detector candidates "
+                "within one completed quarter"
+            )
 
     bars = {str(bar["date"]): bar for bar in context["quarterly_bars"]}
     reviewed_dates = [point.date for point in request.reviewed_highs]

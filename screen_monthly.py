@@ -561,6 +561,7 @@ def run_lifecycle_screen(
             freshness = payload.get("freshness") or {}
             analysis = analyze_coil(
                 payload["bars"],
+                ticker=ticker,
                 review_override=override,
                 variant=analysis_variant,
                 mode=analysis_mode,

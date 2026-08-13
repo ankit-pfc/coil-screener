@@ -473,6 +473,31 @@ def test_coil_v24_validation_endpoint_is_additive_and_algorithm_only(
     assert body["pattern_assessment"]["structure_state"] == "qualified"
 
 
+def test_coil_v24_endpoint_scopes_evidence_ids_to_ticker(client, monkeypatch, tmp_cache):
+    from test_coil_validation_v24 import mature_coil_bars
+
+    bars = mature_coil_bars()
+    for ticker in ("FIRST", "SECOND"):
+        _seed_coil_cache(tmp_cache, ticker, bars)
+    monkeypatch.setattr(app_module, "fetch_monthly_history", lambda symbol: None)
+
+    responses = [
+        client.get(
+            f"/api/coil/{ticker}",
+            params={"variant": "v2_4_validation", "mode": "algorithm_only"},
+        )
+        for ticker in ("FIRST", "SECOND")
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    evidence_ids = [
+        {candidate["id"] for candidate in response.json()["top_candidates"]}
+        for response in responses
+    ]
+    assert evidence_ids[0]
+    assert evidence_ids[0].isdisjoint(evidence_ids[1])
+
+
 def test_coil_v24_validation_rejects_effective_mode(client, tmp_cache):
     from test_coil_validation_v24 import mature_coil_bars
 

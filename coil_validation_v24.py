@@ -101,6 +101,57 @@ def _stable_id(prefix: str, payload: Any) -> str:
     return f"{prefix}_{hashlib.sha256(encoded).hexdigest()[:16]}"
 
 
+def _scope_output_ids(
+    result: dict[str, Any],
+    *,
+    ticker: str,
+    as_of: str | None,
+    config: ValidationConfig,
+) -> dict[str, Any]:
+    """Bind every reviewable id to sample identity and frozen configuration."""
+    scope = {
+        "ticker": ticker.strip().upper(),
+        "as_of": as_of or result.get("as_of"),
+        "config_fingerprint": config_fingerprint(config),
+    }
+    top_id_map: dict[str, str] = {}
+    for top in result.get("top_candidates", []):
+        old = str(top["id"])
+        new = _stable_id("top", {"scope": scope, "event": top})
+        top["id"] = new
+        top_id_map[old] = new
+    hypothesis_id_map: dict[str, str] = {}
+    for hypothesis in result.get("lid_hypotheses", []):
+        old = str(hypothesis["id"])
+        contacts = [top_id_map.get(str(value), str(value)) for value in hypothesis.get("contact_ids", [])]
+        hypothesis["contact_ids"] = contacts
+        if isinstance(hypothesis.get("contacts"), list):
+            for contact in hypothesis["contacts"]:
+                if isinstance(contact, dict) and "id" in contact:
+                    contact["id"] = top_id_map.get(str(contact["id"]), str(contact["id"]))
+        new = _stable_id(
+            "lid",
+            {"scope": scope, "contacts": contacts, "rank": hypothesis.get("rank")},
+        )
+        hypothesis["id"] = new
+        hypothesis_id_map[old] = new
+    band = result.get("resistance_band")
+    if isinstance(band, dict):
+        band["hypothesis_ids"] = [
+            hypothesis_id_map.get(str(value), str(value))
+            for value in band.get("hypothesis_ids", [])
+        ]
+    for field in ("points", "major_highs"):
+        for point in result.get(field, []):
+            evidence = point.get("evidence") if isinstance(point, dict) else None
+            if isinstance(evidence, dict) and evidence.get("top_candidate_id"):
+                evidence["top_candidate_id"] = top_id_map.get(
+                    str(evidence["top_candidate_id"]),
+                    str(evidence["top_candidate_id"]),
+                )
+    return result
+
+
 def _month_end(text: str) -> str:
     parsed = date.fromisoformat(text[:10])
     return date(
@@ -923,6 +974,7 @@ def _empty_result(
 def analyze_coil_v24(
     bars: Iterable[dict[str, Any]],
     *,
+    ticker: str = "UNKNOWN",
     as_of: str | None = None,
     adjustment_mode: str = ADJUSTMENT_UNKNOWN,
     config: ValidationConfig = DEFAULT_CONFIG,
@@ -937,7 +989,7 @@ def analyze_coil_v24(
     clean = inspected.bars
     quality = inspected.report
     if quality["status"] == DATA_QUALITY_BLOCKED:
-        return _empty_result(
+        return _scope_output_ids(_empty_result(
             clean,
             quality,
             config,
@@ -945,7 +997,7 @@ def analyze_coil_v24(
             structure_state="invalid_data",
             failed_rules=["valid_data"],
             abstained=True,
-        )
+        ), ticker=ticker, as_of=as_of, config=config)
 
     all_quarters = _aggregate_quarters(clean)
     completed = [
@@ -953,7 +1005,7 @@ def analyze_coil_v24(
     ]
     partial_quarter = _trailing_partial_quarter(all_quarters, as_of=as_of)
     if len(completed) < 3:
-        return _empty_result(
+        return _scope_output_ids(_empty_result(
             clean,
             quality,
             config,
@@ -961,7 +1013,7 @@ def analyze_coil_v24(
             structure_state="no_structure",
             failed_rules=["sufficient_completed_quarters"],
             abstained=False,
-        )
+        ), ticker=ticker, as_of=as_of, config=config)
 
     top_candidates, eligible = _top_candidates(completed, config)
     hypotheses, rejected = _hypotheses(completed, eligible, config)
@@ -977,7 +1029,7 @@ def analyze_coil_v24(
         )
         result["top_candidates"] = top_candidates
         result["diagnostics"]["rejected_hypotheses"] = rejected
-        return result
+        return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)
 
     equivalent, conflict = _equivalent_leaders(hypotheses, config)
     if conflict:
@@ -995,7 +1047,7 @@ def analyze_coil_v24(
         result["diagnostics"]["rejected_hypotheses"] = rejected
         result["readiness"] = "uncertain_structure"
         result["pattern_assessment"]["readiness"] = "uncertain_structure"
-        return result
+        return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)
 
     primary = hypotheses[0]
     projected = [float(item["projected_lid"]) for item in equivalent]
@@ -1203,4 +1255,4 @@ def analyze_coil_v24(
             "span_years": round(primary["span_quarters"] / 4.0, 3),
             "source": SOURCE,
         }
-    return result
+    return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)

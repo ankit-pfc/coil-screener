@@ -6,7 +6,7 @@ import os
 import re
 import secrets
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -31,6 +31,7 @@ from review_capture import (
     BaseClassificationLockRequest,
     CaptureDraftRequest,
     CaptureFinalizeRequest,
+    validate_blind_assessment_against_context,
     validate_capture_against_context,
 )
 from review_snapshots import (
@@ -705,6 +706,7 @@ def coil(
         override = None
     analysis = analyze_coil(
         payload["bars"],
+        ticker=symbol,
         as_of=as_of,
         review_override=override,
         variant=variant,
@@ -1363,6 +1365,11 @@ def review_session_item_context(
     context["base_classification_locked_at"] = item.get(
         "base_classification_locked_at"
     )
+    context["detectors_revealed_at"] = (
+        item.get("base_classification_locked_at")
+        if context.get("model_revealed")
+        else None
+    )
     return {"context": context}
 
 
@@ -1399,13 +1406,23 @@ def lock_review_session_item_base_classification(
 ) -> dict[str, Any]:
     """Atomically lock the persisted blind verdict before model reveal."""
     try:
+        classification = request.base_classification.model_dump(
+            mode="json", by_alias=True
+        )
+        context = load_review_context(_security["source"], ticker)
+        validate_blind_assessment_against_context(
+            request.base_classification.blind_assessment, context
+        )
+        if (
+            request.base_classification.blind_assessment.first_chart_displayed_at
+            > datetime.now(timezone.utc) + timedelta(minutes=5)
+        ):
+            raise ValueError("firstChartDisplayedAt cannot be in the future")
         item = get_review_store().lock_base_classification(
             session_id,
             ticker,
             expected_draft_revision=request.expected_draft_revision,
-            classification=request.base_classification.model_dump(
-                mode="json", by_alias=True
-            ),
+            classification=classification,
             algorithm_version=ALGORITHM_VERSION,
         )
     except ReviewConflictError as exc:
@@ -1441,6 +1458,44 @@ def finalize_review_session_item(
             status_code=400,
             detail="reviewerName must match the assigned reviewer.",
         )
+    session_item = get_review_store().get_session_item(
+        session_id, symbol, algorithm_version=ALGORITHM_VERSION
+    )
+    if session_item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    if not session_item.get("base_classification_locked"):
+        raise HTTPException(
+            status_code=409,
+            detail="base classification must be locked before finalization",
+        )
+    client_record = request.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude={"idempotency_key", "expected_draft_revision", "sample_id"},
+    )
+    client_request_basis = {
+        "session_id": session_id,
+        "ticker": symbol,
+        "expected_draft_revision": request.expected_draft_revision,
+        "sample_id": request.sample_id,
+        "record": client_record,
+    }
+    client_request_hash = hashlib.sha256(
+        canonical_json(client_request_basis).encode("utf-8")
+    ).hexdigest()
+    prior = get_review_store().get_capture_idempotency(
+        session_id, symbol, request.idempotency_key
+    )
+    if prior is not None:
+        if not hmac.compare_digest(client_request_hash, prior["request_hash"]):
+            raise HTTPException(
+                status_code=409,
+                detail="idempotencyKey was already used for a different request",
+            )
+        item = get_review_store().get_session_item(
+            session_id, symbol, algorithm_version=ALGORITHM_VERSION
+        )
+        return {**prior["response"], "session_item": item}
     try:
         context = load_review_context(security["source"], symbol)
     except ReviewSnapshotError as exc:
@@ -1451,7 +1506,11 @@ def finalize_review_session_item(
             detail="sampleId does not match the frozen review sample.",
         )
     try:
-        validate_capture_against_context(request, context)
+        validate_capture_against_context(
+            request,
+            context,
+            base_classification=session_item.get("base_classification"),
+        )
         record = request.model_dump(
             mode="json",
             by_alias=True,
@@ -1463,6 +1522,30 @@ def finalize_review_session_item(
         )
         client_provenance = record.get("provenance")
         record["algorithm"] = context["analysis"]
+        record["detectorOutputs"] = context.get("detector_outputs", {})
+        record["blindAssessment"] = (
+            (session_item.get("base_classification") or {}).get("blindAssessment")
+        )
+        if record.get("detectorReview") is not None:
+            locked_at = session_item.get("base_classification_locked_at")
+            blind_assessment = (
+                (session_item.get("base_classification") or {}).get(
+                    "blindAssessment"
+                )
+                or {}
+            )
+            first_chart_at = blind_assessment.get("firstChartDisplayedAt")
+            finalized_at = datetime.now(timezone.utc).isoformat().replace(
+                "+00:00", "Z"
+            )
+
+            timing = record["detectorReview"].setdefault("timing", {})
+            timing["firstChartDisplayedAt"] = first_chart_at
+            timing["blindAssessmentLockedAt"] = locked_at
+            timing["detectorsRevealedAt"] = locked_at
+            timing["finalizedAt"] = finalized_at
+            # Optional client-visible/idle counters remain distinct from the
+            # authoritative server chronology above.
         record["provenance"] = {
             "frozen": True,
             "source": context["source"],
@@ -1480,6 +1563,7 @@ def finalize_review_session_item(
             sample_id=request.sample_id,
             idempotency_key=request.idempotency_key,
             record=record,
+            request_hash=client_request_hash,
         )
     except ReviewConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

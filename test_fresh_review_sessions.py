@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,12 +14,53 @@ from fastapi.testclient import TestClient
 import app as app_module
 import review_snapshots
 import reviews as reviews_module
-from coil_analysis import ALGORITHM_VERSION
+from coil_analysis import ALGORITHM_VERSION, _aggregate_quarterly_display_bars
+from review_capture import (
+    BlindAssessment,
+    distinct_quarter_matches,
+    validate_blind_assessment_against_context,
+)
 from reviews import ReviewStore
 from test_coil_analysis import make_coil_bars
 
 TOKEN = "amrut-review-capability-token-0001"
 TOKEN_2 = "amrut-review-capability-token-0002"
+
+
+def _quarter_ordinal(value: str) -> int:
+    parsed = date.fromisoformat(value)
+    return parsed.year * 4 + (parsed.month - 1) // 3
+
+
+def test_blind_human_tops_reject_the_incomplete_final_quarter():
+    assessment = BlindAssessment.model_validate(
+        {
+            "patternLabel": "coil",
+            "lifecycleLabel": "forming",
+            "humanTops": [{"date": "2026-04-01", "price": 101.0}],
+            "resistanceBand": {"lower": 98.0, "upper": 104.0},
+            "firstChartDisplayedAt": "2026-08-13T00:00:00Z",
+        }
+    )
+    context = {
+        "monthly_bars": [{"date": "2026-05-01"}],
+        "quarterly_bars": [{"date": "2026-04-01", "high": 101.0}],
+    }
+
+    with pytest.raises(ValueError, match="incomplete final quarter"):
+        validate_blind_assessment_against_context(assessment, context)
+
+
+def test_blind_first_display_requires_timezone():
+    payload = _blind_assessment_for()
+    payload["firstChartDisplayedAt"] = "2026-08-13T00:00:00"
+    with pytest.raises(ValueError, match="timezone"):
+        BlindAssessment.model_validate(payload)
+
+
+def test_distinct_quarter_matching_is_bounded_and_one_to_one():
+    assert distinct_quarter_matches(list(range(100)), list(range(100))) is True
+    assert distinct_quarter_matches([10, 10], [9, 20]) is False
 
 
 @pytest.fixture
@@ -172,15 +214,51 @@ def _base_learning_capture(
     }
 
 
+def _blind_assessment_for(base_path: str = "base_pattern") -> dict:
+    first = _aggregate_quarterly_display_bars(make_coil_bars())[0]
+    pattern = {
+        "base_pattern": "coil",
+        "exception_territory": "not_coil",
+        "uncertain": "uncertain",
+    }[base_path]
+    return {
+        "patternLabel": pattern,
+        "lifecycleLabel": "forming" if pattern == "coil" else "no_pattern",
+        "humanTops": (
+            [
+                {
+                    "date": first["date"],
+                    "price": first["high"],
+                    "role": "major_top",
+                    "lidMember": True,
+                }
+            ]
+            if pattern == "coil"
+            else []
+        ),
+        "resistanceBand": (
+            {
+                "lower": first["high"] * 0.98,
+                "upper": first["high"] * 1.02,
+            }
+            if pattern == "coil"
+            else None
+        ),
+        "firstChartDisplayedAt": "2026-07-27T23:55:00Z",
+    }
+
+
 def _lock_base(
     client: TestClient,
     session: dict,
     ticker: str,
     *,
     learning_capture: dict | None = None,
+    blind_assessment: dict | None = None,
     token: str = TOKEN,
 ) -> tuple[dict, dict]:
     capture = learning_capture or _base_learning_capture()
+    blind_assessment = blind_assessment or _blind_assessment_for(capture["basePath"])
     item = next(entry for entry in session["items"] if entry["ticker"] == ticker)
     draft = client.put(
         f"/api/review-sessions/{session['id']}/items/{ticker}/draft",
@@ -190,6 +268,11 @@ def _lock_base(
             "payload": {
                 "schemaVersion": 5,
                 "learningCapture": capture,
+                **(
+                    {"blindAssessment": blind_assessment}
+                    if blind_assessment is not None
+                    else {}
+                ),
             },
         },
     )
@@ -205,6 +288,11 @@ def _lock_base(
                 "basePath": capture["basePath"],
                 "failedBaseRules": capture["failedBaseRules"],
                 "rationale": capture["baseRationale"],
+                **(
+                    {"blindAssessment": blind_assessment}
+                    if blind_assessment is not None
+                    else {}
+                ),
             },
         },
     )
@@ -251,6 +339,29 @@ def _finalize_payload(
     learning_capture: dict,
     key: str,
 ) -> dict:
+    detector = (context.get("detector_outputs") or {}).get(
+        "v2_4_validation", {}
+    )
+    tops = detector.get("top_candidates", [])
+    hypotheses = detector.get("lid_hypotheses", [])
+    human_dates = {
+        point["date"]
+        for point in (
+            (item.get("base_classification") or {})
+            .get("blindAssessment", {})
+            .get("humanTops", [])
+        )
+    }
+    candidate_dates = {point.get("peak_date") for point in tops}
+    matched_human_dates = sorted(
+        value
+        for value in human_dates
+        if any(
+            abs(_quarter_ordinal(value) - _quarter_ordinal(candidate)) <= 1
+            for candidate in candidate_dates
+            if candidate
+        )
+    )
     return {
         "schemaVersion": 5,
         "labelPolicyVersion": 2,
@@ -265,6 +376,25 @@ def _finalize_payload(
         "confidence": "high",
         "note": "Meets the sequential base-screen criteria.",
         "learningCapture": learning_capture,
+        "detectorReview": {
+            "algorithmVariant": "v2_4_validation",
+            "configFingerprint": (
+                detector.get("analysis_metadata", {}).get("config_fingerprint")
+                or f"sha256:{'0' * 64}"
+            ),
+            "algorithmMode": "algorithm_only",
+            "acceptedTopIds": [point["id"] for point in tops],
+            "rejectedTopIds": [],
+            "matchedHumanTops": matched_human_dates,
+            "missingHumanTops": sorted(human_dates - set(matched_human_dates)),
+            "acceptableHypothesisIds": [point["id"] for point in hypotheses],
+            "rejectedHypothesisIds": [],
+            "patternLabel": "coil",
+            "lifecycleLabel": detector.get("readiness", "forming"),
+            "confidence": detector.get("confidence", "low"),
+            "reasonCodes": ["reviewed_detector_output"],
+            "timing": {},
+        },
         "reviewedHighs": [],
         "createdAt": "2026-07-28T00:00:00Z",
         "idempotencyKey": key,
@@ -323,6 +453,7 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
         "analysis_status",
         "quarterly_bars",
         "model_snapshot",
+        "detector_outputs",
         "screen_snapshot",
         "corpus_labels",
         "source_features",
@@ -343,11 +474,11 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
     assert blind["model_revealed"] is False
     assert "monthly_bars" in blind
     assert (
-        client.get(
-            f"/api/review-sessions/{session['id']}/export",
-            headers=_headers(),
-        ).status_code
-        == 409
+            client.get(
+                f"/api/review-sessions/{session['id']}/export",
+                headers=_headers(),
+            ).status_code
+            == 409
     )
 
     unlocked_payload = _finalize_payload(
@@ -367,11 +498,13 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
     )
 
     lock_path = f"/api/review-sessions/{session['id']}/items/AAA/base-lock"
+    blind_assessment = _blind_assessment_for()
     classification = {
         "locked": True,
         "basePath": "base_pattern",
         "failedBaseRules": [],
         "rationale": BASE_RATIONALE,
+        "blindAssessment": blind_assessment,
     }
     assert (
         client.post(
@@ -392,6 +525,7 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
             "payload": {
                 "schemaVersion": 5,
                 "learningCapture": _base_learning_capture(),
+                "blindAssessment": blind_assessment,
             },
         },
     )
@@ -447,17 +581,35 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
             "expectedDraftRevision": revision,
             "baseClassification": {
                 "locked": True,
-                "basePath": "exception_territory",
-                "failedBaseRules": ["top_geometry"],
-                "rationale": EXCEPTION_BASE_RATIONALE,
-            },
+                    "basePath": "exception_territory",
+                    "failedBaseRules": ["top_geometry"],
+                    "rationale": EXCEPTION_BASE_RATIONALE,
+                    "blindAssessment": _blind_assessment_for(
+                        "exception_territory"
+                    ),
+                },
         },
     )
     assert different.status_code == 409
 
     revealed = client.get(context_path, headers=_headers()).json()["context"]
     assert revealed["model_revealed"] is True
-    assert {"analysis", "quarterly_bars", "model_snapshot"} <= revealed.keys()
+    assert {
+        "analysis",
+        "quarterly_bars",
+        "model_snapshot",
+        "detector_outputs",
+    } <= revealed.keys()
+    assert set(revealed["detector_outputs"]) == {
+        "v2_3_1",
+        "v2_4_validation",
+    }
+    assert revealed["detector_outputs"]["v2_4_validation"][
+        "analysis_metadata"
+    ]["mode"] == "algorithm_only"
+    assert revealed["detectors_revealed_at"] == revealed[
+        "base_classification_locked_at"
+    ]
     refreshed = client.get(
         f"/api/review-sessions/{session['id']}", headers=_headers()
     ).json()["session"]["items"][0]
@@ -481,6 +633,119 @@ def test_blind_gate_redacts_then_atomically_reveals_model_context(fresh_client):
         ).status_code
         == 409
     )
+
+
+def test_detector_review_is_validated_and_exported_append_only(fresh_client):
+    client, _, root = fresh_client
+    source = "detector-review.csv"
+    _make_corpus(root, source, ["AAA"])
+    session = _create(client, source, ["AAA"])["session"]
+    capture = _base_learning_capture()
+    blind_assessment = _blind_assessment_for()
+    first_quarter = _aggregate_quarterly_display_bars(make_coil_bars())[0]
+    item, context = _lock_base(
+        client,
+        session,
+        "AAA",
+        learning_capture=capture,
+        blind_assessment=blind_assessment,
+    )
+    detector = context["detector_outputs"]["v2_4_validation"]
+    top_ids = [item["id"] for item in detector.get("top_candidates", [])]
+    hypothesis_ids = [item["id"] for item in detector.get("lid_hypotheses", [])]
+    assert top_ids
+    assert hypothesis_ids
+    payload = _finalize_payload(
+        session,
+        "AAA",
+        item=item,
+        context=context,
+        learning_capture=capture,
+        key="detector-review-finalize",
+    )
+    candidate_dates = {
+        entry["peak_date"] for entry in detector.get("top_candidates", [])
+    }
+    first_quarter_matched = any(
+        abs(_quarter_ordinal(first_quarter["date"]) - _quarter_ordinal(value)) <= 1
+        for value in candidate_dates
+    )
+    payload["detectorReview"] = {
+        "algorithmVariant": "v2_4_validation",
+        "configFingerprint": detector["analysis_metadata"]["config_fingerprint"],
+        "algorithmMode": "algorithm_only",
+        "acceptedTopIds": top_ids,
+        "rejectedTopIds": [],
+        "matchedHumanTops": [first_quarter["date"]] if first_quarter_matched else [],
+        "missingHumanTops": [] if first_quarter_matched else [first_quarter["date"]],
+        "acceptableHypothesisIds": hypothesis_ids,
+        "rejectedHypothesisIds": [],
+        "patternLabel": "coil",
+        "lifecycleLabel": detector["readiness"],
+        "confidence": detector["confidence"],
+        "reasonCodes": ["reviewed_detector_output"],
+        "timing": {
+            "firstChartDisplayedAt": "2026-07-27T23:55:00Z",
+            "blindActiveSeconds": 300,
+            "assistedActiveSeconds": 120,
+        },
+    }
+
+    incomplete = json.loads(json.dumps(payload))
+    incomplete["detectorReview"]["acceptedTopIds"] = top_ids[1:]
+    assert (
+        client.post(
+            f"/api/review-sessions/{session['id']}/items/AAA/finalize",
+            headers=_headers(),
+            json=incomplete,
+        ).status_code
+        == 400
+    )
+
+    response = client.post(
+        f"/api/review-sessions/{session['id']}/items/AAA/finalize",
+        headers=_headers(),
+        json=payload,
+    )
+
+    assert response.status_code == 200, response.text
+    finalized = client.post(
+        f"/api/review-sessions/{session['id']}/finalize",
+        headers=_headers(),
+    )
+    assert finalized.status_code == 200, finalized.text
+    export_record = finalized.json()["export"]["records"][0]["record"]
+    assert export_record["detectorReview"]["acceptedTopIds"] == top_ids
+    assert export_record["detectorReview"]["timing"]["blindAssessmentLockedAt"]
+    assert export_record["detectorReview"]["timing"]["detectorsRevealedAt"]
+    assert export_record["detectorReview"]["timing"]["finalizedAt"]
+    assert export_record["detectorReview"]["timing"]["firstChartDisplayedAt"] == (
+        blind_assessment["firstChartDisplayedAt"]
+    )
+    assert export_record["detectorReview"]["timing"]["blindActiveSeconds"] == 300
+    assert export_record["detectorReview"]["timing"]["assistedActiveSeconds"] == 120
+    assert set(export_record["detectorOutputs"]) == {
+        "v2_3_1",
+        "v2_4_validation",
+    }
+
+
+@pytest.mark.parametrize("base_path", ["exception_territory", "uncertain"])
+def test_noncoil_and_uncertain_blind_assessments_lock(fresh_client, base_path):
+    client, _, root = fresh_client
+    source = f"{base_path}.csv"
+    _make_corpus(root, source, ["AAA"])
+    session = _create(client, source, ["AAA"])["session"]
+    capture = _base_learning_capture(
+        base_path=base_path,
+        failed_base_rules=["top_geometry"] if base_path == "exception_territory" else [],
+    )
+    capture["baseRationale"] = EXCEPTION_BASE_RATIONALE
+
+    item, context = _lock_base(client, session, "AAA", learning_capture=capture)
+
+    assert item["base_classification_locked"] is True
+    assert context["model_revealed"] is True
 
 
 def test_protected_stock_universe_records_candidates_outside_frozen_queue(
@@ -615,7 +880,7 @@ def test_protected_stock_universe_records_candidates_outside_frozen_queue(
     )
     assert frozen.status_code == 200
     export = frozen.json()["export"]
-    assert export["schema_version"] == 4
+    assert export["schema_version"] == 5
     assert export["candidate_nominations"][0] == (
         updated.json()["nomination"]
     )
@@ -1018,7 +1283,7 @@ def test_quarantined_context_can_only_be_closed_with_explained_skip(fresh_client
             headers=_headers(),
             json=payload,
         ).status_code
-        == 400
+        == 409
     )
     item_path = f"/api/review-sessions/{session['id']}/items/BAD"
     assert (
@@ -1123,6 +1388,7 @@ def test_session_finalization_freezes_stable_linked_only_export(fresh_client):
         "failedBaseRules": [],
         "locked": True,
         "rationale": BASE_RATIONALE,
+        "blindAssessment": _blind_assessment_for(),
     }
     assert frozen["session"]["items"][0]["base_classification_locked_at"]
     assert len(frozen["records"]) == 1

@@ -51,7 +51,7 @@ def load_export(path: Path | str) -> dict[str, Any]:
         payload = json.loads(match.group(1))
     if payload.get("kind") not in EXPORT_KINDS:
         raise ValueError(f"{export_path}: unsupported export kind")
-    if payload.get("schema_version") not in (1, 2, 3):
+    if payload.get("schema_version") not in (1, 2, 3, 4, 5):
         raise ValueError(f"{export_path}: unsupported export schema version")
     if not isinstance(payload.get("records"), list):
         raise ValueError(f"{export_path}: records must be a list")
