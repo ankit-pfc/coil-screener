@@ -17,11 +17,12 @@ import reviews as reviews_module
 from coil_analysis import ALGORITHM_VERSION, _aggregate_quarterly_display_bars
 from coil_validation_v24 import ValidationConfig, config_fingerprint
 from review_capture import (
+    BaseClassification,
     BlindAssessment,
     distinct_quarter_matches,
     validate_blind_assessment_against_context,
 )
-from reviews import ReviewStore
+from reviews import ReviewStore, _draft_matches_base_classification
 from test_coil_analysis import make_coil_bars
 
 TOKEN = "amrut-review-capability-token-0001"
@@ -188,6 +189,59 @@ BASE_RATIONALE = (
 EXCEPTION_BASE_RATIONALE = (
     "The blind review found top geometry outside the standard base-pattern rules."
 )
+
+
+def test_base_pattern_lock_does_not_force_duplicate_commentary():
+    classification = BaseClassification.model_validate(
+        {
+            "locked": True,
+            "basePath": "base_pattern",
+            "failedBaseRules": [],
+            "rationale": "",
+            "blindAssessment": _blind_assessment_for(),
+        }
+    )
+
+    assert classification.rationale == ""
+
+
+def test_uncertain_lock_still_requires_visible_reasoning():
+    with pytest.raises(ValueError, match="at least 20 rationale"):
+        BaseClassification.model_validate(
+            {
+                "locked": True,
+                "basePath": "uncertain",
+                "failedBaseRules": [],
+                "rationale": "too short",
+                "blindAssessment": _blind_assessment_for("uncertain"),
+            }
+        )
+
+
+def test_base_lock_matches_browser_payload_that_omits_default_top_role():
+    blind = _blind_assessment_for()
+    classification = {
+        "locked": True,
+        "basePath": "base_pattern",
+        "failedBaseRules": [],
+        "rationale": "",
+        "blindAssessment": BlindAssessment.model_validate(blind).model_dump(
+            mode="json", by_alias=True
+        ),
+    }
+    compact_blind = json.loads(json.dumps(blind))
+    compact_blind["humanTops"][0].pop("role")
+    capture = _base_learning_capture()
+    capture["baseRationale"] = ""
+
+    assert _draft_matches_base_classification(
+        {
+            "learningCapture": capture,
+            "blindAssessment": compact_blind,
+        },
+        classification,
+        reviewer_name="Amrut",
+    )
 
 
 def _base_learning_capture(
@@ -764,6 +818,69 @@ def test_detector_review_is_validated_and_exported_append_only(fresh_client):
         "v2_3_1",
         "v2_4_validation",
     }
+
+
+def test_automatic_detector_comparison_keeps_the_human_flow_label_only(
+    fresh_client,
+):
+    client, _, root = fresh_client
+    source = "automatic-detector-comparison.csv"
+    _make_corpus(root, source, ["AAA"])
+    snapshot_path = root / Path(source).stem / "AAA.json"
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot["corpus_labels"]["benchmark_attempt"] = 2
+    snapshot["corpus_labels"]["benchmark_timing_order"] = "blind_first"
+    snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+    session = _create(client, source, ["AAA"])["session"]
+    capture = _base_learning_capture()
+    blind_assessment = _blind_assessment_for()
+    item, context = _lock_base(
+        client,
+        session,
+        "AAA",
+        learning_capture=capture,
+        blind_assessment=blind_assessment,
+    )
+    payload = _finalize_payload(
+        session,
+        "AAA",
+        item=item,
+        context=context,
+        learning_capture=capture,
+        key="automatic-detector-comparison-finalize",
+    )
+    payload["detectorReview"].update(
+        {
+            "acceptedTopIds": [],
+            "rejectedTopIds": [],
+            "matchedHumanTops": [],
+            "missingHumanTops": [],
+            "acceptableHypothesisIds": [],
+            "rejectedHypothesisIds": [],
+            "patternLabel": blind_assessment["patternLabel"],
+            "lifecycleLabel": blind_assessment["lifecycleLabel"],
+            "reasonCodes": ["automatic_label_comparison"],
+            "timing": {"reviewOrder": "blind_first"},
+        }
+    )
+
+    response = client.post(
+        f"/api/review-sessions/{session['id']}/items/AAA/finalize",
+        headers=_headers(),
+        json=payload,
+    )
+
+    assert response.status_code == 200, response.text
+    finalized = client.post(
+        f"/api/review-sessions/{session['id']}/finalize",
+        headers=_headers(),
+    )
+    assert finalized.status_code == 200, finalized.text
+    record = finalized.json()["export"]["records"][0]["record"]
+    assert record["detectorReview"]["reasonCodes"] == [
+        "automatic_label_comparison"
+    ]
+    assert record["detectorReview"]["acceptedTopIds"] == []
 
 
 @pytest.mark.parametrize("base_path", ["exception_territory", "uncertain"])

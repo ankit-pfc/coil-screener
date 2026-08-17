@@ -133,7 +133,19 @@ def _draft_matches_base_classification(
     blind_assessment = classification.get("blindAssessment")
     if blind_assessment is not None:
         payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else draft
-        if payload.get("blindAssessment") != blind_assessment:
+        raw_blind_assessment = payload.get("blindAssessment")
+        try:
+            # The browser omits schema defaults such as role=major_top while
+            # the validated lock model materializes them. Compare the same
+            # normalized contract on both sides rather than raw JSON shapes.
+            from review_capture import BlindAssessment
+
+            normalized_draft_blind = BlindAssessment.model_validate(
+                raw_blind_assessment
+            ).model_dump(mode="json", by_alias=True)
+        except (TypeError, ValidationError, ValueError):
+            return False
+        if normalized_draft_blind != blind_assessment:
             return False
     return True
 
