@@ -11,6 +11,12 @@ import pandas as pd
 import requests
 import yfinance as yf
 
+from history_providers import (
+    configured_provider_name,
+    fetch_eodhd_daily_history,
+    load_frozen_daily_history,
+)
+
 
 DEFAULT_TICKERS = [
     "AER",
@@ -142,6 +148,8 @@ def _split_adjust_and_aggregate_monthly(daily: pd.DataFrame) -> pd.DataFrame:
             "provider history cannot prove split adjustment; missing "
             + ", ".join(missing)
         )
+    provider = str(daily.attrs.get("source") or "yfinance")
+    provider_symbol = daily.attrs.get("provider_symbol")
     frame = daily.copy().sort_index()
     if frame.empty:
         return frame
@@ -187,16 +195,33 @@ def _split_adjust_and_aggregate_monthly(daily: pd.DataFrame) -> pd.DataFrame:
     monthly.index = monthly.index.to_timestamp()
     monthly.attrs.update(
         {
+            "source": provider,
+            "provider_symbol": provider_symbol,
             "adjustment_mode": "split_adjusted",
-            "adjustment_source": "yfinance_stock_splits",
+            "adjustment_source": str(
+                daily.attrs.get("adjustment_source")
+                or f"{provider}_stock_splits"
+            ),
             "source_interval": "1d",
-            "adjustment_transform_version": "yfinance-stock-splits-v1",
+            "adjustment_transform_version": (
+                "yfinance-stock-splits-v1"
+                if provider == "yfinance"
+                else f"{provider}-stock-splits-v1"
+            ),
+            "provider_history_start": daily.attrs.get("provider_history_start"),
+            "provider_history_end": daily.attrs.get("provider_history_end"),
         }
     )
     return monthly
 
 
-def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
+def fetch_daily_history(ticker: str) -> pd.DataFrame:
+    """Return a raw daily provider frame; yfinance remains the default."""
+    provider = configured_provider_name()
+    if provider == "eodhd":
+        return fetch_eodhd_daily_history(ticker)
+    if provider == "frozen_csv":
+        return load_frozen_daily_history(ticker)
     data = yf.download(
         ticker,
         period="max",
@@ -206,6 +231,20 @@ def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
         progress=False,
         multi_level_index=False,
     )
+    if data is not None:
+        data.attrs.update(
+            {
+                "source": "yfinance",
+                "provider_symbol": ticker,
+                "adjustment_source": "yfinance_stock_splits",
+                "source_interval": "1d",
+            }
+        )
+    return data
+
+
+def fetch_monthly_history(ticker: str) -> Optional[pd.DataFrame]:
+    data = fetch_daily_history(ticker)
     if data is None or data.empty:
         return None
     return _split_adjust_and_aggregate_monthly(data)
@@ -228,6 +267,16 @@ def chunked(items: List[str], size: int) -> Iterable[List[str]]:
 
 def fetch_monthly_histories(tickers: List[str], batch_size: int = 10) -> dict[str, pd.DataFrame]:
     histories: dict[str, pd.DataFrame] = {}
+
+    if configured_provider_name() != "yfinance":
+        for ticker in tickers:
+            try:
+                monthly = fetch_monthly_history(ticker)
+            except Exception:
+                continue
+            if monthly is not None and not monthly.empty:
+                histories[ticker] = monthly
+        return histories
 
     for batch in chunked(tickers, batch_size):
         data = yf.download(

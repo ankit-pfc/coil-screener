@@ -47,6 +47,49 @@ The practical first build is:
 
 We are intentionally starting with a lightweight setup so we can get the monthly screener working before adding a heavier finance stack.
 
+## Long-history research pilot
+
+The production default remains `yfinance`. Detector research can now use an
+explicit provider boundary without changing API generations, review storage,
+or the sealed v2.4 benchmark:
+
+- `eodhd` fetches raw daily OHLCV plus the separate split-event history;
+- `frozen_csv` imports a dated vendor export for offline/reproducible trials;
+- CoilingView applies the same split-only transform, completed-quarter cutoff,
+  and strict OHLC integrity checks to either input.
+
+Every non-US EODHD symbol must be mapped explicitly; exchange suffixes are not
+guessed. The API token is read from the environment and is never persisted.
+
+Build the example development corpus from EODHD:
+
+```bash
+export COILINGVIEW_EODHD_API_TOKEN='replace-with-a-local-secret'
+python3 scripts/build_long_history_pilot.py \
+  --provider eodhd \
+  --spec examples/long_history_pilot.example.json \
+  --output /private/tmp/coilingview-long-history-pilot \
+  --as-of 2026-06-30
+```
+
+For a provider-delivered export, create one `<TICKER>.csv` per symbol with the
+columns `Date,Open,High,Low,Close,Volume,Stock Splits`, then run:
+
+```bash
+python3 scripts/build_long_history_pilot.py \
+  --provider frozen_csv \
+  --frozen-root /path/to/frozen-daily-files \
+  --spec examples/long_history_pilot.example.json \
+  --output /private/tmp/coilingview-long-history-pilot \
+  --as-of 2026-06-30
+```
+
+Add a trustworthy `listed_since` date to every spec entry before using the
+manifest as a coverage audit. A start within 366 days is recorded as plausible
+inception coverage; a later start is explicitly `truncated`. The output is an
+unlabeled development corpus and intentionally contains no benchmark holdout
+labels.
+
 ## Planned Outputs
 
 - reproducible local environment

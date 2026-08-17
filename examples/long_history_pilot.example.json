@@ -1,0 +1,16 @@
+{
+  "symbols": [
+    {
+      "ticker": "UNP",
+      "provider_symbol": "UNP.US"
+    },
+    {
+      "ticker": "0005.HK",
+      "provider_symbol": "0005.HK"
+    },
+    {
+      "ticker": "INFY.NS",
+      "provider_symbol": "INFY.NSE"
+    }
+  ]
+}
