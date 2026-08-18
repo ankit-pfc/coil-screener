@@ -1,0 +1,12 @@
+{
+  "symbols": [
+    {
+      "ticker": "0005.HK",
+      "company_name": "HSBC Holdings plc",
+      "provider_symbol": "0005.HK",
+      "listed_since": "1991-04-08",
+      "listing_date_source": "https://history.hsbc.com/index.php/collections/global-archives/hsbc-holdings-plc",
+      "as_of": "2026-06-30"
+    }
+  ]
+}

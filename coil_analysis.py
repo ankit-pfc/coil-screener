@@ -2195,6 +2195,7 @@ def analyze_coil(
     variant: str = ANALYSIS_VARIANT_V2_3_1,
     mode: str = ANALYSIS_MODE_EFFECTIVE,
     adjustment_mode: str = ADJUSTMENT_UNKNOWN,
+    validation_config: Any | None = None,
 ) -> dict[str, Any]:
     """Full analysis of one monthly bar series. JSON-ready dict, schema v2.
 
@@ -2220,6 +2221,7 @@ def analyze_coil(
             as_of=as_of,
             adjustment_mode=adjustment_mode,
             mode=mode,
+            **({"config": validation_config} if validation_config is not None else {}),
         )
     if variant != ANALYSIS_VARIANT_V2_3_1:
         raise ValueError(f"unsupported analysis variant: {variant}")

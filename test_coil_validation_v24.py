@@ -31,6 +31,15 @@ def mature_coil_bars() -> list[dict]:
     return bars
 
 
+def strict_mature_coil_bars() -> list[dict]:
+    bars = copy.deepcopy(mature_coil_bars())
+    for peak_index in (20, 60, 100):
+        for index in range(peak_index + 1, peak_index + 7):
+            for field in ("open", "high", "low", "close"):
+                bars[index][field] *= 0.65
+    return bars
+
+
 def analyze(bars: list[dict]) -> dict:
     return analyze_coil(
         bars,
@@ -195,6 +204,30 @@ def test_continuous_multi_quarter_shoulder_is_one_plateau():
     assert pivots == [1, 3]
     assert clustered == [1]
 
+    quarters = [
+        {
+            "quarter_key": (2000 + idx // 4, idx % 4 + 1),
+            "date": f"{2000 + idx // 4}-{(idx % 4 + 1) * 3:02d}-01",
+            "last_month": (idx % 4 + 1) * 3,
+            "open": high - 2.0,
+            "high": high,
+            "low": high - 8.0,
+            "close": high - 3.0,
+            "volume": 1_000.0,
+            "high_month_idx": idx * 3,
+            "close_month_idx": idx * 3 + 2,
+            "peak_date": f"{2000 + idx // 4}-{(idx % 4 + 1) * 3:02d}-01",
+        }
+        for idx, high in enumerate(highs)
+    ]
+    candidates, _ = v24._top_candidates(quarters, v24.DEFAULT_CONFIG)
+    shoulder = next(item for item in candidates if item["quarter_index"] == 1)
+    assert shoulder["plateau_start_quarter_index"] == 1
+    assert shoulder["plateau_end_quarter_index"] == 3
+    assert shoulder["plateau_quarters"] == 3
+    if shoulder["structural_eligible"]:
+        assert shoulder["confirmation_lag_quarters"] is not None
+
 
 def test_hypothesis_support_counts_only_quarter_separated_contacts():
     quarters = [{"close": 90.0, "low": 80.0} for _ in range(9)]
@@ -251,16 +284,30 @@ def test_sub_ten_year_structure_abstains_without_legacy_geometry():
     assert result["resistance"] is None
 
 
-def test_mature_structure_publishes_ranked_hypotheses_band_and_compatibility():
+def test_mature_structure_without_strict_major_evidence_abstains():
     result = analyze(mature_coil_bars())
 
+    assert result["structure_validity"] == "uncertain_structure"
+    assert result["readiness"] == "uncertain_structure"
+    assert result["confidence"] == "medium"
+    assert result["abstained"] is True
+    assert result["grade"] is None
+    assert result["resistance"] is None
+    assert result["active_lid"] is None
+    assert result["points"] == []
+    assert result["major_highs"] == []
+    assert result["lid_hypotheses"][0]["strict_major_count"] == 0
+    assert "required_strict_major_evidence" in result["pattern_assessment"][
+        "failed_rules"
+    ]
+
+
+def test_strict_mature_structure_publishes_hypotheses_band_and_compatibility():
+    result = analyze(strict_mature_coil_bars())
+
     assert result["structure_validity"] == "qualified"
-    assert result["readiness"] == "pre_breakout"
     assert result["confidence"] == "high"
     assert result["abstained"] is False
-    assert result["lifecycle"] == "pre_breakout"
-    assert result["status"] == "coiling"
-    assert result["grade"] == "A"
     assert result["resistance"] is not None
     assert result["active_lid"] is not None
     assert result["coil_score"] == 0.0
@@ -284,6 +331,24 @@ def test_mature_structure_publishes_ranked_hypotheses_band_and_compatibility():
     assert any(item["secondary_compatibility_eligible"] for item in confirmed)
     assert all(point["confirmed_at"] for point in result["points"])
     assert "completed_period_volume_contraction" in result["metrics"]
+
+
+def test_unverified_adjustment_provenance_blocks_v24_classification():
+    result = v24.analyze_coil_v24(
+        strict_mature_coil_bars(), adjustment_mode="unknown"
+    )
+
+    assert result["status"] == "invalid_data"
+    assert result["structure_validity"] == "invalid_data"
+    assert result["confidence"] == "low"
+    assert result["abstained"] is True
+    assert result["analysis_metadata"]["classification_blocked"] is True
+    assert result["points"] == []
+    assert result["major_highs"] == []
+    assert result["resistance"] is None
+    assert result["pattern_assessment"]["failed_rules"] == [
+        "verified_split_adjustment"
+    ]
 
 
 def test_equal_support_divergent_lids_abstain_without_speculative_winner(monkeypatch):
@@ -564,7 +629,7 @@ def test_future_bars_do_not_backfill_v24_top_confirmation():
 
 
 def test_review_ids_are_sample_scoped_and_compatibility_refs_resolve():
-    bars = mature_coil_bars()
+    bars = strict_mature_coil_bars()
     first = analyze_coil(
         bars,
         ticker="AAA",

@@ -300,6 +300,7 @@ def get_history_payload(
         )
 
     try:
+        live_source = str(live.attrs.get("source") or source)
         live_adjustment_mode = str(
             live.attrs.get("adjustment_mode")
             or adjustment_mode
@@ -324,7 +325,7 @@ def get_history_payload(
             bars,
             features_dict,
             fetched_at=now,
-            source=source,
+            source=live_source,
             adjustment_mode=live_adjustment_mode,
             adjustment_source=(
                 str(adjustment_source) if adjustment_source is not None else None

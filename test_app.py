@@ -371,7 +371,18 @@ def test_bundled_seed_covers_demo_universe():
 # --------------------------------------------------------------------------- #
 def _seed_coil_cache(tmp_cache, ticker: str, bars: list[dict]) -> None:
     tmp_cache.mkdir(parents=True, exist_ok=True)
-    payload = {"ticker": ticker, "bars": bars, "features": None}
+    payload = {
+        "ticker": ticker,
+        "bars": bars,
+        "features": None,
+        "cache_metadata": {
+            "schema_version": 4,
+            "adjustment_mode": "split_adjusted",
+            "adjustment_source": "yfinance_stock_splits",
+            "source_interval": "1d",
+            "adjustment_transform_version": "yfinance-stock-splits-v1",
+        },
+    }
     (tmp_cache / f"{ticker}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -470,7 +481,11 @@ def test_coil_v24_validation_endpoint_is_additive_and_algorithm_only(
     assert body["top_candidates"]
     assert body["lid_hypotheses"]
     assert body["resistance_band"] is not None
-    assert body["pattern_assessment"]["structure_state"] == "qualified"
+    assert body["pattern_assessment"]["structure_state"] == "uncertain_structure"
+    assert body["pattern_assessment"]["abstained"] is True
+    assert "required_strict_major_evidence" in body["pattern_assessment"][
+        "failed_rules"
+    ]
 
 
 def test_coil_v24_endpoint_scopes_evidence_ids_to_ticker(client, monkeypatch, tmp_cache):

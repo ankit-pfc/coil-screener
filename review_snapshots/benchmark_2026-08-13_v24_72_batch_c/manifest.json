@@ -1,0 +1,710 @@
+{
+  "benchmark_canonical_source": "benchmark_2026-08-13_v24_72.csv",
+  "benchmark_id": "coilingview-v24-72",
+  "benchmark_partition": "validation",
+  "canonicalization": {
+    "adjustment_mode": "split_adjusted",
+    "adjustment_source": "yfinance_stock_splits",
+    "adjustment_transform_version": "yfinance-stock-splits-v1",
+    "as_of_policy": "completed quarter only",
+    "source_interval": "1d"
+  },
+  "generated_at": "2026-08-13T13:30:00Z",
+  "items": [
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "1e8e7d5ad7c1c5462732e09711cce4e202a78e7c19007eb7c89570a30a387b32",
+      "bar_count": 318,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_f3abc94b545ae2e1378d",
+      "benchmark_task_id": "task_2b080137798967778b86",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 1,
+        "reviewable": true,
+        "status": "valid_with_warnings"
+      },
+      "first_data_date": "2000-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "1e8e7d5ad7c1c5462732e09711cce4e202a78e7c19007eb7c89570a30a387b32",
+        "bars_sha256": "7527867bd7400bf4b913faa0093e45865ffe528f17d5394c5747de13a7425ad9",
+        "sample_file_sha256": "a951f4815904a3957dc38d578fdd85353d4242ad8bf616dd80c0a5bb56b05a6c",
+        "source_fingerprint": "0b0cc3aa146f54bcdeb13b69e3238f4d4ffa0c2c36c62f790600cc400c248b84"
+      },
+      "sample_file": "MC.PA.json",
+      "sample_id": "sample_f3abc94b545ae2e1378d",
+      "screen_snapshot_sha256": "60491d7cc5db03484bae70255e837cc7d73c23f6ff1cc7bc7f5722e14511ab8b",
+      "snapshot_sha256": "6ec0424ba8c2268a359cd48ca7afca960bd4801546ade92276503fb9f36e0cb9",
+      "ticker": "MC.PA",
+      "ticker_family": "MC.PA"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "bf3d8d6ab382805d921102dde8e41828a3571d3fc594e5607a214b4d44e680ca",
+      "bar_count": 318,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_a3498074e0485dc97a2c",
+      "benchmark_task_id": "task_affa884c9e9ad8c3a08b",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 1,
+        "reviewable": true,
+        "status": "valid_with_warnings"
+      },
+      "first_data_date": "2000-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "bf3d8d6ab382805d921102dde8e41828a3571d3fc594e5607a214b4d44e680ca",
+        "bars_sha256": "2e62171bb5d615a545defa4baf0569b5b6891e27b6ae945e0390eea2fc8d8d29",
+        "sample_file_sha256": "cfe95dd5393a0d2c7f775815b200c1922a304a0841201b9350780b89a12673cc",
+        "source_fingerprint": "9d6884d945da326329d25577ad2fd1f154c5617148b5b7f7412913ed046b0da1"
+      },
+      "sample_file": "OR.PA.json",
+      "sample_id": "sample_a3498074e0485dc97a2c",
+      "screen_snapshot_sha256": "1532691c105c7443a959dfd06d73d42b69dcd3d4a88a4c64018279f40a68dbdc",
+      "snapshot_sha256": "3e8d84f9c1d589bb9f7ab3a070844511e34d47ef3f55939a4e1d31315c6c8652",
+      "ticker": "OR.PA",
+      "ticker_family": "OR.PA"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "90e858284318755f3a6b8000be2874c630e5e1c4740e04bf6f42530a636c7611",
+      "bar_count": 336,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_fec606ccc0a8a674b670",
+      "benchmark_task_id": "task_cdf929ba46c675127c78",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1998-07-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "90e858284318755f3a6b8000be2874c630e5e1c4740e04bf6f42530a636c7611",
+        "bars_sha256": "e0465bab87862995629e64a6030f1bc85f05e8e1366c5aa2f97352c577b093a1",
+        "sample_file_sha256": "a46fa314d3af7a61c43344d2988ceecb4709ae920f0d79311e32f57cf11b9f9c",
+        "source_fingerprint": "d99779d3f0720900c6e6be484893a5fd6f42bd6f207b0a6165ddbf46e7c3b612"
+      },
+      "sample_file": "ASML.AS.json",
+      "sample_id": "sample_fec606ccc0a8a674b670",
+      "screen_snapshot_sha256": "af45dd1004eb851caeed3b37e62314cb7340a8a52f287ffdcbaf85afef6fdea3",
+      "snapshot_sha256": "8883893d87a8c512ca1688c5bd1dad9eac7c8fb6f22666d2f30f354a293e8a1c",
+      "ticker": "ASML.AS",
+      "ticker_family": "ASML.AS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2024-03-31",
+      "backend_bars_identity_sha256": "3ca85d489de9f05afffbf5f31bf8b06eee91cbdb863e9a6ca72be77c02c946d7",
+      "bar_count": 411,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_5575c52e6fb3548aa4ab",
+      "benchmark_task_id": "task_acc6c9b0280c168ebc4f",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1990-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2024-03-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "3ca85d489de9f05afffbf5f31bf8b06eee91cbdb863e9a6ca72be77c02c946d7",
+        "bars_sha256": "f698802379965f72a26897f0208cac0b65414cae42f5116ab291b92b757348c5",
+        "sample_file_sha256": "150bbca810356592f3bbed26e06670d30ba168d2b876ed43fd58157a0291ce3a",
+        "source_fingerprint": "db7e3642f75b398bb57057a29e45328ddb366aea5a3e39212c3aa117c6c26bf3"
+      },
+      "sample_file": "NESN.SW.json",
+      "sample_id": "sample_5575c52e6fb3548aa4ab",
+      "screen_snapshot_sha256": "3fc30d5ac53da68caee1044d0d452d879a41717db4e74d72ae549220a2b4d760",
+      "snapshot_sha256": "71853d9e4dcca4da6ad76615429f64f5b3c16340cd4e30b1eafd0a2cb408ea05",
+      "ticker": "NESN.SW",
+      "ticker_family": "NESN.SW"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "0237afb89485b059b0ededd11bca66453403cf6ea83b3614847660e6730bfe4e",
+      "bar_count": 326,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_6c7a3db3a8c8d159e8ad",
+      "benchmark_task_id": "task_02c30a9fc380353f4290",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 1,
+        "reviewable": true,
+        "status": "valid_with_warnings"
+      },
+      "first_data_date": "1999-05-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "0237afb89485b059b0ededd11bca66453403cf6ea83b3614847660e6730bfe4e",
+        "bars_sha256": "24b74ac9b8cb7646576ef6041dafe03ec58f6399bb652c3d58460801a1967265",
+        "sample_file_sha256": "5bd79d205557f6393ed3d430735524326efcb5969224264a00f89a8cc66fcb5d",
+        "source_fingerprint": "81c4a08308bb08dbb6f2fcc2f847d067b7cab00c917bff820450b61cfb4bcd58"
+      },
+      "sample_file": "7203.T.json",
+      "sample_id": "sample_6c7a3db3a8c8d159e8ad",
+      "screen_snapshot_sha256": "f2a8181d4c24dad7f761ca8ee4b82297f8ee7d5592c7a5c660b3d5c3970d2e9d",
+      "snapshot_sha256": "5e40039151aad20d8854554129c27a10d36bd4988f6a3d36dc755b01edb250cf",
+      "ticker": "7203.T",
+      "ticker_family": "7203.T"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "22537f3bf233ce4456ab8f3821ad32cebda025006c267f2d1608784d97969261",
+      "bar_count": 318,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_9591e755d34b2b30f900",
+      "benchmark_task_id": "task_53a33b332175f58bc92e",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2000-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "22537f3bf233ce4456ab8f3821ad32cebda025006c267f2d1608784d97969261",
+        "bars_sha256": "3eb81f4ad1870d89d9dc8d0106e6760640d9eca4b48cbc3fc9a9f8ded6ae6d00",
+        "sample_file_sha256": "49bd76f5f6a2389da320b80d6daf098bb09b926c50daedb6ff3face34ea3bbef",
+        "source_fingerprint": "59667386929b4092243904962d3bebab2b22d68518e5cb7a3edf7e8e364dbc1a"
+      },
+      "sample_file": "6758.T.json",
+      "sample_id": "sample_9591e755d34b2b30f900",
+      "screen_snapshot_sha256": "05af0d717196a507ace7d07c5c0fe95b613c45b6e71959fc1a5704d66ea16cdd",
+      "snapshot_sha256": "3428b262c457f234ff339cd03e52828ca097eb09dd32a99d85790b4a8a40b269",
+      "ticker": "6758.T",
+      "ticker_family": "6758.T"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "c04753bed8f2fe6253fc261fecf986755c9183f41a5168db6ebe339ea817c08b",
+      "bar_count": 276,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_a27b956ca31365d09d99",
+      "benchmark_task_id": "task_abc080291265637b1b0a",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2003-07-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "c04753bed8f2fe6253fc261fecf986755c9183f41a5168db6ebe339ea817c08b",
+        "bars_sha256": "ccb24c08788bc44339eeeb47091caf1369db1933c1ebfb9c3dd4d4485f83784e",
+        "sample_file_sha256": "680f776c7e30dcb1919f423f5f5176ce778542d193243da9a36b064b735ce2b5",
+        "source_fingerprint": "2e770d83e3dda9ff371fee5388ae07a3e0b91588c5db2fd865d031e99529e4de"
+      },
+      "sample_file": "MARUTI.NS.json",
+      "sample_id": "sample_a27b956ca31365d09d99",
+      "screen_snapshot_sha256": "ad4a6211ae53e2720ff396fe18db2d782d2e8d09cba1be5ba6dd23a5e100bac8",
+      "snapshot_sha256": "bb6c6e1be6d2c8c5678a1da8425e0e80576481bd940ed6f0e0a4313b3edf9c5a",
+      "ticker": "MARUTI.NS",
+      "ticker_family": "MARUTI.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "a83cf161686cdcf5760625c3aa2eaaf5d850d372e9a85cec027dcd1e2e0c8725",
+      "bar_count": 364,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_e7779646918570176276",
+      "benchmark_task_id": "task_d5b12be514a45ea9a4e7",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-03-01",
+      "history_start": "1996-03-01",
+      "history_start_policy": {
+        "first_included_month": "1996-03-01",
+        "kind": "exclude_pre_cutoff_provider_rows",
+        "reason": "predeclared strict-OHLC remediation before label exposure"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "a83cf161686cdcf5760625c3aa2eaaf5d850d372e9a85cec027dcd1e2e0c8725",
+        "bars_sha256": "b7b5adc8650692ff441ba254e9ea6bd5cddace90cf371cc60e164d460333290c",
+        "sample_file_sha256": "906bca0abce1dfe00b73e0dd3f2e8f98a268641bd3f2a1d596f72ca1d6d61f22",
+        "source_fingerprint": "efec9c2ee32177547027b20b8c43559e139df5493fa0592b3cf601ff36f7eb3d"
+      },
+      "sample_file": "SUNPHARMA.NS.json",
+      "sample_id": "sample_e7779646918570176276",
+      "screen_snapshot_sha256": "ebd3c790f4768dcca1d0188f1b40fe03ba5cbbead17c12f0e299b67f72ece939",
+      "snapshot_sha256": "ed5ef21ad96eca016f2fe6ecc5752b9363f42ad6640974b17568cb7967e645e4",
+      "ticker": "SUNPHARMA.NS",
+      "ticker_family": "SUNPHARMA.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "e0fbc3dd2b1ed8d264b990a0618515dac66fb4eec18f0d6d013a16a0f80e4126",
+      "bar_count": 366,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_3ee97a227ba316accfc3",
+      "benchmark_task_id": "task_e6ea11576622c5e0c7d4",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "e0fbc3dd2b1ed8d264b990a0618515dac66fb4eec18f0d6d013a16a0f80e4126",
+        "bars_sha256": "879474946130bd06a520695b08ec0853a61aa6760ed4bc9462d647cfb8ec804d",
+        "sample_file_sha256": "2b3567fd13731e8601c0256e98e3db24de1baad733321fae548afbbda990aab7",
+        "source_fingerprint": "c8eaf4bb0c2bc0448d2f41bf80d3eeeb7a400ff3712e9b4c50b4efbf61b53eec"
+      },
+      "sample_file": "TITAN.NS.json",
+      "sample_id": "sample_3ee97a227ba316accfc3",
+      "screen_snapshot_sha256": "d1d47fb3f6c94eec61ef89e46e5d8ec74b4386b03c60e52428521e034c5fe8a0",
+      "snapshot_sha256": "302f7491ecce5ca7a53c6dafa36d1545408792b22784558ee91c742fc80f84fd",
+      "ticker": "TITAN.NS",
+      "ticker_family": "TITAN.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2024-03-31",
+      "backend_bars_identity_sha256": "ffc98bf7e3f0e731cc215ccbab0c02cc5b103824731a1dd313b5ea07c4de714d",
+      "bar_count": 233,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_ccb5339870db05f50d28",
+      "benchmark_task_id": "task_325bb0b060b9900aec89",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2004-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2024-03-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "ffc98bf7e3f0e731cc215ccbab0c02cc5b103824731a1dd313b5ea07c4de714d",
+        "bars_sha256": "5fdb80ad1683661176cb96bd9f4afa8a1ec2967e2f102d9294f548c66810cd3f",
+        "sample_file_sha256": "dd673d8607425188b6667fab1d13f288c96a8e9803253599ccf996777a5ad665",
+        "source_fingerprint": "429764333e5ac8f32d6c4e2436f94b57cd80cf941804c215fe3b1a9564b644fa"
+      },
+      "sample_file": "NTPC.NS.json",
+      "sample_id": "sample_ccb5339870db05f50d28",
+      "screen_snapshot_sha256": "bcb1dbc5f966c7d8f654d53f4c6d4471a9edf074f7c6c80825c038c9a3eba608",
+      "snapshot_sha256": "86a2352a7313f521d671ca6e8408014618135d760a78e48b5f09214da9fb5731",
+      "ticker": "NTPC.NS",
+      "ticker_family": "NTPC.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "8ce8f18215084cc2f4248f6076107a16cf9e8a36e1ab1d4f8766b682594bbb6f",
+      "bar_count": 366,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_55b233bd77d3f4254b14",
+      "benchmark_task_id": "task_894ba70b26604a1f88a3",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "8ce8f18215084cc2f4248f6076107a16cf9e8a36e1ab1d4f8766b682594bbb6f",
+        "bars_sha256": "ac7b3d3c768ff89666e8a39e0e19e8dab55cc11be174115e29b1000592a1ae4e",
+        "sample_file_sha256": "5e4fd5bd64db7f72f051bb141e03ddde3bfb970019e9a8d2fdb74e2e8ec60928",
+        "source_fingerprint": "4bc57760737507be87a15950a0e2c877c96ca8051cb80c5bbcb864ec6d76e7db"
+      },
+      "sample_file": "ONGC.NS.json",
+      "sample_id": "sample_55b233bd77d3f4254b14",
+      "screen_snapshot_sha256": "10bef5e6deff1063499c93999a0bed414eb287869defc0028169c18dccbaf243",
+      "snapshot_sha256": "6705c9553476f1397b658e0461725074ed4ac1866be0c3583414dfe6a345c8ea",
+      "ticker": "ONGC.NS",
+      "ticker_family": "ONGC.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "2a4f0a16f1e9084e2bbaa28090166d2de0855f0ea9d6ad888241a0c635186d72",
+      "bar_count": 225,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_ee62680d3d113657fdb0",
+      "benchmark_task_id": "task_e2527692215803ca8bed",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2007-10-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "india",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "2a4f0a16f1e9084e2bbaa28090166d2de0855f0ea9d6ad888241a0c635186d72",
+        "bars_sha256": "413f7b65a2d87d74ebd4a8137d80951df548232f1681168e5b999ba9d8f55c8c",
+        "sample_file_sha256": "994b6f25388605d8c41273edf8f4b87da6c7f19305f9320a82e59b1b37a3e5ee",
+        "source_fingerprint": "65e06170deae7a024151fb795fb33f414d7cd8bbbe6dcbd7ccb0b9a940864b62"
+      },
+      "sample_file": "POWERGRID.NS.json",
+      "sample_id": "sample_ee62680d3d113657fdb0",
+      "screen_snapshot_sha256": "05b8aab46796632ff8ca68e97e0c48a85f640b821089a6ffceecc6a241cc80b4",
+      "snapshot_sha256": "7ad829a26d7f96808031ffb65d9f356a053493dcd9fa995450033f15cb59b3cf",
+      "ticker": "POWERGRID.NS",
+      "ticker_family": "POWERGRID.NS"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "11e8b9f876989f07b21fc57f978d6a3ce3ad34751fd2ae5ff05178ffd4f19770",
+      "bar_count": 380,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_037555ebcf7283b01a0c",
+      "benchmark_task_id": "task_a7ef8aa7a4e88a22de43",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1994-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "11e8b9f876989f07b21fc57f978d6a3ce3ad34751fd2ae5ff05178ffd4f19770",
+        "bars_sha256": "96f7eed2b7c9e001fffdbf897028c87aa182280ac4f0d782bf9a0956f9bf0989",
+        "sample_file_sha256": "4e5e5dffcaea6cd7d16d3ae16ea8c79fbf00f459080b49b72ff45270aed413c9",
+        "source_fingerprint": "6dfed599164dab98100c134b1acff3ed0b96b7891b26773328e368cf418abe55"
+      },
+      "sample_file": "COF.json",
+      "sample_id": "sample_037555ebcf7283b01a0c",
+      "screen_snapshot_sha256": "f74df0431e6955f1969206f9a84fc5bcad136dea6f4df52d35bcb630a2a89dd9",
+      "snapshot_sha256": "16bafce3fcd51215ebfd6cf2010d24a76fe349a761af7f1464e6d6bd276b6846",
+      "ticker": "COF",
+      "ticker_family": "COF"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "335fea598493a2d7254bf705bdd21bf65c2cad79976c4bacc9178ca4e8c58654",
+      "bar_count": 548,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_14ca983e71b15a3c38d6",
+      "benchmark_task_id": "task_b742ae6009b412b1cf78",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1980-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "335fea598493a2d7254bf705bdd21bf65c2cad79976c4bacc9178ca4e8c58654",
+        "bars_sha256": "629234ece57f6c9b76cbdbe8bd81e66791d247c32024202130643cce0e9e070a",
+        "sample_file_sha256": "44fe5d85495b5bf3fb92d9eea0a033f683b23c5d33fadb810bc1b2428ef07c04",
+        "source_fingerprint": "ae5dc49a3a79cb02af28a79447826aaae9e0042b781a9bcb467443f0f5b7b02a"
+      },
+      "sample_file": "CSX.json",
+      "sample_id": "sample_14ca983e71b15a3c38d6",
+      "screen_snapshot_sha256": "6f777f9066509522fe59243d1ba2864d3aa950de6c226b6ce33aa39005f50c06",
+      "snapshot_sha256": "a0f56f3b5728ddc78959ab3f9585dd0cb1429b8396d7f865aba36a15996e8b3a",
+      "ticker": "CSX",
+      "ticker_family": "CSX"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "84e75971564d25899695331f2d869aa96160c519fe739f4df15b566ba70b8368",
+      "bar_count": 529,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_35feb281be40781ed23b",
+      "benchmark_task_id": "task_a92202e5f089ab97a53d",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1982-06-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "84e75971564d25899695331f2d869aa96160c519fe739f4df15b566ba70b8368",
+        "bars_sha256": "f22569f65287f2ae772fd5ab7016fdeeaebb3690e6887e010d4b515cd17f1780",
+        "sample_file_sha256": "f9c846457614dba20065ba73f3ff61a70d5b65bb95345d3a46b19026500c15d2",
+        "source_fingerprint": "b9f1755a08ba5e02f774829f5138b79adc008048d0080d59df517c8855f8cc90"
+      },
+      "sample_file": "NSC.json",
+      "sample_id": "sample_35feb281be40781ed23b",
+      "screen_snapshot_sha256": "bb6ca7c280d2dde24783a3cae2ddf2b78fb5abf89c72b4b594b688deae4db968",
+      "snapshot_sha256": "b2f0536aaafec65478d7a4997c92cfddf169b19f84155742087b9696094d83eb",
+      "ticker": "NSC",
+      "ticker_family": "NSC"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2024-03-31",
+      "backend_bars_identity_sha256": "eda1d7e2e7f759f6cbd5dfab0595134eaf7bfaa51190097c64571a9963c21584",
+      "bar_count": 520,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_488ff08d75b3c8849d0a",
+      "benchmark_task_id": "task_a767941f1b1164f4e6d1",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1980-12-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2024-03-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "eda1d7e2e7f759f6cbd5dfab0595134eaf7bfaa51190097c64571a9963c21584",
+        "bars_sha256": "dfec0b042096ec77739e3f901851cd4fbee1e7c60eced653fe1a7d7ba4caf38b",
+        "sample_file_sha256": "0d44a18e8c595bca4855de2fcd83c32c0696eb12b86d2f78f3511acf14400d37",
+        "source_fingerprint": "012e92ead7a248f149fa4749f5ab0b08031d3913d9b60871a7dad5b9f515f74a"
+      },
+      "sample_file": "AAPL.json",
+      "sample_id": "sample_488ff08d75b3c8849d0a",
+      "screen_snapshot_sha256": "6f9cf6d70246f085cafb0adf6960cb65d33d4c3e63d2a6f47184d31a350cf06f",
+      "snapshot_sha256": "7b239a271c5d5b9ef8f5bf8de3c0088d878f82dad067d3054cfc4548f436c1d5",
+      "ticker": "AAPL",
+      "ticker_family": "AAPL"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "7735e8231511e0b7d8cbed3feafc5167cc0f2df501f930c0cc07da5d20a2a018",
+      "bar_count": 484,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_9c8776e9cbcb8b1a970a",
+      "benchmark_task_id": "task_be1080a33de7c71d4756",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1986-03-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "7735e8231511e0b7d8cbed3feafc5167cc0f2df501f930c0cc07da5d20a2a018",
+        "bars_sha256": "ff28d0afc7ef178a7c8a86b64240d23d03ed39333353b402bbadff7b2d99bf0a",
+        "sample_file_sha256": "3a9d3a7194f1e80e01d48db2c247c86af5554bdab7544d5e1312c0fa7beb2100",
+        "source_fingerprint": "a0f915692cb0d568602380254606c7d97881c11d08641f053a69aa2ec5986c59"
+      },
+      "sample_file": "MSFT.json",
+      "sample_id": "sample_9c8776e9cbcb8b1a970a",
+      "screen_snapshot_sha256": "0b4c53cb9dd737155d489aaf89586cb0da8b6e664cb14091230164633226c7ab",
+      "snapshot_sha256": "402bb14a7321438d2a468d723d6a27151a08441a577f25ec9b3426fd43138a13",
+      "ticker": "MSFT",
+      "ticker_family": "MSFT"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "59a16acf8f76e16a0e1bcc68cfb383ceb6266345fca1046a2d0a061ffa02d6d8",
+      "bar_count": 774,
+      "benchmark_attempt": 1,
+      "benchmark_sample_id": "sample_20c8793332be7fe85110",
+      "benchmark_task_id": "task_5993c3e376a70069f901",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1962-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "united_states",
+      "new_or_remediated": true,
+      "partition": "validation",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "59a16acf8f76e16a0e1bcc68cfb383ceb6266345fca1046a2d0a061ffa02d6d8",
+        "bars_sha256": "4bc9e459c8267b7a35d8b1dc4f3cf5f3b94dfe7bb274550b86cf9981507984a1",
+        "sample_file_sha256": "14ba9885f7d81d9357dd2ec63fb66819dbd478b420c676619cba93c53e8e51af",
+        "source_fingerprint": "47930b6ae8c9534553e26fd8df632fe208ae0e9c9cac22d15865792e79b5463a"
+      },
+      "sample_file": "XOM.json",
+      "sample_id": "sample_20c8793332be7fe85110",
+      "screen_snapshot_sha256": "1fc6f7c3ce1c30e544f23c3b44375cc99d48db4210107fa70c6f2cf6c961282e",
+      "snapshot_sha256": "be3506ee8551fd4e96f8c37e7e77d9d4f98111c495c29c1b33c481df9423b288",
+      "ticker": "XOM",
+      "ticker_family": "XOM"
+    }
+  ],
+  "kind": "coilingview.saved-run-review-corpus-manifest",
+  "schema_version": 1,
+  "source": "benchmark_2026-08-13_v24_72_batch_c.csv",
+  "source_run": {
+    "algorithm_version": "2.3.1",
+    "code_sha": null,
+    "fetched_at": "2026-08-13T13:30:00Z",
+    "filename": "benchmark_2026-08-13_v24_72_batch_c.csv"
+  }
+}

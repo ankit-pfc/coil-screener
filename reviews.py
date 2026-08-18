@@ -133,7 +133,19 @@ def _draft_matches_base_classification(
     blind_assessment = classification.get("blindAssessment")
     if blind_assessment is not None:
         payload = draft.get("payload") if isinstance(draft.get("payload"), dict) else draft
-        if payload.get("blindAssessment") != blind_assessment:
+        raw_blind_assessment = payload.get("blindAssessment")
+        try:
+            # The browser omits schema defaults such as role=major_top while
+            # the validated lock model materializes them. Compare the same
+            # normalized contract on both sides rather than raw JSON shapes.
+            from review_capture import BlindAssessment
+
+            normalized_draft_blind = BlindAssessment.model_validate(
+                raw_blind_assessment
+            ).model_dump(mode="json", by_alias=True)
+        except (TypeError, ValidationError, ValueError):
+            return False
+        if normalized_draft_blind != blind_assessment:
             return False
     return True
 
@@ -1326,6 +1338,25 @@ class ReviewStore:
             "token_revision": int(row[6] or 1),
             "token_revoked_at": row[7],
         }
+
+    def get_session_snapshot(self, session_id: int) -> Optional[dict[str, Any]]:
+        """Return the server-owned session snapshot for internal analysis wiring.
+
+        Fresh-session API responses intentionally expose only a redacted view of
+        this object. Detector configuration must nevertheless be loaded from the
+        immutable persisted snapshot rather than silently falling back to a
+        process default.
+        """
+        with self._connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT snapshot FROM review_sessions WHERE id = {self._ph}",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0]) if row[0] else {}
 
     def authorize_session(
         self, session_id: int, access_token: Optional[str]

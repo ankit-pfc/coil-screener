@@ -121,6 +121,45 @@ class DetectorReviewTiming(BaseModel):
     assisted_active_seconds: int | None = Field(
         default=None, ge=0, alias="assistedActiveSeconds"
     )
+    review_order: Literal["blind_first", "assisted_first"] = Field(
+        alias="reviewOrder"
+    )
+    manual_pattern_label: Literal["coil", "not_coil", "uncertain"] | None = Field(
+        default=None, alias="manualPatternLabel"
+    )
+    manual_lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] | None = Field(default=None, alias="manualLifecycleLabel")
+    manual_confidence: Literal["high", "medium", "low"] | None = Field(
+        default=None, alias="manualConfidence"
+    )
+    assisted_pattern_label: Literal["coil", "not_coil", "uncertain"] | None = Field(
+        default=None, alias="assistedPatternLabel"
+    )
+    assisted_lifecycle_label: Literal[
+        "no_pattern",
+        "watch_immature",
+        "forming",
+        "pre_breakout",
+        "breakout_provisional",
+        "breaking_out",
+        "failed_breakout",
+        "retest",
+        "post_breakout",
+        "uncertain_structure",
+    ] | None = Field(default=None, alias="assistedLifecycleLabel")
+    assisted_confidence: Literal["high", "medium", "low"] | None = Field(
+        default=None, alias="assistedConfidence"
+    )
 
     @field_validator(
         "first_chart_displayed_at",
@@ -561,16 +600,13 @@ class BaseClassification(BaseModel):
             "other",
         ]
     ] = Field(default_factory=list, max_length=9, alias="failedBaseRules")
-    rationale: str = Field(min_length=20, max_length=5000)
+    rationale: str = Field(max_length=5000)
     blind_assessment: BlindAssessment = Field(alias="blindAssessment")
 
     @field_validator("rationale")
     @classmethod
-    def substantive_rationale(cls, value: str) -> str:
-        normalized = value.strip()
-        if len(normalized) < 20:
-            raise ValueError("base classification rationale needs at least 20 characters")
-        return normalized
+    def normalized_rationale(cls, value: str) -> str:
+        return value.strip()
 
     @model_validator(mode="after")
     def coherent_base_path(self) -> "BaseClassification":
@@ -581,6 +617,10 @@ class BaseClassification(BaseModel):
         if self.base_path == "exception_territory" and not self.failed_base_rules:
             raise ValueError(
                 "exception-territory locks require at least one failed base rule"
+            )
+        if self.base_path != "base_pattern" and len(self.rationale) < 20:
+            raise ValueError(
+                "exception and uncertain classifications need at least 20 rationale characters"
             )
         expected_pattern = {
             "base_pattern": "coil",
@@ -677,6 +717,9 @@ def validate_capture_against_context(
         raise ValueError("asOf does not match the frozen data date")
 
     if request.detector_review is not None:
+        automatic_comparison = request.detector_review.reason_codes == [
+            "automatic_label_comparison"
+        ]
         detector = (context.get("detector_outputs") or {}).get(
             request.detector_review.algorithm_variant
         )
@@ -689,65 +732,120 @@ def validate_capture_against_context(
             "config_fingerprint"
         ):
             raise ValueError("detectorReview configFingerprint does not match the output")
-        known_top_ids = {
-            str(item.get("id"))
-            for item in detector.get("top_candidates", [])
-            if isinstance(item, dict) and item.get("id")
-        }
-        reviewed_top_ids = set(request.detector_review.accepted_top_ids) | set(
-            request.detector_review.rejected_top_ids
-        )
-        if reviewed_top_ids != known_top_ids:
-            raise ValueError(
-                "detectorReview must accept or reject every validation top exactly once"
+        corpus_labels = context.get("corpus_labels") or {}
+        if corpus_labels.get("benchmark_attempt") == 2:
+            timing = request.detector_review.timing
+            assigned_order = corpus_labels.get("benchmark_timing_order")
+            if timing.review_order != assigned_order:
+                raise ValueError(
+                    "detectorReview reviewOrder does not match the frozen benchmark assignment"
+                )
+            if (
+                not automatic_comparison
+                and (not timing.blind_active_seconds or not timing.assisted_active_seconds)
+            ):
+                raise ValueError(
+                    "repeat benchmark reviews require positive manual and assisted active seconds"
+                )
+            if not automatic_comparison and any(
+                value is None
+                for value in (
+                    timing.manual_pattern_label,
+                    timing.manual_lifecycle_label,
+                    timing.manual_confidence,
+                    timing.assisted_pattern_label,
+                    timing.assisted_lifecycle_label,
+                    timing.assisted_confidence,
+                )
+            ):
+                raise ValueError(
+                    "repeat benchmark reviews require complete manual and assisted judgments"
+                )
+        if automatic_comparison:
+            manual_decisions = (
+                request.detector_review.accepted_top_ids,
+                request.detector_review.rejected_top_ids,
+                request.detector_review.missing_human_tops,
+                request.detector_review.matched_human_tops,
+                request.detector_review.acceptable_hypothesis_ids,
+                request.detector_review.rejected_hypothesis_ids,
             )
-        known_hypothesis_ids = {
-            str(item.get("id"))
-            for item in detector.get("lid_hypotheses", [])
-            if isinstance(item, dict) and item.get("id")
-        }
-        reviewed_hypothesis_ids = set(
-            request.detector_review.acceptable_hypothesis_ids
-        ) | set(request.detector_review.rejected_hypothesis_ids)
-        if reviewed_hypothesis_ids != known_hypothesis_ids:
-            raise ValueError(
-                "detectorReview must accept or reject every lid hypothesis exactly once"
+            if any(manual_decisions):
+                raise ValueError(
+                    "automatic detector comparison cannot contain manual adjudications"
+                )
+            blind = (base_classification or {}).get("blindAssessment") or {}
+            if request.detector_review.pattern_label != blind.get("patternLabel"):
+                raise ValueError(
+                    "automatic detector comparison must preserve the locked pattern label"
+                )
+            if request.detector_review.lifecycle_label != blind.get("lifecycleLabel"):
+                raise ValueError(
+                    "automatic detector comparison must preserve the locked lifecycle label"
+                )
+        else:
+            known_top_ids = {
+                str(item.get("id"))
+                for item in detector.get("top_candidates", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            reviewed_top_ids = set(request.detector_review.accepted_top_ids) | set(
+                request.detector_review.rejected_top_ids
             )
-        blind = (base_classification or {}).get("blindAssessment") or {}
-        human_dates = {
-            str(point.get("date"))
-            for point in blind.get("humanTops", [])
-            if isinstance(point, dict) and point.get("date")
-        }
-        candidate_dates = {
-            str(item.get("peak_date"))
-            for item in detector.get("top_candidates", [])
-            if isinstance(item, dict)
-            and item.get("peak_date")
-            and str(item.get("id")) in request.detector_review.accepted_top_ids
-        }
-        reviewed_human_dates = set(request.detector_review.missing_human_tops) | set(
-            request.detector_review.matched_human_tops
-        )
-        if reviewed_human_dates != human_dates:
-            raise ValueError(
-                "detectorReview must mark every locked human top matched or missing"
-            )
-        def quarter_ordinal(value: str) -> int:
-            parsed = date.fromisoformat(value)
-            return parsed.year * 4 + (parsed.month - 1) // 3
+            if reviewed_top_ids != known_top_ids:
+                raise ValueError(
+                    "detectorReview must accept or reject every validation top exactly once"
+                )
+            known_hypothesis_ids = {
+                str(item.get("id"))
+                for item in detector.get("lid_hypotheses", [])
+                if isinstance(item, dict) and item.get("id")
+            }
+            reviewed_hypothesis_ids = set(
+                request.detector_review.acceptable_hypothesis_ids
+            ) | set(request.detector_review.rejected_hypothesis_ids)
+            if reviewed_hypothesis_ids != known_hypothesis_ids:
+                raise ValueError(
+                    "detectorReview must accept or reject every lid hypothesis exactly once"
+                )
+            blind = (base_classification or {}).get("blindAssessment") or {}
+            human_dates = {
+                str(point.get("date"))
+                for point in blind.get("humanTops", [])
+                if isinstance(point, dict) and point.get("date")
+            }
+            candidate_dates = {
+                str(item.get("peak_date"))
+                for item in detector.get("top_candidates", [])
+                if isinstance(item, dict)
+                and item.get("peak_date")
+                and str(item.get("id")) in request.detector_review.accepted_top_ids
+            }
+            reviewed_human_dates = set(
+                request.detector_review.missing_human_tops
+            ) | set(request.detector_review.matched_human_tops)
+            if reviewed_human_dates != human_dates:
+                raise ValueError(
+                    "detectorReview must mark every locked human top matched or missing"
+                )
 
-        candidate_quarters = sorted(quarter_ordinal(value) for value in candidate_dates)
-        human_quarters = [
-            quarter_ordinal(value)
-            for value in request.detector_review.matched_human_tops
-        ]
+            def quarter_ordinal(value: str) -> int:
+                parsed = date.fromisoformat(value)
+                return parsed.year * 4 + (parsed.month - 1) // 3
 
-        if not distinct_quarter_matches(human_quarters, candidate_quarters):
-            raise ValueError(
-                "matchedHumanTops require distinct accepted detector candidates "
-                "within one completed quarter"
+            candidate_quarters = sorted(
+                quarter_ordinal(value) for value in candidate_dates
             )
+            human_quarters = [
+                quarter_ordinal(value)
+                for value in request.detector_review.matched_human_tops
+            ]
+
+            if not distinct_quarter_matches(human_quarters, candidate_quarters):
+                raise ValueError(
+                    "matchedHumanTops require distinct accepted detector candidates "
+                    "within one completed quarter"
+                )
 
     bars = {str(bar["date"]): bar for bar in context["quarterly_bars"]}
     reviewed_dates = [point.date for point in request.reviewed_highs]

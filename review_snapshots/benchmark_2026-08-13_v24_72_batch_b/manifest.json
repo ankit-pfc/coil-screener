@@ -1,0 +1,480 @@
+{
+  "benchmark_canonical_source": "benchmark_2026-08-13_v24_72.csv",
+  "benchmark_id": "coilingview-v24-72",
+  "benchmark_partition": "development_repeat",
+  "canonicalization": {
+    "adjustment_mode": "split_adjusted",
+    "adjustment_source": "yfinance_stock_splits",
+    "adjustment_transform_version": "yfinance-stock-splits-v1",
+    "as_of_policy": "completed quarter only",
+    "source_interval": "1d"
+  },
+  "generated_at": "2026-08-13T13:30:00Z",
+  "items": [
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "ac03ae90fa8fcb4f60b700a8d6c191479d90d1fd235947b7dc0ec6224b5182f2",
+      "bar_count": 318,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_a29ced72e7ebd743c4aa",
+      "benchmark_task_id": "task_78b42c7a83e550658e00",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2000-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "ac03ae90fa8fcb4f60b700a8d6c191479d90d1fd235947b7dc0ec6224b5182f2",
+        "bars_sha256": "0451801e7ae09fe5dbf25e39e170c30426a78f46beb8e8519d803aafbd0ffb56",
+        "sample_file_sha256": "1a5b7e1504604a260d1ceea8f6fd4d77d9b7f07002ef54298afeb2e20f19d471",
+        "source_fingerprint": "d739be0a9cc906e571aeba9efc9ef3cff74e581c05106401ac823773acca6867"
+      },
+      "sample_file": "0005.HK.json",
+      "sample_id": "sample_a29ced72e7ebd743c4aa",
+      "screen_snapshot_sha256": "c453288fadf961621d04cbc477fcab8afa5deee746f868ae4802f8e84654966f",
+      "snapshot_sha256": "160e1c586b6adedb148427fe1d0b7351035062dbedea17e017623c9212670d19",
+      "ticker": "0005.HK",
+      "ticker_family": "0005.HK"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "9316eec6511b550d4d0906afb50c8d5978040d31ab2c94cc18eed980908472d3",
+      "bar_count": 355,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_afe99279c196c1508e8d",
+      "benchmark_task_id": "task_4b3eaaab9a60a7431873",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-12-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "9316eec6511b550d4d0906afb50c8d5978040d31ab2c94cc18eed980908472d3",
+        "bars_sha256": "6f55ac8dce5e26806e2acb8ddce490629fcdb6495e98876f17369adc13f9058a",
+        "sample_file_sha256": "e3b61fcfd7aedf8bcf0b48ce29a46675de9854e41099f61fa0959e212f429d53",
+        "source_fingerprint": "ff69e79e6a0023c0f8bb25c0b751553f765ec271118fe34f0de55ff1922abc33"
+      },
+      "sample_file": "ALV.DE.json",
+      "sample_id": "sample_afe99279c196c1508e8d",
+      "screen_snapshot_sha256": "76b9dd8ed6e55b8a8444105fa8640427fa1cc72a9ff77177e7fcf476f57dd083",
+      "snapshot_sha256": "a5b56d51067a9a65a6dcb1b8177ccc50ff1f1168193b3f4a92ea17218283101b",
+      "ticker": "ALV.DE",
+      "ticker_family": "ALV.DE"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "a0c0bf606fb93737a79d85b1adb42e487179dd143e2f4f05d64a01b3287ebd84",
+      "bar_count": 456,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_c5210a8d812bb83b6dea",
+      "benchmark_task_id": "task_ca7f5fa53651a238aa12",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 1,
+        "reviewable": true,
+        "status": "valid_with_warnings"
+      },
+      "first_data_date": "1988-07-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": true,
+      "provenance": {
+        "backend_bars_identity_sha256": "a0c0bf606fb93737a79d85b1adb42e487179dd143e2f4f05d64a01b3287ebd84",
+        "bars_sha256": "140709fc489c75dfe359fac84aae11fcb3c50824de7022f3728fa1f57230b6cd",
+        "sample_file_sha256": "cdb0451f5a1652ef66a42c7c17e086884f6aa252c74cba432d98891c22b57c5a",
+        "source_fingerprint": "41e1a30158f1f1a85cb6fa87361d72715b72d358f187b957490cc06fdc0507ba"
+      },
+      "sample_file": "ULVR.L.json",
+      "sample_id": "sample_c5210a8d812bb83b6dea",
+      "screen_snapshot_sha256": "a4d12b54387adb4f5503e493aead14da6a6a7806d4dc90c0643b7032e3229130",
+      "snapshot_sha256": "4fbcccf96c980e0f630565a99cdd6af75f1a1ac3edb59736fb7b91c79689bab6",
+      "ticker": "ULVR.L",
+      "ticker_family": "ULVR.L"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2022-09-30",
+      "backend_bars_identity_sha256": "d90fa84016bf12c9baf4edf3eaa3bbb34deb6ced8c21670c0f1a7c8b0723d28a",
+      "bar_count": 333,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_786b435b27d5edba3290",
+      "benchmark_task_id": "task_83629b6cf302fda835c3",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1995-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2022-09-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "d90fa84016bf12c9baf4edf3eaa3bbb34deb6ced8c21670c0f1a7c8b0723d28a",
+        "bars_sha256": "8779053731a594b8c7c441110f318f082cae907cbd01b01fe89e78b8988f1a2e",
+        "sample_file_sha256": "c3cec76360367d8cc91d3c376e9d0e3c02021de72422d9bc350a4613cd280743",
+        "source_fingerprint": "ac0cc1a871289634cb07f3a24ed253c2171b71496c0c9bf0771f58a241419de6"
+      },
+      "sample_file": "TD.TO.json",
+      "sample_id": "sample_786b435b27d5edba3290",
+      "screen_snapshot_sha256": "15e1c9a5428d853b51cb249aab1512fdbe56a958e3d4999a255dcabc9370c399",
+      "snapshot_sha256": "c85bba0b9c6c27f95af578b50bf9fefded27217c482daf61e183f3fa82def4f6",
+      "ticker": "TD.TO",
+      "ticker_family": "TD.TO"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "ba6e29a71fdc68ea2503cc14b6728ba22f696143b64153fea2aed4d5cbd6789b",
+      "bar_count": 356,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_ce5fafd98c807aed46bd",
+      "benchmark_task_id": "task_b619fd6fa28024e82bdd",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "ba6e29a71fdc68ea2503cc14b6728ba22f696143b64153fea2aed4d5cbd6789b",
+        "bars_sha256": "8bccb5bf470922cb82c4eac6b7d572e7ab381b36d851eff27edab06f53ccabd8",
+        "sample_file_sha256": "c1db261710722ea66283420ce6b7469820f1614cd374f58a80822bd6f3bebdfc",
+        "source_fingerprint": "773112fdc52055e173ff03e92078447a5efa011ec82398815d1cba4e18f87a7a"
+      },
+      "sample_file": "CNR.TO.json",
+      "sample_id": "sample_ce5fafd98c807aed46bd",
+      "screen_snapshot_sha256": "df04fcc9620e600da8fdf518b4e68e1c4be9610b73d72b0c632db3cdc20ed365",
+      "snapshot_sha256": "6f966a2ab00d3257c0de9c387a173e728547ff267cf23f8828a7512a67e3eeb6",
+      "ticker": "CNR.TO",
+      "ticker_family": "CNR.TO"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "d28a53c5cfc284d193d6a2bbb1dfbb8ce453d910b6309addaeee8558e78fa3ed",
+      "bar_count": 134,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_e73ae2a83145c7b41866",
+      "benchmark_task_id": "task_af8c42df5d679f19ce9a",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "2015-05-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "d28a53c5cfc284d193d6a2bbb1dfbb8ce453d910b6309addaeee8558e78fa3ed",
+        "bars_sha256": "dcb1cc6814610a579a3929d69d766cdf0a118ceaf499eefc5f3db6061117509a",
+        "sample_file_sha256": "265c32402e74fe04300b1153d024b1b7127d5e7eafd442f6f0758e1d6dc25913",
+        "source_fingerprint": "2acc11414e5fc10f35a4f01349937be803b1d4f244f91b6a2b075ee1a4951103"
+      },
+      "sample_file": "SHOP.TO.json",
+      "sample_id": "sample_e73ae2a83145c7b41866",
+      "screen_snapshot_sha256": "f23211cb9b7580607657ea368ceba937567653bd0df249594b9ca8ad6d76b174",
+      "snapshot_sha256": "f9cce3c9751f59a0689fa526e860413963869e7be773d87c028f3e4218827c31",
+      "ticker": "SHOP.TO",
+      "ticker_family": "SHOP.TO"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "711c2b9ecbec1bf1d3d88f6f33a5066b1a9f7242fe5080a7edee29c11f4f8509",
+      "bar_count": 378,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_15f18a3d557b56eaebfb",
+      "benchmark_task_id": "task_ce148ddfd29c7b8ca197",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1995-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "711c2b9ecbec1bf1d3d88f6f33a5066b1a9f7242fe5080a7edee29c11f4f8509",
+        "bars_sha256": "2beb6a7d40c70836abf2eaf9b3fc747434c47a6c4fa2b880390024612d8f58b5",
+        "sample_file_sha256": "88cb1b8e6618cf1ff1a45003a596754c148ef2d43e6cdbbdc9cac3be395c1674",
+        "source_fingerprint": "b8f245566bcb4ccf2ea8d46cd38904db1912f7520d95156c582fd3feaa2b0e44"
+      },
+      "sample_file": "RY.TO.json",
+      "sample_id": "sample_15f18a3d557b56eaebfb",
+      "screen_snapshot_sha256": "769702a2fcfb830a7698db474ef5d8f941b7608691d9a2d8900ed6dc0af009b5",
+      "snapshot_sha256": "7ba5998327720e909667769bb92891c3e928e4db9ba31c59523dbbdb2718d481",
+      "ticker": "RY.TO",
+      "ticker_family": "RY.TO"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2023-03-31",
+      "backend_bars_identity_sha256": "fb27626d0f6c8624158598fa76fe3701c46a793477f5925ef831d0ac21d31640",
+      "bar_count": 359,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_8bc892d9a126c2bb4d5e",
+      "benchmark_task_id": "task_8f8caba2a3ffc83a5a8f",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1993-05-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2023-03-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "fb27626d0f6c8624158598fa76fe3701c46a793477f5925ef831d0ac21d31640",
+        "bars_sha256": "e2f0656b3fb1731b18c7a5811734978bafe1c414cc4ea8355776e06905fcb852",
+        "sample_file_sha256": "2a93fdfb9c7ea449a397220eaddff25d8e0b680346493f6c9a5b12ba0f889cb8",
+        "source_fingerprint": "3310c8bbb446bc010f93e114ece8329a925574f8b5d77aa2ae5644de17a48e4d"
+      },
+      "sample_file": "AZN.L.json",
+      "sample_id": "sample_8bc892d9a126c2bb4d5e",
+      "screen_snapshot_sha256": "d768413acf59cb7cf14ac2801993ed345caff6ad448bac489410335eb7afc12b",
+      "snapshot_sha256": "9dfd888f1bab6d4e92eab96f71bf8fcbfdb2085ca1fbbbf4675acc424c2d29ac",
+      "ticker": "AZN.L",
+      "ticker_family": "AZN.L"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "1f0f69b4cb18062e75a2b673607d33af564136e511366152ee246c39f31bf145",
+      "bar_count": 462,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_6d92fd881d3d0e2ab667",
+      "benchmark_task_id": "task_d54ec577ba154a620757",
+      "cohort": "expert_positive",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1988-01-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "1f0f69b4cb18062e75a2b673607d33af564136e511366152ee246c39f31bf145",
+        "bars_sha256": "3a35e700c8ddba00bd05e5d338604b2e174378d51d771548b82bcccaa8f6b009",
+        "sample_file_sha256": "6f5afd891a51db0547931e29221f2e92efa4ed4990577aeb01c46d836f76af66",
+        "source_fingerprint": "24c0e37bffb22c955f71e5b87e817cced1f2d948f9114044ff6dabcccc118b32"
+      },
+      "sample_file": "BHP.AX.json",
+      "sample_id": "sample_6d92fd881d3d0e2ab667",
+      "screen_snapshot_sha256": "3d0b80ebd7c35f8951af525835305fd61eac40c25e49b6e3e37cfa72ae422b0e",
+      "snapshot_sha256": "f74de4bf52fea3d07e68abd23dcb9ccf10ac07755a30d536b05e91a3ef591363",
+      "ticker": "BHP.AX",
+      "ticker_family": "BHP.AX"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "081c1f640670c6377e587ad60d9295504cfb3009c9e5e654be35fb60353af94d",
+      "bar_count": 339,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_8cd0ba4e7969c1c34a13",
+      "benchmark_task_id": "task_946c56201c12b80ca8ac",
+      "cohort": "clear_negative",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1998-04-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "081c1f640670c6377e587ad60d9295504cfb3009c9e5e654be35fb60353af94d",
+        "bars_sha256": "4cb946492041998f83c254ba07037950438a82f0bebb3d05f2dbc85da917d7f7",
+        "sample_file_sha256": "5f82e10d3599fe7928263aae46046c1a01c8e9eb87c1cff02d01c68dcb27ea24",
+        "source_fingerprint": "f93eeea9ce9ad4cc8e3f54aaa54bf017720d13ef14ab969b16657694016162e0"
+      },
+      "sample_file": "SAP.DE.json",
+      "sample_id": "sample_8cd0ba4e7969c1c34a13",
+      "screen_snapshot_sha256": "a0e9d4fa6f07dad1c31a6a1cb85fd19e432658971c6ecb1e4cb755d9bf5701a7",
+      "snapshot_sha256": "f58593b7645ea2b446a871f04d47cd4399198e853437f79a1806ee683137ce80",
+      "ticker": "SAP.DE",
+      "ticker_family": "SAP.DE"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2026-06-30",
+      "backend_bars_identity_sha256": "5526561003281b8c07f280b9add5f438c904cd874823720a071207197ed181d4",
+      "bar_count": 356,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_84fee1c1db545a8c01b1",
+      "benchmark_task_id": "task_f9326c3d5d280628eb29",
+      "cohort": "disagreement_exception",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2026-06-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "5526561003281b8c07f280b9add5f438c904cd874823720a071207197ed181d4",
+        "bars_sha256": "fe283944ffeb613f0bf485e8af2d826b8ca73cfdf1dba2234c2936c28223f8fa",
+        "sample_file_sha256": "7e5e5f2dd2907ba98f0ab60975d84c88bd6444739fea8399a61475c1c6caeac7",
+        "source_fingerprint": "281f8b6010a6b97860e7423ab69704372fd6c0c6374baebbe49ce40f2c284f2f"
+      },
+      "sample_file": "SIE.DE.json",
+      "sample_id": "sample_84fee1c1db545a8c01b1",
+      "screen_snapshot_sha256": "1cd27a5171cd9cce0cfbbd0bd56c0a060d12cce51cbf013d20a79922bd5b9fc2",
+      "snapshot_sha256": "016636b738bd40b967eefa5b19c5a6c113e3eadd32618c838d564f479a8ebdcd",
+      "ticker": "SIE.DE",
+      "ticker_family": "SIE.DE"
+    },
+    {
+      "adjustment_mode": "split_adjusted",
+      "as_of": "2023-09-30",
+      "backend_bars_identity_sha256": "63b263eb9822271667d379d3f623f6590e6fd8468326565355d4c8f796dfbc54",
+      "bar_count": 323,
+      "benchmark_attempt": 2,
+      "benchmark_sample_id": "sample_1f953430303037bb6942",
+      "benchmark_task_id": "task_83f9998ec4932938ae7c",
+      "cohort": "point_in_time_lifecycle",
+      "data_quality": {
+        "expected_hard_invalid": false,
+        "issue_count": 0,
+        "reviewable": true,
+        "status": "valid"
+      },
+      "first_data_date": "1996-11-01",
+      "history_start": null,
+      "history_start_policy": {
+        "kind": "full_provider_history"
+      },
+      "last_data_date": "2023-09-01",
+      "market": "global_ex_us",
+      "new_or_remediated": true,
+      "partition": "development",
+      "prior_review_or_tuning": false,
+      "provenance": {
+        "backend_bars_identity_sha256": "63b263eb9822271667d379d3f623f6590e6fd8468326565355d4c8f796dfbc54",
+        "bars_sha256": "3ad58790792913ac4ca1a98149365bc3ca59942de51bb4ad5101e282ba48f571",
+        "sample_file_sha256": "a749c4181aae6e02a61d8c019ae4a82e0fe0418ede79a4103db7fc98ade4e4aa",
+        "source_fingerprint": "accfc950b2338752bbc1eb86a671caee7e096d7f588c7476fd01fd2723469017"
+      },
+      "sample_file": "DTE.DE.json",
+      "sample_id": "sample_1f953430303037bb6942",
+      "screen_snapshot_sha256": "1b1a6f61ecf6cb5fb7e5dbab8bdc8cc8dafa0f09e6a59c9f0c3e5c6229cd8a7f",
+      "snapshot_sha256": "3b75bb08315cba40324ed682c6bd99b24ec918bbcf2fdc3a4a4db3dc4386f88b",
+      "ticker": "DTE.DE",
+      "ticker_family": "DTE.DE"
+    }
+  ],
+  "kind": "coilingview.saved-run-review-corpus-manifest",
+  "schema_version": 1,
+  "source": "benchmark_2026-08-13_v24_72_batch_b.csv",
+  "source_run": {
+    "algorithm_version": "2.3.1",
+    "code_sha": null,
+    "fetched_at": "2026-08-13T13:30:00Z",
+    "filename": "benchmark_2026-08-13_v24_72_batch_b.csv"
+  }
+}

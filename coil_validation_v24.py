@@ -42,6 +42,7 @@ class ValidationConfig:
     strict_min_range_position_pct: float = 35.0
     secondary_wick_prominence_pct: float = 14.0
     secondary_body_prominence_pct: float = 10.0
+    required_strict_major_count: int = 1
     min_separation_quarters: int = 4
     min_structure_years: float = 10.0
     min_slope_pct_per_year: float = -3.0
@@ -70,6 +71,7 @@ class ValidationConfig:
             "strict_min_range_position_pct": 35.0,
             "secondary_wick_prominence_pct": 14.0,
             "secondary_body_prominence_pct": 10.0,
+            "required_strict_major_count": 1,
             "min_separation_quarters": 4,
             "min_structure_years": 10.0,
             "min_slope_pct_per_year": -3.0,
@@ -269,9 +271,9 @@ def _two_sided_prominence(values: list[float], idx: int, peak: float) -> float:
     return max(0.0, (peak - max(floors)) / peak * 100.0)
 
 
-def _cluster_plateaus(
+def _plateau_clusters(
     indexes: list[int], highs: list[float], config: ValidationConfig
-) -> list[int]:
+) -> list[list[int]]:
     clusters: list[list[int]] = []
     for idx in indexes:
         if (
@@ -292,10 +294,16 @@ def _cluster_plateaus(
             clusters[-1].append(idx)
         else:
             clusters.append([idx])
-    representatives: list[int] = []
-    for cluster in clusters:
-        representatives.append(sorted(cluster, key=lambda idx: (-highs[idx], idx))[0])
-    return representatives
+    return clusters
+
+
+def _cluster_plateaus(
+    indexes: list[int], highs: list[float], config: ValidationConfig
+) -> list[int]:
+    return [
+        sorted(cluster, key=lambda idx: (-highs[idx], idx))[0]
+        for cluster in _plateau_clusters(indexes, highs, config)
+    ]
 
 
 def _top_candidates(
@@ -320,11 +328,20 @@ def _top_candidates(
                 max(float(item["open"]), float(item["close"])) for item in prefix
             ]
             prefix_lows = [float(item["low"]) for item in prefix]
-            prefix_indexes = _cluster_plateaus(
+            prefix_clusters = _plateau_clusters(
                 _pivot_indexes(prefix_highs), prefix_highs, config
             )
+            prefix_indexes = [
+                sorted(cluster, key=lambda position: (-prefix_highs[position], position))[0]
+                for cluster in prefix_clusters
+            ]
             if idx not in prefix_indexes:
                 continue
+            plateau = next(
+                cluster
+                for cluster, representative in zip(prefix_clusters, prefix_indexes)
+                if representative == idx
+            )
             active_start = max(0, end - 40)
             active_low = min(prefix_lows[active_start:])
             active_high = max(prefix_highs[active_start:])
@@ -342,6 +359,9 @@ def _top_candidates(
                 / active_range
                 * 100.0,
                 "confirmed_quarter_index": end - 1,
+                "plateau_start_quarter_index": min(plateau),
+                "plateau_end_quarter_index": max(plateau),
+                "plateau_quarters": max(plateau) - min(plateau) + 1,
             }
             if (
                 latest["wick_prominence_pct"]
@@ -361,6 +381,9 @@ def _top_candidates(
             "body_prominence_pct": 0.0,
             "range_position_pct": 0.0,
             "confirmed_quarter_index": None,
+            "plateau_start_quarter_index": idx,
+            "plateau_end_quarter_index": idx,
+            "plateau_quarters": 1,
         }
         wick_prominence = float(observed["wick_prominence_pct"])
         body_prominence = float(observed["body_prominence_pct"])
@@ -439,12 +462,23 @@ def _top_candidates(
             "wick_prominence_pct": round(wick_prominence, 3),
             "body_prominence_pct": round(body_prominence, 3),
             "range_position_pct": round(range_position, 3),
+            "confirmation_lag_quarters": (
+                confirmed_quarter_idx - idx
+                if structural and confirmed_quarter_idx is not None
+                else None
+            ),
             "rejection_quarters": (
                 confirmed_quarter_idx - idx
                 if rejected and confirmed_quarter_idx is not None
                 else None
             ),
-            "plateau_quarters": 1,
+            "plateau_start_quarter_index": int(
+                observed["plateau_start_quarter_index"]
+            ),
+            "plateau_end_quarter_index": int(
+                observed["plateau_end_quarter_index"]
+            ),
+            "plateau_quarters": int(observed["plateau_quarters"]),
             "rejection_reasons": rejection_reasons + strict_failures,
         }
         candidates.append(item)
@@ -485,7 +519,10 @@ def _top_candidates(
                     "range_position_pct": round(
                         (highs[idx] - pending_low) / pending_range * 100.0, 3
                     ),
+                    "confirmation_lag_quarters": None,
                     "rejection_quarters": None,
+                    "plateau_start_quarter_index": idx,
+                    "plateau_end_quarter_index": idx,
                     "plateau_quarters": 1,
                     "rejection_reasons": ["right_pivot_not_yet_observable"],
                 }
@@ -971,6 +1008,46 @@ def _empty_result(
     }
 
 
+def _enforce_adjustment_gate(result: dict[str, Any]) -> dict[str, Any]:
+    """Keep diagnostic evidence visible but never classify an unverified basis."""
+    metadata = result.get("analysis_metadata") or {}
+    if metadata.get("adjustment_mode") == "split_adjusted":
+        return result
+    metadata["classification_blocked"] = True
+    assessment = result.get("pattern_assessment") or {}
+    failed = list(assessment.get("failed_rules") or [])
+    if "verified_split_adjustment" not in failed:
+        failed.append("verified_split_adjustment")
+    assessment.update(
+        {
+            "structure_state": "invalid_data",
+            "readiness": "invalid_data",
+            "confidence": "low",
+            "abstained": True,
+            "failed_rules": failed,
+        }
+    )
+    result.update(
+        {
+            "structure_validity": "invalid_data",
+            "readiness": "invalid_data",
+            "confidence": "low",
+            "abstained": True,
+            "lifecycle": "no_structure",
+            "status": "invalid_data",
+            "grade": None,
+            "points": [],
+            "major_highs": [],
+            "active_lid": None,
+            "resistance": None,
+            "support": None,
+            "breakout": None,
+        }
+    )
+    result["notes"] = list(dict.fromkeys([*result.get("notes", []), *failed]))
+    return result
+
+
 def analyze_coil_v24(
     bars: Iterable[dict[str, Any]],
     *,
@@ -998,22 +1075,28 @@ def analyze_coil_v24(
             failed_rules=["valid_data"],
             abstained=True,
         ), ticker=ticker, as_of=as_of, config=config)
-
     all_quarters = _aggregate_quarters(clean)
     completed = [
         item for item in all_quarters if _quarter_complete(item, as_of=as_of)
     ]
     partial_quarter = _trailing_partial_quarter(all_quarters, as_of=as_of)
     if len(completed) < 3:
-        return _scope_output_ids(_empty_result(
-            clean,
-            quality,
-            config,
-            status="no_structure",
-            structure_state="no_structure",
-            failed_rules=["sufficient_completed_quarters"],
-            abstained=False,
-        ), ticker=ticker, as_of=as_of, config=config)
+        return _scope_output_ids(
+            _enforce_adjustment_gate(
+                _empty_result(
+                    clean,
+                    quality,
+                    config,
+                    status="no_structure",
+                    structure_state="no_structure",
+                    failed_rules=["sufficient_completed_quarters"],
+                    abstained=False,
+                )
+            ),
+            ticker=ticker,
+            as_of=as_of,
+            config=config,
+        )
 
     top_candidates, eligible = _top_candidates(completed, config)
     hypotheses, rejected = _hypotheses(completed, eligible, config)
@@ -1029,7 +1112,12 @@ def analyze_coil_v24(
         )
         result["top_candidates"] = top_candidates
         result["diagnostics"]["rejected_hypotheses"] = rejected
-        return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)
+        return _scope_output_ids(
+            _enforce_adjustment_gate(result),
+            ticker=ticker,
+            as_of=as_of,
+            config=config,
+        )
 
     equivalent, conflict = _equivalent_leaders(hypotheses, config)
     if conflict:
@@ -1047,7 +1135,12 @@ def analyze_coil_v24(
         result["diagnostics"]["rejected_hypotheses"] = rejected
         result["readiness"] = "uncertain_structure"
         result["pattern_assessment"]["readiness"] = "uncertain_structure"
-        return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)
+        return _scope_output_ids(
+            _enforce_adjustment_gate(result),
+            ticker=ticker,
+            as_of=as_of,
+            config=config,
+        )
 
     primary = hypotheses[0]
     projected = [float(item["projected_lid"]) for item in equivalent]
@@ -1081,12 +1174,18 @@ def analyze_coil_v24(
         passed.append("steady_trend_veto_clear")
     else:
         failed.append("steady_trend_veto_clear")
+    if primary["strict_major_count"] >= config.required_strict_major_count:
+        passed.append("required_strict_major_evidence")
+    else:
+        failed.append("required_strict_major_evidence")
     passed.append("no_unresolved_competing_lid")
     structure_qualified = not failed
     if structure_qualified:
         structure_state = "qualified"
     elif "minimum_ten_year_structure" in failed:
         structure_state = "watch_immature"
+    elif "required_strict_major_evidence" in failed:
+        structure_state = "uncertain_structure"
     else:
         structure_state = "no_pattern"
     signals = _readiness_signals(completed, primary, float(band["centre"]))
@@ -1101,10 +1200,16 @@ def analyze_coil_v24(
     )
     if structure_state == "watch_immature":
         readiness = "watch_immature"
+    elif structure_state == "uncertain_structure":
+        readiness = "uncertain_structure"
     elif structure_state == "no_pattern":
         readiness = "no_pattern"
-    confidence = "medium" if structure_state == "watch_immature" else "high"
-    abstained = structure_state == "watch_immature"
+    confidence = (
+        "medium"
+        if structure_state in {"watch_immature", "uncertain_structure"}
+        else "high"
+    )
+    abstained = structure_state in {"watch_immature", "uncertain_structure"}
 
     contacts = primary["contacts"]
     contact_points = [
@@ -1129,6 +1234,7 @@ def analyze_coil_v24(
     lifecycle_map = {
         "no_pattern": "no_structure",
         "watch_immature": "forming",
+        "uncertain_structure": "forming",
         "forming": "forming",
         "pre_breakout": "pre_breakout",
         "breakout_provisional": "breaking_out",
@@ -1255,4 +1361,9 @@ def analyze_coil_v24(
             "span_years": round(primary["span_quarters"] / 4.0, 3),
             "source": SOURCE,
         }
-    return _scope_output_ids(result, ticker=ticker, as_of=as_of, config=config)
+    return _scope_output_ids(
+        _enforce_adjustment_gate(result),
+        ticker=ticker,
+        as_of=as_of,
+        config=config,
+    )

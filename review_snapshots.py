@@ -8,6 +8,7 @@ snapshot captured with that run without consulting human overrides.
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
 import json
@@ -30,6 +31,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 REVIEW_SNAPSHOT_ROOT = PROJECT_ROOT / "review_snapshots"
 SNAPSHOT_SCHEMA_VERSION = 1
 SNAPSHOT_KIND = "coilingview.saved-run-review-snapshot"
+REVIEW_CORPUS_MANIFEST_KIND = "coilingview.saved-run-review-corpus-manifest"
+REVIEW_LEGACY_MANIFEST_KIND = "coilingview.saved-run-review-manifest"
 _TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.^=_-]{0,31}$")
 
 
@@ -101,8 +104,8 @@ def load_review_manifest(source: str) -> dict[str, Any]:
     if manifest.get("schema_version") != 1:
         raise ReviewSnapshotError("unsupported frozen review manifest schema")
     if manifest.get("kind") not in {
-        "coilingview.saved-run-review-corpus-manifest",
-        "coilingview.saved-run-review-manifest",
+        REVIEW_CORPUS_MANIFEST_KIND,
+        REVIEW_LEGACY_MANIFEST_KIND,
     }:
         raise ReviewSnapshotError("unexpected frozen review manifest kind")
     manifest_source = manifest.get("source")
@@ -315,6 +318,21 @@ def load_review_snapshot(source: str, ticker: str) -> dict[str, Any]:
     if str(screen_snapshot.get("ticker", "")).strip().upper() != symbol:
         raise ReviewSnapshotError("screen snapshot ticker does not match")
     bars, analysis_bars, server_quality = _inspect_bars(raw.get("monthly_bars"))
+    frozen_as_of = raw.get("as_of")
+    if frozen_as_of is not None:
+        try:
+            parsed_as_of = date.fromisoformat(str(frozen_as_of))
+        except ValueError as exc:
+            raise ReviewSnapshotError("snapshot as_of must be an ISO date") from exc
+        if (
+            parsed_as_of.month not in {3, 6, 9, 12}
+            or parsed_as_of.day
+            != calendar.monthrange(parsed_as_of.year, parsed_as_of.month)[1]
+        ):
+            raise ReviewSnapshotError("snapshot as_of must be a completed quarter end")
+        last_bar = date.fromisoformat(str(bars[-1]["date"])[:10])
+        if (last_bar.year, last_bar.month) != (parsed_as_of.year, parsed_as_of.month):
+            raise ReviewSnapshotError("snapshot bars must end in the as_of month")
     corpus_quality = raw.get("data_quality", raw.get("data_quality_snapshot"))
     if corpus_quality is not None and not isinstance(corpus_quality, dict):
         raise ReviewSnapshotError("snapshot data_quality must be a JSON object")
@@ -355,6 +373,7 @@ def load_review_snapshot(source: str, ticker: str) -> dict[str, Any]:
         "kind": SNAPSHOT_KIND,
         "source": source,
         "ticker": symbol,
+        "as_of": str(frozen_as_of) if frozen_as_of is not None else None,
         "run": run,
         "screen_snapshot": screen_snapshot,
         "corpus_labels": raw.get("corpus_labels") or {},
@@ -380,6 +399,7 @@ def review_snapshot_identity(source: str, ticker: str) -> dict[str, Any]:
     return {
         "source": snapshot["source"],
         "ticker": snapshot["ticker"],
+        "as_of": snapshot.get("as_of"),
         "run": snapshot["run"],
         "screen_snapshot": snapshot["screen_snapshot"],
         "corpus_labels": snapshot["corpus_labels"],
@@ -445,6 +465,7 @@ def load_blind_review_context(source: str, ticker: str) -> dict[str, Any]:
         "kind": snapshot["kind"],
         "source": snapshot["source"],
         "ticker": snapshot["ticker"],
+        "as_of": snapshot.get("as_of"),
         "interval": "3M",
         "data_date": snapshot["monthly_bars"][-1]["date"],
         "monthly_bars": snapshot["monthly_bars"],
@@ -458,7 +479,12 @@ def load_blind_review_context(source: str, ticker: str) -> dict[str, Any]:
     }
 
 
-def load_review_context(source: str, ticker: str) -> dict[str, Any]:
+def load_review_context(
+    source: str,
+    ticker: str,
+    *,
+    validation_config: Any | None = None,
+) -> dict[str, Any]:
     """Frozen inputs plus the algorithm-only analysis captured for the run."""
     snapshot = load_review_snapshot(source, ticker)
     analysis = snapshot.get("_frozen_analysis")
@@ -467,6 +493,7 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
     detector_outputs: dict[str, Any] = {}
     analysis_status = "quarantined_unavailable"
     if snapshot["reviewable"]:
+        frozen_as_of = snapshot.get("as_of")
         adjustment_mode = str(
             (snapshot.get("source_cache_metadata") or {}).get("adjustment_mode")
             or "unknown"
@@ -475,6 +502,8 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
             if run_algorithm_version == ALGORITHM_VERSION:
                 analysis = analyze_coil(
                     snapshot["_analysis_bars"],
+                    ticker=snapshot["ticker"],
+                    as_of=frozen_as_of,
                     review_override=None,
                     mode=ANALYSIS_MODE_ALGORITHM_ONLY,
                     adjustment_mode=adjustment_mode,
@@ -496,6 +525,8 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
         detector_outputs = {
             ANALYSIS_VARIANT_V2_3_1: analyze_coil(
                 snapshot["_analysis_bars"],
+                ticker=snapshot["ticker"],
+                as_of=frozen_as_of,
                 variant=ANALYSIS_VARIANT_V2_3_1,
                 mode=ANALYSIS_MODE_ALGORITHM_ONLY,
                 adjustment_mode=adjustment_mode,
@@ -503,9 +534,11 @@ def load_review_context(source: str, ticker: str) -> dict[str, Any]:
             ANALYSIS_VARIANT_V2_4_VALIDATION: analyze_coil(
                 snapshot["_analysis_bars"],
                 ticker=snapshot["ticker"],
+                as_of=frozen_as_of,
                 variant=ANALYSIS_VARIANT_V2_4_VALIDATION,
                 mode=ANALYSIS_MODE_ALGORITHM_ONLY,
                 adjustment_mode=adjustment_mode,
+                validation_config=validation_config,
             ),
         }
     snapshot.pop("_analysis_bars", None)
