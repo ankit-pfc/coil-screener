@@ -23,6 +23,7 @@ from benchmark_v24 import (  # noqa: E402
     MANIFEST_SCHEMA_VERSION,
     canonical_json,
     history_coverage_audit,
+    load_sample,
     sha256_json,
     stable_sample_id,
     stable_task_id,
@@ -164,6 +165,23 @@ def _items_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return items
+
+
+def _load_frozen_canonical_samples(
+    manifest: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Load hash-bound samples while keeping every holdout label sealed."""
+    snapshots: dict[str, dict[str, Any]] = {}
+    for item in manifest.get("items") or []:
+        snapshot = load_sample(CORPUS_DIR, item)
+        if item.get("partition") == "holdout" and (
+            (snapshot.get("corpus_labels") or {}).get("ground_truth") is not None
+        ):
+            raise SystemExit(
+                f"holdout ground truth must remain sealed for {item.get('ticker')}"
+            )
+        snapshots[str(item["ticker"])] = snapshot
+    return snapshots
 
 
 def _write_workbench_source(
@@ -372,12 +390,7 @@ def main() -> int:
                 "workbench-only rebuild requires verified listing-quarter history"
             )
         manifest_items = list(old_manifest["items"])
-        snapshots = {
-            item["ticker"]: json.loads(
-                (CORPUS_DIR / item["sample_file"]).read_text(encoding="utf-8")
-            )
-            for item in manifest_items
-        }
+        snapshots = _load_frozen_canonical_samples(old_manifest)
         _materialize_workbench(
             manifest_items,
             snapshots,
@@ -601,10 +614,7 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(source_rows)
 
-    snapshots = {
-        item["ticker"]: json.loads((CORPUS_DIR / item["sample_file"]).read_text(encoding="utf-8"))
-        for item in manifest_items
-    }
+    snapshots = _load_frozen_canonical_samples(manifest)
     _materialize_workbench(
         manifest_items,
         snapshots,

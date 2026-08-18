@@ -238,6 +238,65 @@ def test_benchmark_builder_accepts_only_hash_bound_verified_long_history(tmp_pat
         )
 
 
+def test_workbench_rebuild_verifies_samples_and_keeps_holdout_labels_sealed(
+    tmp_path, monkeypatch
+):
+    bars = [
+        {
+            "date": "2026-06-01",
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.5,
+            "volume": 100.0,
+        }
+    ]
+    snapshot = {
+        "ticker": "AAA",
+        "sample_id": "sample-aaa",
+        "as_of": "2026-06-30",
+        "monthly_bars": bars,
+        "corpus_labels": {"ground_truth": None},
+    }
+    sample_path = tmp_path / "AAA.json"
+    _write(sample_path, snapshot)
+    item = {
+        "ticker": "AAA",
+        "sample_id": "sample-aaa",
+        "sample_file": "AAA.json",
+        "as_of": "2026-06-30",
+        "partition": "holdout",
+        "provenance": {
+            "bars_sha256": benchmark_module.sha256_json(bars),
+            "sample_file_sha256": benchmark_module.file_sha256(sample_path),
+        },
+    }
+    manifest = {"items": [item]}
+    monkeypatch.setattr(build_v24_benchmark, "CORPUS_DIR", tmp_path)
+
+    loaded = build_v24_benchmark._load_frozen_canonical_samples(manifest)
+    assert loaded["AAA"]["corpus_labels"]["ground_truth"] is None
+
+    snapshot["monthly_bars"][0]["close"] = 10.75
+    _write(sample_path, snapshot)
+    with pytest.raises(BenchmarkError, match="sample file hash mismatch"):
+        build_v24_benchmark._load_frozen_canonical_samples(manifest)
+
+    snapshot["corpus_labels"]["ground_truth"] = {"pattern_label": "coil"}
+    _write(sample_path, snapshot)
+    labeled_item = deepcopy(item)
+    labeled_item["provenance"]["bars_sha256"] = benchmark_module.sha256_json(
+        snapshot["monthly_bars"]
+    )
+    labeled_item["provenance"]["sample_file_sha256"] = (
+        benchmark_module.file_sha256(sample_path)
+    )
+    with pytest.raises(SystemExit, match="holdout ground truth must remain sealed"):
+        build_v24_benchmark._load_frozen_canonical_samples(
+            {"items": [labeled_item]}
+        )
+
+
 def _selection_report(manifest_path, protocol_path):
     configs = registered_validation_configs()
     metrics = {
