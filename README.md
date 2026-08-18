@@ -84,11 +84,13 @@ python3 scripts/build_long_history_pilot.py \
   --as-of 2026-06-30
 ```
 
-Add a trustworthy `listed_since` date to every spec entry before using the
-manifest as a coverage audit. A start within 366 days is recorded as plausible
-inception coverage; a later start is explicitly `truncated`. The output is an
-unlabeled development corpus and intentionally contains no benchmark holdout
-labels.
+Every spec entry requires a full `company_name`, an exact `listed_since` date,
+and a primary `listing_date_source`. Coverage is marked
+`verified_listing_quarter_to_date` only when completed monthly bars begin in the
+listing month, reach the review cutoff month, contain no missing months, and
+show no unreconciled split-like discontinuity. All other histories remain
+explicitly unverified. The output is an unlabeled development corpus and
+intentionally contains no benchmark holdout labels.
 
 ## Planned Outputs
 

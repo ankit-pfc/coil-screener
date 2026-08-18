@@ -1,16 +1,11 @@
 {
   "symbols": [
     {
-      "ticker": "UNP",
-      "provider_symbol": "UNP.US"
-    },
-    {
       "ticker": "0005.HK",
-      "provider_symbol": "0005.HK"
-    },
-    {
-      "ticker": "INFY.NS",
-      "provider_symbol": "INFY.NSE"
+      "company_name": "HSBC Holdings plc",
+      "provider_symbol": "0005.HK",
+      "listed_since": "1991-04-08",
+      "listing_date_source": "https://history.hsbc.com/index.php/collections/global-archives/hsbc-holdings-plc"
     }
   ]
 }

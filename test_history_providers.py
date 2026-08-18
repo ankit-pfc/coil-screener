@@ -133,7 +133,7 @@ def test_long_history_pilot_freezes_completed_quarters_without_labels(tmp_path):
         "1980-01-02,10,11,9,10.5,100,0\n"
         "1980-02-01,10.5,12,10,11.5,120,0\n"
         "1980-03-31,11.5,13,11,12.5,140,0\n"
-        "1980-04-01,12.5,14,12,13.5,160,0\n",
+        "1980-04-01,12.5,14,12,13.5,160,2\n",
         encoding="utf-8",
     )
     spec = tmp_path / "spec.json"
@@ -143,7 +143,9 @@ def test_long_history_pilot_freezes_completed_quarters_without_labels(tmp_path):
                 "symbols": [
                     {
                         "ticker": "AAA",
+                        "company_name": "AAA Holdings plc",
                         "listed_since": "1980-01-01",
+                        "listing_date_source": "https://example.test/aaa-listing",
                     }
                 ]
             }
@@ -177,7 +179,44 @@ def test_long_history_pilot_freezes_completed_quarters_without_labels(tmp_path):
     snapshot = json.loads((output / "AAA.json").read_text(encoding="utf-8"))
     assert result.stdout.strip().endswith("manifest.json")
     assert manifest["holdout_labels_included"] is False
-    assert manifest["counts"]["plausible_inception_coverage"] == 1
+    assert manifest["counts"]["verified_listing_quarter_to_date"] == 1
+    assert manifest["items"][0]["company_name"] == "AAA Holdings plc"
+    assert snapshot["company_name"] == "AAA Holdings plc"
     assert snapshot["coverage"]["first_bar_date"] == "1980-01-01"
+    assert snapshot["coverage"]["status"] == "verified_listing_quarter_to_date"
+    assert snapshot["coverage"]["listing_date_source"].startswith("https://")
+    assert snapshot["coverage"]["admitted_daily_end"] == "1980-03-31"
+    assert snapshot["security_identity_sha256"]
+    assert snapshot["coverage_sha256"]
     assert snapshot["monthly_bars"][-1]["date"] == "1980-03-01"
+    assert snapshot["monthly_bars"][-1]["close"] == 12.5
     assert snapshot["provider"]["adjustment_mode"] == "split_adjusted"
+    assert snapshot["provider"]["provider_history_end"] == "1980-04-01"
+    assert snapshot["provider"]["admitted_daily_end"] == "1980-03-31"
+
+
+def test_long_history_pilot_requires_full_security_identity(tmp_path):
+    spec = tmp_path / "spec.json"
+    spec.write_text(
+        json.dumps({"symbols": [{"ticker": "AAA"}]}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_long_history_pilot.py",
+            "--provider",
+            "frozen_csv",
+            "--spec",
+            str(spec),
+            "--output",
+            str(tmp_path / "pilot"),
+        ],
+        cwd=__file__.rsplit("/", 1)[0],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "full company_name" in result.stderr
