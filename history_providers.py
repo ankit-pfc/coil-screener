@@ -175,16 +175,26 @@ def fetch_eodhd_daily_history(
     frame = pd.DataFrame(rows).set_index("Date").sort_index()
     if frame.index.has_duplicates:
         raise HistoryProviderError("EODHD EOD history contains duplicate dates")
+    out_of_range_split_events: list[dict[str, Any]] = []
     for item in splits_payload:
         if not isinstance(item, dict) or not item.get("date"):
             raise HistoryProviderError("EODHD split history has an invalid row")
         split_date = pd.Timestamp(str(item["date"]))
+        raw_factor = item.get("split") or item.get("split_factor")
+        factor = _split_factor(raw_factor)
+        if split_date < frame.index[0] or split_date > frame.index[-1]:
+            out_of_range_split_events.append(
+                {
+                    "date": split_date.strftime("%Y-%m-%d"),
+                    "factor": factor,
+                }
+            )
+            continue
         if split_date not in frame.index:
             raise HistoryProviderError(
                 f"EODHD split date {split_date.date()} has no matching trading bar"
             )
-        raw_factor = item.get("split") or item.get("split_factor")
-        frame.loc[split_date, "Stock Splits"] = _split_factor(raw_factor)
+        frame.loc[split_date, "Stock Splits"] = factor
     frame.attrs.update(
         {
             "source": "eodhd",
@@ -192,8 +202,10 @@ def fetch_eodhd_daily_history(
             "adjustment_mode": "raw_with_split_events",
             "adjustment_source": "eodhd_splits_api",
             "source_interval": "1d",
+            "requested_history_start": date_from,
             "provider_history_start": frame.index[0].strftime("%Y-%m-%d"),
             "provider_history_end": frame.index[-1].strftime("%Y-%m-%d"),
+            "split_events_outside_provider_history": out_of_range_split_events,
         }
     )
     return frame

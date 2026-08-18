@@ -214,6 +214,7 @@ def main() -> int:
             daily = fetch_eodhd_daily_history(
                 ticker,
                 provider_symbol=item["provider_symbol"],
+                date_from=str(item["listed_since"]),
             )
         else:
             daily = load_frozen_daily_history(ticker, root=args.frozen_root)
@@ -277,10 +278,16 @@ def main() -> int:
                 "name": args.provider,
                 "symbol": daily.attrs.get("provider_symbol"),
                 "source_interval": "1d",
+                "requested_history_start": provider_attrs.get(
+                    "requested_history_start"
+                ),
                 "provider_history_start": provider_attrs.get(
                     "provider_history_start"
                 ),
                 "provider_history_end": provider_attrs.get("provider_history_end"),
+                "split_events_outside_provider_history": provider_attrs.get(
+                    "split_events_outside_provider_history", []
+                ),
                 "admitted_daily_start": admitted_daily_start,
                 "admitted_daily_end": admitted_daily_end,
                 "adjustment_mode": "split_adjusted",

@@ -54,6 +54,11 @@ def eodhd_payloads():
 
 def test_eodhd_returns_raw_ohlc_with_explicit_split_events():
     bars, splits = eodhd_payloads()
+    splits = [
+        {"date": "1990-01-02", "split": "2/1"},
+        *splits,
+        {"date": "2021-01-04", "split": "3/2"},
+    ]
     calls = []
 
     def request_get(url, **kwargs):
@@ -68,10 +73,34 @@ def test_eodhd_returns_raw_ohlc_with_explicit_split_events():
 
     assert frame.attrs["source"] == "eodhd"
     assert frame.attrs["provider_symbol"] == "AAPL.US"
+    assert frame.attrs["requested_history_start"] == "1900-01-01"
     assert frame.loc[pd.Timestamp("2020-08-31"), "Stock Splits"] == 4.0
+    assert frame.attrs["split_events_outside_provider_history"] == [
+        {"date": "1990-01-02", "factor": 2.0},
+        {"date": "2021-01-04", "factor": 1.5},
+    ]
     assert "private-test-token" not in json.dumps(frame.attrs)
     assert len(calls) == 2
     assert all(call[1]["params"]["from"] == "1900-01-01" for call in calls)
+
+
+def test_eodhd_rejects_an_unmatched_split_inside_the_returned_price_window():
+    bars, _splits = eodhd_payloads()
+
+    def request_get(url, **_kwargs):
+        payload = (
+            [{"date": "2020-08-29", "split": "4/1"}]
+            if "/splits/" in url
+            else bars
+        )
+        return FakeResponse(payload)
+
+    with pytest.raises(HistoryProviderError, match="no matching trading bar"):
+        fetch_eodhd_daily_history(
+            "AAPL",
+            api_token="private-test-token",
+            request_get=request_get,
+        )
 
 
 def test_international_eodhd_suffixes_are_never_guessed():
@@ -218,6 +247,7 @@ def test_long_history_pilot_freezes_completed_quarters_without_labels(tmp_path):
     assert snapshot["monthly_bars"][-1]["close"] == 12.5
     assert snapshot["provider"]["adjustment_mode"] == "split_adjusted"
     assert snapshot["provider"]["provider_history_end"] == "1980-04-01"
+    assert snapshot["provider"]["split_events_outside_provider_history"] == []
     assert snapshot["provider"]["admitted_daily_end"] == "1980-03-31"
 
 
