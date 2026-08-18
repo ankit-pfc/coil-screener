@@ -151,6 +151,50 @@ def test_prefix_replay_uses_fresh_cutoffs_and_never_predates_confirmation():
             assert point["peak_date"] == point["date"]
 
 
+def test_every_v231_replay_prefix_matches_literal_prefix_and_keeps_major_events():
+    bars = make_coil_bars()
+    replay = replay_completed_quarter_prefixes(
+        bars,
+        adjustment_mode="split_adjusted",
+        today=date(2021, 1, 1),
+    )
+    event_ledger: dict[str, tuple[str | None, float]] = {}
+
+    def major_events(analysis: dict) -> dict[str, tuple[str | None, float]]:
+        return {
+            str(point["date"]): (
+                point.get("confirmed_at"),
+                float(point["price"]),
+            )
+            for point in analysis["major_highs"]
+        }
+
+    for snapshot in replay["snapshots"]:
+        cutoff = date.fromisoformat(snapshot["as_of"])
+        literal_prefix = []
+        for item in bars:
+            parsed = date.fromisoformat(item["date"])
+            available = date(
+                parsed.year,
+                parsed.month,
+                calendar.monthrange(parsed.year, parsed.month)[1],
+            )
+            if available <= cutoff:
+                literal_prefix.append(item)
+        literal = analyze_coil(
+            literal_prefix,
+            as_of=snapshot["as_of"],
+            mode=ANALYSIS_MODE_ALGORITHM_ONLY,
+            adjustment_mode="split_adjusted",
+        )
+        current = major_events(snapshot["analysis"])
+
+        assert current == major_events(literal)
+        for peak_date, frozen_event in event_ledger.items():
+            assert current.get(peak_date) == frozen_event
+        event_ledger.update(current)
+
+
 def test_prefix_replay_does_not_manufacture_a_future_quarter_end():
     partial_march = [
         {

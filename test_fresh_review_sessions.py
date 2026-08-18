@@ -132,7 +132,13 @@ def _make_corpus(
                 "tuning_anchor": {"flag": False, "evidence": []},
             },
             "provenance": {"source_cache_file": f"cache/{ticker}.json"},
-            "source_cache_metadata": {},
+            "source_cache_metadata": {
+                "schema_version": 4,
+                "adjustment_mode": "split_adjusted",
+                "adjustment_source": "yfinance_stock_splits",
+                "source_interval": "1d",
+                "adjustment_transform_version": "yfinance-stock-splits-v1",
+            },
         }
         (folder / f"{ticker}.json").write_text(
             json.dumps(snapshot), encoding="utf-8"
