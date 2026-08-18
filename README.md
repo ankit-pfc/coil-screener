@@ -88,9 +88,16 @@ Every spec entry requires a full `company_name`, an exact `listed_since` date,
 and a primary `listing_date_source`. Coverage is marked
 `verified_listing_quarter_to_date` only when completed monthly bars begin in the
 listing month, reach the review cutoff month, contain no missing months, and
-show no unreconciled split-like discontinuity. All other histories remain
-explicitly unverified. The output is an unlabeled development corpus and
+show no unreconciled split-like discontinuity. The command fails without
+writing a corpus if any entry is unverified. `--allow-unverified` may be used
+only to write a clearly marked diagnostic corpus; the benchmark builder and
+review renderer still reject it. All output is unlabeled development data and
 intentionally contains no benchmark holdout labels.
+
+An entry may also set its own completed-quarter `as_of`; otherwise the command's
+`--as-of` value is used. This lets the 72-sample benchmark build each ticker at
+its frozen lifecycle cutoff before split adjustment, without using later
+corporate actions.
 
 ## Planned Outputs
 

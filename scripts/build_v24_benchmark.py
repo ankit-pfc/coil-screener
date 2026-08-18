@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download and freeze the 72 canonical v2.4 benchmark samples."""
+"""Freeze the 72 canonical v2.4 samples from verified listing history."""
 from __future__ import annotations
 
 import argparse
@@ -8,8 +8,6 @@ import csv
 import hashlib
 import json
 import sys
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,18 +22,17 @@ from benchmark_v24 import (  # noqa: E402
     COHORTS,
     MANIFEST_SCHEMA_VERSION,
     canonical_json,
+    history_coverage_audit,
     sha256_json,
     stable_sample_id,
     stable_task_id,
     validate_manifest,
 )
 from coil_analysis import ALGORITHM_VERSION  # noqa: E402
-from history_cache import _bars_from_frame  # noqa: E402
 from review_snapshots import (  # noqa: E402
     REVIEW_CORPUS_MANIFEST_KIND,
     review_snapshot_identity,
 )
-from screen_monthly import fetch_monthly_history  # noqa: E402
 
 SOURCE = "benchmark_2026-08-13_v24_72.csv"
 CORPUS_DIR = PROJECT_ROOT / "review_snapshots" / Path(SOURCE).stem
@@ -59,20 +56,78 @@ def _write_json(path: Path, value: Any) -> None:
     )
 
 
-def _download(ticker: str, attempts: int = 3):
-    last_error: Exception | None = None
-    for attempt in range(attempts):
+def _load_long_history_corpus(
+    root: Path,
+    planned: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    root = root.resolve()
+    manifest_path = root / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"long-history manifest is unreadable: {manifest_path}") from exc
+    if manifest.get("kind") != "coilingview.long-history-research-manifest":
+        raise SystemExit("long-history manifest kind is invalid")
+    manifest_items = {
+        str(item.get("ticker") or "").strip().upper(): item
+        for item in manifest.get("items") or []
+        if isinstance(item, dict)
+    }
+    expected = {str(item["ticker"]) for item in planned}
+    if set(manifest_items) != expected:
+        missing = sorted(expected - set(manifest_items))
+        extra = sorted(set(manifest_items) - expected)
+        raise SystemExit(
+            "long-history ticker set mismatch: "
+            + canonical_json({"missing": missing, "extra": extra})
+        )
+    snapshots: dict[str, dict[str, Any]] = {}
+    failures: dict[str, list[str]] = {}
+    for item in planned:
+        ticker = str(item["ticker"])
+        manifest_item = manifest_items[ticker]
+        snapshot_path = (root / str(manifest_item.get("snapshot_file") or "")).resolve()
+        if root not in snapshot_path.parents:
+            failures[ticker] = ["snapshot path escapes the long-history root"]
+            continue
         try:
-            frame = fetch_monthly_history(ticker)
-            if frame is not None and not frame.empty:
-                return frame
-        except Exception as exc:  # provider errors vary by curl backend
-            last_error = exc
-        if attempt + 1 < attempts:
-            time.sleep(1 + attempt)
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("provider returned no history")
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            failures[ticker] = ["snapshot is missing or unreadable"]
+            continue
+        expected_snapshot_hash = str(manifest_item.get("snapshot_sha256") or "")
+        if hashlib.sha256(snapshot_path.read_bytes()).hexdigest() != expected_snapshot_hash:
+            failures[ticker] = ["snapshot hash does not match the long-history manifest"]
+            continue
+        bars = payload.get("monthly_bars")
+        if (
+            payload.get("kind") != "coilingview.long-history-research-snapshot"
+            or payload.get("ticker") != ticker
+            or payload.get("as_of") != item["as_of"]
+            or not isinstance(bars, list)
+            or sha256_json(bars) != payload.get("bars_sha256")
+        ):
+            failures[ticker] = ["snapshot identity, cutoff, or bars hash is invalid"]
+            continue
+        audit_item = {
+            "ticker": ticker,
+            "as_of": item["as_of"],
+            "company_name": payload.get("company_name"),
+            "security": payload.get("security"),
+            "security_identity_sha256": payload.get("security_identity_sha256"),
+            "coverage": payload.get("coverage"),
+            "coverage_sha256": payload.get("coverage_sha256"),
+        }
+        audit = history_coverage_audit({"items": [audit_item]})
+        if not audit["valid"]:
+            failures[ticker] = list(audit["errors"])
+            continue
+        snapshots[ticker] = payload
+    if failures:
+        raise SystemExit(
+            "long-history coverage failures: " + canonical_json(failures)
+        )
+    return snapshots
 
 
 def _items_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -106,7 +161,6 @@ def _items_from_spec(spec: dict[str, Any]) -> list[dict[str, Any]]:
                     "cohort": cohort,
                     "as_of": as_of,
                     "prior_review_or_tuning": bool(raw.get("prior_review_or_tuning", False)),
-                    "history_start": raw.get("history_start"),
                 }
             )
     return items
@@ -136,16 +190,12 @@ def _write_workbench_source(
             "universe_position": position,
         }
         task_id = stable_task_id(item["sample_id"], attempt, QUEUE_SALT)
-        timing_order = None
-        if attempt == 2:
-            timing_order = "blind_first" if position <= 6 else "assisted_first"
         snapshot["corpus_labels"].update(
             {
                 "benchmark_task_id": task_id,
                 "benchmark_sample_id": item["sample_id"],
                 "benchmark_attempt": attempt,
                 "benchmark_partition": partition,
-                "benchmark_timing_order": timing_order,
             }
         )
         path = root / f"{ticker}.json"
@@ -174,7 +224,6 @@ def _write_workbench_source(
                 "sample_id": item["sample_id"],
                 "bars_sha256": item["provenance"]["bars_sha256"],
                 "partition": partition,
-                **({"timing_order": timing_order} if timing_order else {}),
             }
         )
     session_manifest = {
@@ -193,10 +242,11 @@ def _write_workbench_source(
         },
         "canonicalization": {
             "adjustment_mode": "split_adjusted",
-            "adjustment_source": "yfinance_stock_splits",
+            "adjustment_source": "per_snapshot_split_events",
             "source_interval": "1d",
-            "adjustment_transform_version": "yfinance-stock-splits-v1",
+            "adjustment_transform_version": "per_snapshot",
             "as_of_policy": "completed quarter only",
+            "history_policy": "verified_listing_quarter_to_date",
         },
         "items": session_items,
     }
@@ -288,7 +338,11 @@ def _materialize_workbench(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument(
+        "--long-history-root",
+        type=Path,
+        help="72-ticker output from build_long_history_pilot.py, with each ticker frozen at its benchmark cutoff",
+    )
     parser.add_argument(
         "--workbench-only",
         action="store_true",
@@ -312,6 +366,11 @@ def main() -> int:
         validation = validate_manifest(old_manifest)
         if not validation["valid"]:
             raise SystemExit("canonical manifest validation failed: " + "; ".join(validation["errors"]))
+        coverage = history_coverage_audit(old_manifest)
+        if not coverage["valid"]:
+            raise SystemExit(
+                "workbench-only rebuild requires verified listing-quarter history"
+            )
         manifest_items = list(old_manifest["items"])
         snapshots = {
             item["ticker"]: json.loads(
@@ -331,32 +390,20 @@ def main() -> int:
     if holdout_leaks:
         raise SystemExit(f"prior review/tuning names leaked into holdout: {holdout_leaks}")
 
-    frames: dict[str, Any] = {}
-    failures: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
-        futures = {executor.submit(_download, item["ticker"]): item["ticker"] for item in planned}
-        for future in as_completed(futures):
-            ticker = futures[future]
-            try:
-                frames[ticker] = future.result()
-                print(f"downloaded {ticker}: {len(frames[ticker])} months", flush=True)
-            except Exception as exc:
-                failures[ticker] = str(exc)
-                print(f"failed {ticker}: {exc}", file=sys.stderr, flush=True)
-    if failures:
-        raise SystemExit("provider failures: " + canonical_json(failures))
+    if args.long_history_root is None:
+        raise SystemExit(
+            "--long-history-root is required; the benchmark cannot use an unverified provider maximum"
+        )
+    long_history = _load_long_history_corpus(args.long_history_root, planned)
 
-    prepared: dict[str, tuple[list[dict[str, Any]], dict[str, Any]]] = {}
+    prepared: dict[
+        str, tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]
+    ] = {}
     quality_failures: dict[str, Any] = {}
     for item in planned:
         ticker = item["ticker"]
-        frame = frames[ticker]
-        if item.get("history_start"):
-            start_month = date.fromisoformat(str(item["history_start"])).replace(day=1)
-            frame = frame[frame.index.date >= start_month]
-        cutoff_month = date.fromisoformat(item["as_of"]).replace(day=1)
-        frame = frame[frame.index.date <= cutoff_month]
-        bars = _bars_from_frame(frame)
+        history = long_history[ticker]
+        bars = list(history["monthly_bars"])
         inspected = inspect_monthly_bars(
             bars,
             as_of=item["as_of"],
@@ -375,7 +422,7 @@ def main() -> int:
                 "actual": bars[-1]["date"][:7] if bars else None,
             }
             continue
-        prepared[ticker] = (bars, quality)
+        prepared[ticker] = (bars, quality, history)
     if quality_failures:
         raise SystemExit("strict OHLC/cutoff failures: " + canonical_json(quality_failures))
 
@@ -383,19 +430,17 @@ def main() -> int:
     source_rows: list[dict[str, str]] = []
     for position, item in enumerate(planned, start=1):
         ticker = item["ticker"]
-        bars, quality = prepared[ticker]
+        bars, quality, history = prepared[ticker]
         bars_hash = sha256_json(bars)
         sample_id = stable_sample_id(ticker, item["as_of"], bars_hash)
         source_fingerprint = sha256_json(
             {
-                "provider": "yfinance",
+                "provider": history.get("provider"),
                 "ticker": ticker,
                 "fetched_at": args.fetched_at,
                 "adjustment_mode": "split_adjusted",
-                "adjustment_source": "yfinance_stock_splits",
-                "source_interval": "1d",
-                "adjustment_transform_version": "yfinance-stock-splits-v1",
-                "history_start": item.get("history_start"),
+                "security_identity_sha256": history["security_identity_sha256"],
+                "coverage_sha256": history["coverage_sha256"],
                 "bars_sha256": bars_hash,
             }
         )
@@ -403,7 +448,7 @@ def main() -> int:
             "ticker": ticker,
             "data_date": bars[-1]["date"],
             "fetched_at": args.fetched_at,
-            "data_source": "yfinance",
+            "data_source": str((history.get("provider") or {}).get("name") or "frozen_long_history"),
             "freshness": "frozen_benchmark",
             "status": "blind_unlabeled",
             "grade": None,
@@ -413,6 +458,7 @@ def main() -> int:
             "kind": "coilingview.saved-run-review-snapshot",
             "source": SOURCE,
             "ticker": ticker,
+            "company_name": history["company_name"],
             "sample_id": sample_id,
             "as_of": item["as_of"],
             "run": {
@@ -435,6 +481,10 @@ def main() -> int:
                 "expected_hard_invalid": False,
                 "strict_report": quality,
             },
+            "security": history["security"],
+            "security_identity_sha256": history["security_identity_sha256"],
+            "coverage": history["coverage"],
+            "coverage_sha256": history["coverage_sha256"],
             "provenance": {
                 "bars_sha256": bars_hash,
                 "source_fingerprint": source_fingerprint,
@@ -443,11 +493,11 @@ def main() -> int:
                 "schema_version": 4,
                 "fetched_at": args.fetched_at,
                 "last_bar_date": bars[-1]["date"],
-                "source": "yfinance",
+                "source": str((history.get("provider") or {}).get("name") or "frozen_long_history"),
                 "adjustment_mode": "split_adjusted",
-                "adjustment_source": "yfinance_stock_splits",
-                "source_interval": "1d",
-                "adjustment_transform_version": "yfinance-stock-splits-v1",
+                "adjustment_source": (history.get("provider") or {}).get("adjustment_source"),
+                "source_interval": (history.get("provider") or {}).get("source_interval"),
+                "adjustment_transform_version": (history.get("provider") or {}).get("adjustment_transform_version"),
             },
             "monthly_bars": bars,
         }
@@ -460,6 +510,11 @@ def main() -> int:
         manifest_items.append(
             {
                 **item,
+                "company_name": history["company_name"],
+                "security": history["security"],
+                "security_identity_sha256": history["security_identity_sha256"],
+                "coverage": history["coverage"],
+                "coverage_sha256": history["coverage_sha256"],
                 "sample_id": sample_id,
                 "sample_file": path.name,
                 "bar_count": len(bars),
@@ -467,15 +522,7 @@ def main() -> int:
                 "last_data_date": bars[-1]["date"],
                 "adjustment_mode": "split_adjusted",
                 "new_or_remediated": True,
-                "history_start_policy": (
-                    {
-                        "kind": "exclude_pre_cutoff_provider_rows",
-                        "first_included_month": item["history_start"],
-                        "reason": "predeclared strict-OHLC remediation before label exposure",
-                    }
-                    if item.get("history_start")
-                    else {"kind": "full_provider_history"}
-                ),
+                "history_start_policy": {"kind": "verified_listing_quarter_to_date"},
                 "data_quality": {
                     "reviewable": True,
                     "status": quality["status"],
@@ -500,6 +547,7 @@ def main() -> int:
                 "partition": item["partition"],
                 "cohort": item["cohort"],
                 "sample_id": sample_id,
+                "company_name": history["company_name"],
             }
         )
 
@@ -517,16 +565,22 @@ def main() -> int:
         },
         "canonicalization": {
             "adjustment_mode": "split_adjusted",
-            "adjustment_source": "yfinance_stock_splits",
+            "adjustment_source": "per_snapshot_split_events",
             "source_interval": "1d",
-            "adjustment_transform_version": "yfinance-stock-splits-v1",
+            "adjustment_transform_version": "per_snapshot",
             "as_of_policy": "completed quarter only",
+            "history_policy": "verified_listing_quarter_to_date",
         },
         "items": manifest_items,
     }
     validation = validate_manifest(manifest)
     if not validation["valid"]:
         raise SystemExit("manifest validation failed: " + "; ".join(validation["errors"]))
+    coverage = history_coverage_audit(manifest)
+    if not coverage["valid"]:
+        raise SystemExit(
+            "listing-history validation failed: " + "; ".join(coverage["errors"])
+        )
     _write_json(CORPUS_DIR / "manifest.json", manifest)
     if isinstance(old_manifest, dict) and old_manifest.get("benchmark_id") == BENCHMARK_ID:
         current_files = {str(item["sample_file"]) for item in manifest_items}

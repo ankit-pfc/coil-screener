@@ -31,10 +31,10 @@
     "india": [
       {"ticker": "RELIANCE.NS"},
       {"ticker": "TCS.NS"},
-      {"ticker": "HDFCBANK.NS", "history_start": "1996-03-01"},
+      {"ticker": "HDFCBANK.NS"},
       {"ticker": "ICICIBANK.NS"},
-      {"ticker": "INFY.NS", "history_start": "2005-01-01"},
-      {"ticker": "ITC.NS", "history_start": "1996-03-01"},
+      {"ticker": "INFY.NS"},
+      {"ticker": "ITC.NS"},
       {"ticker": "HINDUNILVR.NS"},
       {"ticker": "SBIN.NS"},
       {"ticker": "LT.NS"},
@@ -42,7 +42,7 @@
       {"ticker": "KOTAKBANK.NS"},
       {"ticker": "BAJFINANCE.NS"},
       {"ticker": "MARUTI.NS"},
-      {"ticker": "SUNPHARMA.NS", "history_start": "1996-03-01"},
+      {"ticker": "SUNPHARMA.NS"},
       {"ticker": "TITAN.NS"},
       {"ticker": "NTPC.NS"},
       {"ticker": "ONGC.NS"},
@@ -81,6 +81,6 @@
       {"ticker": "PEP"}
     ]
   },
-  "source": "Yahoo Finance raw daily OHLC and Stock Splits events, aggregated after split-only adjustment",
+  "source": "Frozen, source-identified raw daily OHLC and split events with verified listing-quarter coverage, aggregated after point-in-time split-only adjustment",
   "version": 1
 }

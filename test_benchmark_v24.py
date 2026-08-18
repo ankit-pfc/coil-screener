@@ -12,6 +12,7 @@ from benchmark_v24 import (
     HoldoutSealedError,
     band_agrees,
     gate_decision,
+    history_coverage_audit,
     label_stability,
     labels_from_review_exports,
     load_labels,
@@ -75,6 +76,31 @@ def _manifest():
                 },
             }
         )
+        security = {
+            "ticker": f"T{index}",
+            "company_name": f"Test Company {index} plc",
+            "provider_symbol": f"T{index}.TEST",
+            "listed_since": "2000-01-15",
+            "listing_date_source": f"https://example.test/listings/{index}",
+        }
+        coverage = {
+            "status": "verified_listing_quarter_to_date",
+            "listed_since": security["listed_since"],
+            "listing_date_source": security["listing_date_source"],
+            "first_bar_date": "2000-01-01",
+            "last_bar_date": "2026-06-01",
+        }
+        items[-1].update(
+            {
+                "company_name": security["company_name"],
+                "security": security,
+                "security_identity_sha256": benchmark_module.sha256_json(security),
+                "coverage": coverage,
+                "coverage_sha256": benchmark_module.sha256_json(coverage),
+                "first_data_date": coverage["first_bar_date"],
+                "last_data_date": coverage["last_bar_date"],
+            }
+        )
     return {
         "schema_version": 1,
         "benchmark_id": BENCHMARK_ID,
@@ -135,6 +161,81 @@ def test_builder_emits_workbench_manifest_kind_accepted_by_loader():
     assert build_v24_benchmark.REVIEW_CORPUS_MANIFEST_KIND == (
         REVIEW_CORPUS_MANIFEST_KIND
     )
+
+
+def test_benchmark_builder_accepts_only_hash_bound_verified_long_history(tmp_path):
+    security = {
+        "ticker": "AAA",
+        "company_name": "AAA Holdings plc",
+        "provider_symbol": "AAA.TEST",
+        "listed_since": "2000-01-15",
+        "listing_date_source": "https://example.test/aaa-listing",
+    }
+    coverage = {
+        "status": "verified_listing_quarter_to_date",
+        "listed_since": security["listed_since"],
+        "listing_date_source": security["listing_date_source"],
+        "first_bar_date": "2000-01-01",
+        "last_bar_date": "2026-06-01",
+        "review_as_of": "2026-06-30",
+    }
+    bars = [
+        {
+            "date": "2000-01-01",
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.5,
+            "volume": 100.0,
+        },
+        {
+            "date": "2026-06-01",
+            "open": 20.0,
+            "high": 21.0,
+            "low": 19.0,
+            "close": 20.5,
+            "volume": 200.0,
+        },
+    ]
+    snapshot = {
+        "kind": "coilingview.long-history-research-snapshot",
+        "ticker": "AAA",
+        "company_name": security["company_name"],
+        "as_of": "2026-06-30",
+        "security": security,
+        "security_identity_sha256": benchmark_module.sha256_json(security),
+        "coverage": coverage,
+        "coverage_sha256": benchmark_module.sha256_json(coverage),
+        "bars_sha256": benchmark_module.sha256_json(bars),
+        "monthly_bars": bars,
+    }
+    snapshot_path = tmp_path / "AAA.json"
+    _write(snapshot_path, snapshot)
+    _write(
+        tmp_path / "manifest.json",
+        {
+            "kind": "coilingview.long-history-research-manifest",
+            "items": [
+                {
+                    "ticker": "AAA",
+                    "snapshot_file": "AAA.json",
+                    "snapshot_sha256": benchmark_module.file_sha256(snapshot_path),
+                }
+            ],
+        },
+    )
+
+    loaded = build_v24_benchmark._load_long_history_corpus(
+        tmp_path, [{"ticker": "AAA", "as_of": "2026-06-30"}]
+    )
+    assert loaded["AAA"]["company_name"] == "AAA Holdings plc"
+
+    snapshot["company_name"] = "Tampered Name plc"
+    _write(snapshot_path, snapshot)
+    with pytest.raises(SystemExit, match="snapshot hash"):
+        build_v24_benchmark._load_long_history_corpus(
+            tmp_path, [{"ticker": "AAA", "as_of": "2026-06-30"}]
+        )
 
 
 def _selection_report(manifest_path, protocol_path):
@@ -228,6 +329,22 @@ def test_manifest_requires_completed_calendar_quarter_cutoffs():
     assert report["valid"] is False
     assert any("not a calendar quarter-end" in error for error in report["errors"])
     assert any("not a completed quarter" in error for error in report["errors"])
+
+
+def test_history_coverage_gate_requires_full_name_hashes_and_listing_month():
+    manifest = _manifest()
+    assert history_coverage_audit(manifest)["valid"] is True
+
+    truncated = deepcopy(manifest)
+    truncated["items"][0].pop("company_name")
+    truncated["items"][1]["coverage"]["status"] = "truncated_start"
+
+    report = history_coverage_audit(truncated)
+
+    assert report["valid"] is False
+    assert report["verified_count"] == 70
+    assert any("distinct full company name" in error for error in report["errors"])
+    assert any("not verified listing-quarter-to-date" in error for error in report["errors"])
 
 
 def test_frozen_evaluation_command_includes_repeat_and_holdout_artifacts():
@@ -599,12 +716,14 @@ def test_label_stability_uses_attempt_role_not_random_task_id_order():
 def test_gate_is_inconclusive_without_labels_but_no_go_on_pit_failure():
     manifest_validation = {"valid": True}
     pit = {"violation_count": 0}
+    coverage = {"valid": True, "verified_count": 72, "required_count": 72}
     decision = gate_decision(
         manifest_validation=manifest_validation,
         stability=None,
         v24_metrics=None,
         point_in_time=pit,
         accepted_hard_invalid=0,
+        history_coverage=coverage,
     )
     assert decision["outcome"] == "inconclusive"
     assert decision["promotion_authorized"] is False
@@ -615,8 +734,57 @@ def test_gate_is_inconclusive_without_labels_but_no_go_on_pit_failure():
         v24_metrics=None,
         point_in_time={"violation_count": 1},
         accepted_hard_invalid=0,
+        history_coverage=coverage,
     )
     assert failed["outcome"] == "no_go"
+
+    truncated = gate_decision(
+        manifest_validation=manifest_validation,
+        stability=None,
+        v24_metrics=None,
+        point_in_time=pit,
+        accepted_hard_invalid=0,
+        history_coverage={"valid": False, "verified_count": 0, "required_count": 72},
+    )
+    assert truncated["outcome"] == "no_go"
+    assert truncated["reason"] == "listing_history_coverage_gate_failed"
+    assert truncated["checks"]["history_coverage_verified"]["passed"] is False
+
+
+def test_codex_native_labels_can_pass_detector_gates_without_assisted_timing():
+    decision = gate_decision(
+        manifest_validation={"valid": True},
+        stability={
+            "repeat_pair_count": 12,
+            "passed": True,
+            "pattern_agreement": 0.9,
+            "matched_top_f1": 0.8,
+            "band_agreement": 0.8,
+            "timed_repeat_count": 0,
+            "counterbalanced": False,
+            "median_review_time_reduction": None,
+        },
+        v24_metrics={
+            "labeled_sample_count": 18,
+            "clear_negative_count": 3,
+            "major_top_precision": 0.9,
+            "major_top_recall": 0.7,
+            "band_agreement": 0.8,
+            "pattern_precision": 0.9,
+            "automated_positive_coverage": 0.5,
+            "clear_negative_false_positive_rate": 0.0,
+        },
+        point_in_time={"violation_count": 0},
+        accepted_hard_invalid=0,
+        history_coverage={"valid": True, "verified_count": 72, "required_count": 72},
+    )
+
+    assert decision["outcome"] == "go"
+    assert decision["promotion_authorized"] is True
+    assert "review_time_reduction" not in decision["checks"]
+    assert decision["observations"]["review_timing"][
+        "required_for_detector_promotion"
+    ] is False
 
 
 def test_frozen_72_sample_corpus_is_review_workbench_compatible():

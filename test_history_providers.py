@@ -125,6 +125,32 @@ def test_screen_monthly_can_use_eodhd_without_changing_the_default(monkeypatch):
     assert monthly.iloc[0]["High"] == 130
 
 
+def test_hsbc_1999_three_for_one_event_keeps_pre_post_price_basis_continuous():
+    daily = pd.DataFrame(
+        {
+            "Open": [90.0, 30.0],
+            "High": [93.0, 31.0],
+            "Low": [87.0, 29.0],
+            "Close": [90.0, 30.0],
+            "Volume": [100.0, 300.0],
+            "Stock Splits": [0.0, 3.0],
+        },
+        index=pd.to_datetime(["1999-07-02", "1999-07-05"]),
+    )
+    daily.attrs.update(
+        {
+            "source": "frozen_csv",
+            "adjustment_source": "hkex_1999_three_for_one",
+        }
+    )
+
+    monthly = screen_monthly._split_adjust_and_aggregate_monthly(daily)
+
+    assert monthly.iloc[0]["Open"] == pytest.approx(30.0)
+    assert monthly.iloc[0]["Close"] == pytest.approx(30.0)
+    assert monthly.iloc[0]["Volume"] == pytest.approx(600.0)
+
+
 def test_long_history_pilot_freezes_completed_quarters_without_labels(tmp_path):
     frozen_root = tmp_path / "frozen"
     frozen_root.mkdir()
@@ -220,3 +246,55 @@ def test_long_history_pilot_requires_full_security_identity(tmp_path):
 
     assert result.returncode != 0
     assert "full company_name" in result.stderr
+
+
+def test_long_history_pilot_fails_closed_without_writing_truncated_corpus(tmp_path):
+    frozen_root = tmp_path / "frozen"
+    frozen_root.mkdir()
+    (frozen_root / "AAA.csv").write_text(
+        "Date,Open,High,Low,Close,Volume,Stock Splits\n"
+        "1980-02-01,10,11,9,10.5,100,0\n"
+        "1980-03-31,11,12,10,11.5,120,0\n",
+        encoding="utf-8",
+    )
+    spec = tmp_path / "spec.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "symbols": [
+                    {
+                        "ticker": "AAA",
+                        "company_name": "AAA Holdings plc",
+                        "listed_since": "1980-01-01",
+                        "listing_date_source": "https://example.test/aaa-listing",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "pilot"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_long_history_pilot.py",
+            "--provider",
+            "frozen_csv",
+            "--frozen-root",
+            str(frozen_root),
+            "--spec",
+            str(spec),
+            "--output",
+            str(output),
+            "--as-of",
+            "1980-03-31",
+        ],
+        cwd=__file__.rsplit("/", 1)[0],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "no corpus was written" in result.stderr
+    assert not output.exists()

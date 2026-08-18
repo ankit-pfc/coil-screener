@@ -7,6 +7,7 @@ It is for coverage and detector refinement only and contains no holdout labels.
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import sys
@@ -32,10 +33,13 @@ from screen_monthly import _split_adjust_and_aggregate_monthly  # noqa: E402
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
+    path.write_bytes(_json_bytes(value))
+
+
+def _json_bytes(value: Any) -> bytes:
+    return (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
 
 
 def _last_completed_quarter_end(today: date) -> date:
@@ -44,6 +48,13 @@ def _last_completed_quarter_end(today: date) -> date:
         return date(today.year - 1, 12, 31)
     month = quarter * 3
     return date(today.year, month, 31 if month in {3, 12} else 30)
+
+
+def _require_quarter_end(value: date, label: str) -> None:
+    if value.month not in {3, 6, 9, 12} or value.day != calendar.monthrange(
+        value.year, value.month
+    )[1]:
+        raise SystemExit(f"{label} must be a completed calendar quarter-end")
 
 
 def _load_spec(path: Path) -> list[dict[str, str | None]]:
@@ -87,8 +98,17 @@ def _load_spec(path: Path) -> list[dict[str, str | None]]:
                 ),
                 "listed_since": listed_since,
                 "listing_date_source": listing_date_source,
+                "as_of": (
+                    str(raw["as_of"])[:10] if raw.get("as_of") else None
+                ),
             }
         )
+        if rows[-1]["as_of"]:
+            try:
+                parsed_as_of = date.fromisoformat(str(rows[-1]["as_of"]))
+            except ValueError as exc:
+                raise SystemExit(f"{raw['ticker']} has an invalid as_of date") from exc
+            _require_quarter_end(parsed_as_of, f"{raw['ticker']} as_of")
     if len({row["ticker"] for row in rows}) != len(rows):
         raise SystemExit("pilot spec contains duplicate tickers")
     return rows
@@ -162,6 +182,11 @@ def parser() -> argparse.ArgumentParser:
     )
     value.add_argument("--frozen-root", type=Path)
     value.add_argument("--as-of", type=date.fromisoformat)
+    value.add_argument(
+        "--allow-unverified",
+        action="store_true",
+        help="write a diagnostic-only corpus when listing-quarter coverage fails",
+    )
     return value
 
 
@@ -172,12 +197,19 @@ def main() -> int:
         raise SystemExit(f"output must be absent or empty: {output}")
     items = _load_spec(args.spec.resolve())
     today = datetime.now(timezone.utc).date()
-    cutoff = args.as_of or _last_completed_quarter_end(today)
+    default_cutoff = args.as_of or _last_completed_quarter_end(today)
+    _require_quarter_end(default_cutoff, "default as_of")
     generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     manifest_items: list[dict[str, Any]] = []
+    pending_snapshots: list[tuple[Path, bytes]] = []
 
     for item in items:
         ticker = str(item["ticker"])
+        cutoff = (
+            date.fromisoformat(str(item["as_of"]))
+            if item.get("as_of")
+            else default_cutoff
+        )
         if args.provider == "eodhd":
             daily = fetch_eodhd_daily_history(
                 ticker,
@@ -264,7 +296,8 @@ def main() -> int:
             "monthly_bars": bars,
         }
         snapshot_path = output / f"{ticker}.json"
-        _write_json(snapshot_path, snapshot)
+        snapshot_bytes = _json_bytes(snapshot)
+        pending_snapshots.append((snapshot_path, snapshot_bytes))
         manifest_items.append(
             {
                 "ticker": ticker,
@@ -272,7 +305,7 @@ def main() -> int:
                 "security_identity_sha256": security_identity_sha256,
                 "coverage_sha256": coverage_sha256,
                 "snapshot_file": snapshot_path.name,
-                "snapshot_sha256": hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
+                "snapshot_sha256": hashlib.sha256(snapshot_bytes).hexdigest(),
                 "bars_sha256": bars_sha256,
                 "bar_count": len(bars),
                 "coverage": coverage,
@@ -280,13 +313,34 @@ def main() -> int:
             }
         )
 
+    unverified = [
+        {
+            "ticker": item["ticker"],
+            "status": item["coverage"]["status"],
+        }
+        for item in manifest_items
+        if item["coverage"]["status"] != "verified_listing_quarter_to_date"
+    ]
+    if unverified and not args.allow_unverified:
+        raise SystemExit(
+            "listing-quarter coverage is not verified; no corpus was written: "
+            + canonical_json(unverified)
+        )
+
     manifest = {
         "schema_version": 1,
         "kind": "coilingview.long-history-research-manifest",
         "generated_at": generated_at,
         "provider": args.provider,
-        "as_of": cutoff.isoformat(),
+        "as_of_policy": "per_symbol_or_default",
+        "default_as_of": default_cutoff.isoformat(),
+        "distinct_as_of": sorted(
+            {str(item["coverage"]["review_as_of"]) for item in manifest_items}
+        ),
         "purpose": "development-only history coverage and detector refinement",
+        "release_status": (
+            "diagnostic_unverified" if unverified else "verified_listing_quarter_to_date"
+        ),
         "holdout_labels_included": False,
         "items": manifest_items,
         "counts": {
@@ -306,6 +360,9 @@ def main() -> int:
             ),
         },
     }
+    for snapshot_path, snapshot_bytes in pending_snapshots:
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot_path.write_bytes(snapshot_bytes)
     _write_json(output / "manifest.json", manifest)
     print(output / "manifest.json")
     return 0

@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from benchmark_v24 import (  # noqa: E402
     BENCHMARK_ID,
     detector_metrics,
+    history_coverage_audit,
     file_sha256,
     label_stability,
     load_labels,
@@ -61,6 +62,11 @@ def main() -> int:
     manifest_path = root / "manifest.json"
     protocol_path = root / "protocol.json"
     manifest = load_manifest(manifest_path)
+    coverage = history_coverage_audit(manifest)
+    if not coverage["valid"]:
+        raise SystemExit(
+            "configuration selection requires verified listing-quarter history"
+        )
     development = load_labels(
         args.development_labels,
         partition="development",

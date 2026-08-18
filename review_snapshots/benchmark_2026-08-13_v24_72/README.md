@@ -10,10 +10,13 @@ samples. Twelve development samples are queued a second time, producing 84
 review tasks. The reviewer-facing queue omits repeat relationships. Cohort names
 are sampling intentions, not labels; blind review must confirm them.
 
-All histories use raw Yahoo daily OHLC plus reported split events, adjusted into
-latest share units and then aggregated to months. Every analysis cutoff is a
-completed quarter. The manifest freezes the bars, source fingerprints, quality
-disposition, ticker family, split, cohort, and `as_of` date.
+Every sample must use frozen, source-identified raw daily OHLC plus reported
+split events, cut at that sample's `as_of` date before adjustment, and then
+aggregated to months. Every analysis cutoff is a completed quarter. The
+manifest freezes the full company name, sourced listing date, listing-quarter
+coverage report, bars, source fingerprints, quality disposition, ticker
+family, split, cohort, and `as_of` date. A provider's `max` response is not
+accepted as proof of listing history.
 
 Holdout labels are deliberately absent. `benchmark_v24.load_labels()` rejects a
 holdout artifact until the configuration-freeze file matches the corpus,
@@ -25,9 +28,9 @@ The development sweep is limited to the 54 registered combinations in
 `protocol.json`. `scripts/select_v24_configuration.py` refuses to run until all
 36 development labels, all 12 repeats, and all 18 validation labels are
 present; it applies the validation partition exactly once by creating its
-selection report exclusively. The counterbalanced timing order is coordinator
-metadata and is omitted from the reviewer queue. An exported review must record
-the order actually used before the review-time gate can pass.
+selection report exclusively. Review timing is an optional observation, not a
+detector-promotion gate: the deployed assisted-review experiment was retired
+when blind labeling moved to the Codex-native chart flow.
 
 Workbench collection is partition-isolated. Development (36), repeat (12),
 validation (18), and holdout (18) each have a separate saved-run manifest, so
@@ -36,14 +39,14 @@ never contain holdout records. The API rejects creation of the holdout session
 until a valid `configuration-freeze.json` and deployed code commit are supplied.
 The source names are opaque batches A–D and the protected UI does not display
 them, so the reviewer cannot infer partitions or repeats. The repeat session
-always locks its independent blind label first. After that lock, the UI performs
-an explicit, automatically timed manual-versus-assisted exercise in the frozen
-6/6 counterbalanced order, recorded in `reviewOrder` at finalization.
+always records an independent blind label without exposing detector evidence.
 
-Build (network required):
+Build from a verified 72-ticker long-history corpus (provider acquisition may
+require network access):
 
 ```bash
-python3 scripts/build_v24_benchmark.py
+python3 scripts/build_v24_benchmark.py \
+  --long-history-root /path/to/frozen-verified-long-history
 ```
 
 ## Blind review runbook

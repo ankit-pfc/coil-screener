@@ -75,7 +75,6 @@ GATES = {
     "clear_negative_false_positive_rate_max": 0.15,
     "point_in_time_violations_max": 0,
     "accepted_hard_invalid_max": 0,
-    "review_time_reduction": 0.30,
 }
 
 
@@ -309,6 +308,93 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def history_coverage_audit(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Require hash-bound full names and listing-quarter coverage for every sample.
+
+    This gate is deliberately separate from the legacy manifest-shape validator
+    so an older frozen corpus can still be diagnosed and receive an explicit
+    no-go decision instead of becoming unreadable.
+    """
+    errors: list[str] = []
+    verified_count = 0
+    items = manifest.get("items")
+    if not isinstance(items, list):
+        raise BenchmarkError("manifest items must be a list")
+    for index, raw in enumerate(items):
+        if not isinstance(raw, Mapping):
+            errors.append(f"item {index} is not an object")
+            continue
+        item_error_start = len(errors)
+        ticker = str(raw.get("ticker") or index).strip().upper()
+        company_name = str(raw.get("company_name") or "").strip()
+        security = raw.get("security")
+        coverage = raw.get("coverage")
+        if not company_name or company_name.upper() == ticker:
+            errors.append(f"{ticker} lacks a distinct full company name")
+        if not isinstance(security, Mapping):
+            errors.append(f"{ticker} lacks a frozen security identity")
+            security = {}
+        if not isinstance(coverage, Mapping):
+            errors.append(f"{ticker} lacks a frozen history coverage report")
+            coverage = {}
+        if (
+            security.get("ticker") != ticker
+            or security.get("company_name") != company_name
+            or security.get("listed_since") != coverage.get("listed_since")
+            or security.get("listing_date_source")
+            != coverage.get("listing_date_source")
+        ):
+            errors.append(f"{ticker} security and coverage identities disagree")
+        security_hash = str(raw.get("security_identity_sha256") or "")
+        if len(security_hash) != 64 or not hmac.compare_digest(
+            security_hash, sha256_json(dict(security))
+        ):
+            errors.append(f"{ticker} has an invalid security identity hash")
+        coverage_hash = str(raw.get("coverage_sha256") or "")
+        if len(coverage_hash) != 64 or not hmac.compare_digest(
+            coverage_hash, sha256_json(dict(coverage))
+        ):
+            errors.append(f"{ticker} has an invalid coverage hash")
+        try:
+            listed_since = date.fromisoformat(str(coverage.get("listed_since") or ""))
+            first_bar = date.fromisoformat(str(coverage.get("first_bar_date") or ""))
+            last_bar = date.fromisoformat(str(coverage.get("last_bar_date") or ""))
+            as_of = date.fromisoformat(str(raw.get("as_of") or ""))
+        except ValueError:
+            errors.append(f"{ticker} coverage dates are invalid")
+            continue
+        start_matches = (first_bar.year, first_bar.month) == (
+            listed_since.year,
+            listed_since.month,
+        )
+        end_matches = (last_bar.year, last_bar.month) == (as_of.year, as_of.month)
+        if coverage.get("review_as_of") not in {None, as_of.isoformat()}:
+            errors.append(f"{ticker} coverage cutoff disagrees with the sample")
+        if raw.get("first_data_date") not in {None, coverage.get("first_bar_date")}:
+            errors.append(f"{ticker} first-data identity disagrees with coverage")
+        if raw.get("last_data_date") not in {None, coverage.get("last_bar_date")}:
+            errors.append(f"{ticker} last-data identity disagrees with coverage")
+        if coverage.get("status") != "verified_listing_quarter_to_date":
+            errors.append(f"{ticker} history is not verified listing-quarter-to-date")
+        elif not start_matches:
+            errors.append(f"{ticker} first bar is not in its listing month")
+        elif not end_matches:
+            errors.append(f"{ticker} last bar does not reach its review cutoff")
+        elif not str(coverage.get("listing_date_source") or "").startswith(
+            ("https://", "http://")
+        ):
+            errors.append(f"{ticker} listing date lacks a primary source URL")
+        elif len(errors) == item_error_start:
+            verified_count += 1
+    return {
+        "valid": not errors and verified_count == len(items),
+        "required_count": len(items),
+        "verified_count": verified_count,
+        "unverified_count": len(items) - verified_count,
+        "errors": errors,
+    }
+
+
 def load_manifest(path: str | Path) -> dict[str, Any]:
     manifest = _load_json(path, label="benchmark manifest")
     validation = validate_manifest(manifest)
@@ -355,6 +441,11 @@ def make_freeze(
     if not evaluation_command.strip():
         raise BenchmarkError("evaluation_command is required")
     manifest = load_manifest(manifest_path)
+    coverage = history_coverage_audit(manifest)
+    if not coverage["valid"]:
+        raise BenchmarkError(
+            "configuration freeze requires verified listing-quarter history"
+        )
     protocol = _load_json(protocol_path, label="benchmark protocol")
     if protocol.get("benchmark_id") != BENCHMARK_ID:
         raise BenchmarkError("protocol benchmark id mismatch")
@@ -1407,6 +1498,7 @@ def gate_decision(
     v24_metrics: Mapping[str, Any] | None,
     point_in_time: Mapping[str, Any],
     accepted_hard_invalid: int,
+    history_coverage: Mapping[str, Any],
 ) -> dict[str, Any]:
     checks: dict[str, dict[str, Any]] = {}
 
@@ -1431,6 +1523,12 @@ def gate_decision(
         "threshold": True,
         "operator": "==",
         "passed": bool(manifest_validation.get("valid")),
+    }
+    checks["history_coverage_verified"] = {
+        "value": history_coverage.get("verified_count", 0),
+        "threshold": history_coverage.get("required_count", 0),
+        "operator": "==",
+        "passed": bool(history_coverage.get("valid")),
     }
     stability_ready = stability is not None and stability.get("repeat_pair_count", 0) >= 12
     checks["label_stability_ready"] = {
@@ -1467,22 +1565,17 @@ def gate_decision(
             v24_metrics.get("clear_negative_false_positive_rate"),
             GATES["clear_negative_false_positive_rate_max"],
         )
-    if stability is not None:
-        checks["review_time_counterbalanced"] = {
-            "value": bool(stability.get("counterbalanced")),
-            "threshold": True,
-            "operator": "==",
-            "passed": bool(stability.get("counterbalanced")),
-        }
-        minimum(
-            "review_time_reduction",
-            stability.get("median_review_time_reduction"),
-            GATES["review_time_reduction"],
-        )
     maximum("point_in_time_violations", point_in_time.get("violation_count"), 0)
     maximum("accepted_hard_invalid", accepted_hard_invalid, 0)
 
-    if not manifest_validation.get("valid") or point_in_time.get("violation_count", 0) > 0 or accepted_hard_invalid > 0:
+    if not history_coverage.get("valid"):
+        outcome = "no_go"
+        reason = "listing_history_coverage_gate_failed"
+    elif (
+        not manifest_validation.get("valid")
+        or point_in_time.get("violation_count", 0) > 0
+        or accepted_hard_invalid > 0
+    ):
         outcome = "no_go"
         reason = "hard_integrity_gate_failed"
     elif not stability_ready or not metrics_ready:
@@ -1502,4 +1595,21 @@ def gate_decision(
         "promotion_authorized": outcome == "go",
         "reason": reason,
         "checks": checks,
+        "observations": {
+            "review_timing": {
+                "required_for_detector_promotion": False,
+                "timed_repeat_count": (
+                    stability.get("timed_repeat_count") if stability else 0
+                ),
+                "counterbalanced": (
+                    stability.get("counterbalanced") if stability else False
+                ),
+                "median_review_time_reduction": (
+                    stability.get("median_review_time_reduction")
+                    if stability
+                    else None
+                ),
+                "reason": "Codex-native blind labeling replaced the deployed assisted-review timing experiment.",
+            }
+        },
     }

@@ -19,6 +19,7 @@ from benchmark_v24 import (  # noqa: E402
     HoldoutSealedError,
     detector_metrics,
     gate_decision,
+    history_coverage_audit,
     label_stability,
     load_labels,
     load_manifest,
@@ -127,12 +128,14 @@ def main() -> int:
         if result.get("abstained") is not True:
             invalid_accepted += 1
     validation = validate_manifest(manifest)
+    history_coverage = history_coverage_audit(manifest)
     decision = gate_decision(
         manifest_validation=validation,
         stability=stability,
         v24_metrics=v24_metrics,
         point_in_time=pit,
         accepted_hard_invalid=invalid_accepted,
+        history_coverage=history_coverage,
     )
     report = {
         "schema_version": DECISION_SCHEMA_VERSION,
@@ -142,6 +145,7 @@ def main() -> int:
         "manifest_sha256": manifest["_manifest_sha256"],
         "holdout_state": holdout_state,
         "manifest_validation": validation,
+        "history_coverage": history_coverage,
         "point_in_time": pit,
         "paired_operating_behavior": operating_behavior,
         "label_stability": stability,
