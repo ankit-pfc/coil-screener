@@ -12,6 +12,7 @@ import argparse
 import calendar
 import json
 import math
+import re
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -71,6 +72,7 @@ BLIND_PROTOCOL_IDENTITY_FIELDS = (
     "evidence_sha256",
     "frozen_detector_version",
 )
+_FULL_GIT_SHA_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
 
 class DetectorOnlyViolation(RuntimeError):
@@ -2075,10 +2077,54 @@ def aggregate_results(
     }
 
 
-def _load_episode_bars(episode: dict[str, Any]) -> list[dict[str, Any]]:
+def _load_episode_input(
+    episode: dict[str, Any],
+    *,
+    source_root: Path | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    eodhd_snapshot = episode.get("eodhd_snapshot")
+    if isinstance(eodhd_snapshot, (dict, str)):
+        from eodhd_ingestion import (
+            EodhdIngestionError,
+            load_frozen_snapshot,
+            validate_frozen_snapshot,
+        )
+
+        try:
+            if isinstance(eodhd_snapshot, dict):
+                snapshot = validate_frozen_snapshot(eodhd_snapshot)
+            else:
+                snapshot_path = Path(eodhd_snapshot)
+                if not snapshot_path.is_absolute():
+                    snapshot_path = (source_root or Path.cwd()) / snapshot_path
+                snapshot = load_frozen_snapshot(snapshot_path)
+        except EodhdIngestionError as exc:
+            raise BenchmarkCorpusError(f"invalid EODHD snapshot: {exc}") from exc
+        expected_ticker = str(episode.get("ticker") or "").strip().upper()
+        if expected_ticker and expected_ticker != snapshot["symbol"]:
+            raise BenchmarkCorpusError(
+                "episode ticker does not match its EODHD snapshot symbol"
+            )
+        params = snapshot["request"]["params"]
+        return snapshot["monthly_bars"], {
+            "kind": snapshot["kind"],
+            "provider": snapshot["provider"],
+            "symbol": snapshot["symbol"],
+            "requested_from": params["from"],
+            "requested_to": params["to"],
+            "fetched_at": snapshot["fetched_at"],
+            "code_sha": snapshot["code_sha"],
+            "provider_rows_sha256": snapshot["provider_rows_sha256"],
+            "monthly_bars_sha256": snapshot["monthly_bars_sha256"],
+            "snapshot_sha256": snapshot["snapshot_sha256"],
+        }
+
     bars = episode.get("monthly_bars")
     if isinstance(bars, list):
-        return bars
+        return bars, {
+            "kind": "coilingview.embedded-monthly-bars",
+            "monthly_bars_sha256": sha256_json(bars),
+        }
     source = episode.get("source")
     ticker = episode.get("ticker")
     if source and ticker:
@@ -2087,10 +2133,26 @@ def _load_episode_bars(episode: dict[str, Any]) -> list[dict[str, Any]]:
         from review_snapshots import load_blind_review_context
 
         context = load_blind_review_context(str(source), str(ticker))
-        return context["monthly_bars"]
+        return context["monthly_bars"], {
+            "kind": "coilingview.saved-run-review-snapshot",
+            "source": str(source),
+            "ticker": str(ticker),
+            "sample_id": context.get("sample_id"),
+            "monthly_bars_sha256": context.get("bars_hash"),
+        }
     raise BenchmarkCorpusError(
-        "each episode requires monthly_bars or a frozen source/ticker snapshot"
+        "each episode requires monthly_bars, eodhd_snapshot, or a frozen "
+        "source/ticker snapshot"
     )
+
+
+def _load_episode_bars(
+    episode: dict[str, Any],
+    *,
+    source_root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Compatibility facade for callers that only need the validated bars."""
+    return _load_episode_input(episode, source_root=source_root)[0]
 
 
 def _load_episode_gold(
@@ -2319,6 +2381,8 @@ def evaluate_corpus(
     raw_corpus: dict[str, Any],
     *,
     config: EvaluatorConfig = EvaluatorConfig(),
+    source_root: Path | None = None,
+    expected_code_sha: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate a complete corpus, failing the run on any leakage/integrity error."""
     if not isinstance(raw_corpus, dict):
@@ -2333,6 +2397,29 @@ def evaluate_corpus(
     episodes = raw_corpus.get("episodes")
     if not isinstance(episodes, list) or not episodes:
         raise BenchmarkCorpusError("benchmark corpus requires episodes")
+    has_eodhd_snapshot = any(
+        isinstance(episode, dict) and "eodhd_snapshot" in episode
+        for episode in episodes
+    )
+    raw_code_sha = raw_corpus.get("code_sha")
+    corpus_code_sha = (
+        str(raw_code_sha).strip().lower() if raw_code_sha is not None else None
+    )
+    if has_eodhd_snapshot and not (
+        isinstance(corpus_code_sha, str)
+        and _FULL_GIT_SHA_RE.fullmatch(corpus_code_sha)
+    ):
+        raise BenchmarkCorpusError(
+            "an EODHD benchmark corpus requires the exact full pushed code_sha"
+        )
+    if expected_code_sha is not None:
+        runtime_sha = str(expected_code_sha).strip().lower()
+        if not _FULL_GIT_SHA_RE.fullmatch(runtime_sha):
+            raise BenchmarkCorpusError("expected_code_sha must be a full Git SHA")
+        if corpus_code_sha != runtime_sha:
+            raise BenchmarkCorpusError(
+                "benchmark corpus code_sha does not match the running checkout"
+            )
 
     setup_splits: dict[str, str] = {}
     seen_episode_ids: set[str] = set()
@@ -2342,7 +2429,18 @@ def evaluate_corpus(
     for index, episode in enumerate(episodes):
         if not isinstance(episode, dict):
             raise BenchmarkCorpusError(f"episode {index} must be an object")
-        bars = _load_episode_bars(episode)
+        bars, input_source = _load_episode_input(
+            episode,
+            source_root=source_root,
+        )
+        if (
+            input_source.get("kind")
+            == "coilingview.eodhd-monthly-ohlcv-snapshot"
+            and input_source.get("code_sha") != corpus_code_sha
+        ):
+            raise BenchmarkCorpusError(
+                "EODHD snapshot code_sha does not match the benchmark corpus"
+            )
         gold = _load_episode_gold(episode, bars)
         episode_id = str(gold["episode_id"])
         if episode_id in seen_episode_ids:
@@ -2367,6 +2465,7 @@ def evaluate_corpus(
         roles[evaluation_role] += 1
         outcome_visible_count += bool(gold.get("outcome_visible_during_label"))
         result = evaluate_episode(gold, bars, config=config)
+        result["input_source"] = input_source
         result["sampling_stratum"] = episode.get(
             "sampling_stratum", episode.get("stratum")
         )
@@ -2380,6 +2479,7 @@ def evaluate_corpus(
         "kind": REPORT_KIND,
         "corpus_id": corpus_id,
         "corpus_sha256": sha256_json(raw_corpus),
+        "code_sha": corpus_code_sha,
         "algorithm_version": ALGORITHM_VERSION,
         "default_config_sha256": DEFAULT_CONFIG_SHA256,
         "intervention_policy_version": INTERVENTION_POLICY_VERSION,
@@ -2425,6 +2525,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     raw = json.loads(args.corpus.read_text(encoding="utf-8"))
+    has_eodhd_snapshot = any(
+        isinstance(episode, dict) and "eodhd_snapshot" in episode
+        for episode in raw.get("episodes", [])
+    )
+    expected_code_sha = None
+    if has_eodhd_snapshot:
+        from eodhd_ingestion import repository_identity
+
+        expected_code_sha = repository_identity(Path(__file__).resolve().parent)
     report = evaluate_corpus(
         raw,
         config=EvaluatorConfig(
@@ -2436,6 +2545,8 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_samples=args.bootstrap_samples,
             bootstrap_seed=args.bootstrap_seed,
         ),
+        source_root=args.corpus.resolve().parent,
+        expected_code_sha=expected_code_sha,
     )
     encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:

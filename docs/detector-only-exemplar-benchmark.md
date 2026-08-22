@@ -71,11 +71,13 @@ present. A partial sum is never treated as quarterly volume.
   "schema_version": 1,
   "kind": "coilingview.detector-benchmark-corpus",
   "corpus_id": "example-development-wave-1",
+  "code_sha": "FULL_PUSHED_GIT_SHA",
   "episodes": [
     {
       "split": "development",
       "sampling_stratum": "predicted_positive",
-      "monthly_bars": [],
+      "ticker": "EXAMPLE.US",
+      "eodhd_snapshot": "snapshots/EXAMPLE.US.json",
       "gold_capture": {}
     }
   ]
@@ -84,10 +86,54 @@ present. A partial sum is never treated as quarterly volume.
 
 An episode may use a previously materialized `gold_label` instead of
 `gold_capture`. It must retain the normalized embedded capture so the evaluator
-can reproduce the label. Frozen review snapshots may be referenced with the
-existing `source` and `ticker` fields.
+can reproduce the label. `monthly_bars` may still be embedded directly, and
+frozen review snapshots may be referenced with the existing `source` and
+`ticker` fields. Relative EODHD snapshot paths resolve from the corpus file.
 
 All cutoffs from one `setup_id` must remain in one split.
+
+## Frozen EODHD ingestion
+
+`eodhd_ingestion.py` calls EODHD's historical EOD endpoint with `fmt=json`,
+`period=m`, and `order=a`. The provider documents the returned OHLC as raw and
+unadjusted, `adjusted_close` as split/dividend adjusted, and volume as
+split-adjusted. The adapter preserves the full provider rows but passes only
+raw OHLCV to the detector, matching the existing unadjusted detector input.
+
+The token is read from `EODHD_API_TOKEN` and is never written to a snapshot.
+Before any request, the CLI requires a clean Git worktree and verifies that
+HEAD is contained by an `origin/*` tracking ref. The full SHA is sealed into
+every snapshot.
+
+Run ingestion from the exact pushed candidate-engine checkout and write output
+outside the repository so the checkout stays clean:
+
+```bash
+export EODHD_API_TOKEN='...'
+.venv/bin/python eodhd_ingestion.py \
+  --symbol AAPL.US \
+  --symbol MSFT.US \
+  --from 1990-01-01 \
+  --to 2026-06-30 \
+  --output-dir /absolute/path/to/frozen-eodhd-snapshots
+```
+
+Each snapshot seals:
+
+- the exact pushed Git SHA and fetch timestamp;
+- token-free endpoint parameters and provider adjustment semantics;
+- canonical provider rows and their SHA-256;
+- normalized detector OHLCV and its SHA-256; and
+- a SHA-256 over the complete snapshot envelope.
+
+The adapter fails on malformed dates, unordered or duplicate months, bars
+outside the requested range, invalid/non-finite OHLCV, OHLC containment errors,
+negative volume, token-bearing provenance, or any derived/hash mismatch. It
+also refuses to overwrite an existing snapshot.
+
+An EODHD-backed corpus must include `code_sha`. The evaluator requires every
+snapshot SHA boundary to equal that corpus SHA, and its CLI requires the corpus
+SHA to equal the clean pushed checkout currently executing the detector.
 
 ## Metrics and release gates
 
@@ -119,7 +165,8 @@ From the repository root:
 ```
 
 The report records the algorithm version, default-config SHA-256, corpus
-SHA-256, report SHA-256, bootstrap method, seed, sample count, and setup count.
+SHA-256, exact code SHA, every EODHD source/snapshot SHA-256, report SHA-256,
+bootstrap method, seed, sample count, and setup count.
 
 ## Strict blind eligibility
 

@@ -9,12 +9,14 @@ from review_snapshots import (
 
 V22_SOURCE = "screen_2026-07-27_v2.2.0.csv"
 V23_SOURCE = "screen_2026-08-05_v2.3.0.csv"
+V23_ALGORITHM_VERSION = "2.3.0"
 V23_TICKERS = ["REG", "BG", "1299.HK", "AZN.L"]
 
 
 def test_v23_release_is_a_frozen_four_candidate_cohort():
     manifest = load_review_manifest(V23_SOURCE)
-    assert manifest["source_run"]["algorithm_version"] == ALGORITHM_VERSION
+    assert ALGORITHM_VERSION == "2.5.0"
+    assert manifest["source_run"]["algorithm_version"] == V23_ALGORITHM_VERSION
     assert manifest["source_run"]["selection_policy"] == "grade_is_not_null"
     assert manifest["ordered_universe"] == V23_TICKERS
 
@@ -24,8 +26,11 @@ def test_v23_release_is_a_frozen_four_candidate_cohort():
         assert identity["screen_snapshot"]["grade"] == "A"
         context = load_review_context(V23_SOURCE, ticker)
         assert context["analysis_status"] == "frozen_algorithm_only"
-        assert context["analysis"]["algorithm_version"] == ALGORITHM_VERSION
-        assert context["model_snapshot"]["algorithm_version"] == ALGORITHM_VERSION
+        assert context["analysis"]["algorithm_version"] == V23_ALGORITHM_VERSION
+        assert (
+            context["model_snapshot"]["algorithm_version"]
+            == V23_ALGORITHM_VERSION
+        )
 
 
 def test_prior_release_price_evidence_survives_an_algorithm_upgrade():

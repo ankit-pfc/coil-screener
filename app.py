@@ -851,6 +851,15 @@ def create_review_session(
                     "fresh review sessions require a capability accessToken"
                 )
             manifest = load_review_manifest(request.source)
+            manifest_algorithm_version = str(
+                (manifest.get("source_run") or {}).get("algorithm_version", "")
+            ).strip()
+            if manifest_algorithm_version != ALGORITHM_VERSION:
+                raise ValueError(
+                    "fresh review manifest algorithm version "
+                    f"{manifest_algorithm_version or 'unknown'} does not match "
+                    f"the active algorithm version {ALGORITHM_VERSION}"
+                )
             manifest_order = [
                 str(ticker).strip().upper()
                 for ticker in (
