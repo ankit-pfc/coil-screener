@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -444,7 +445,30 @@ def _review_fixture(ticker: str) -> Path:
 
 
 def _cached_bars(ticker: str) -> list[dict]:
-    return json.loads((CACHE_DIR / f"{ticker}.json").read_text(encoding="utf-8"))["bars"]
+    fixture = CACHE_DIR / f"{ticker}.json"
+    if not fixture.exists():
+        pytest.skip(f"optional local market-data fixture is unavailable: {ticker}")
+    return json.loads(fixture.read_text(encoding="utf-8"))["bars"]
+
+
+def test_quarterly_volume_requires_and_sums_all_three_constituent_months():
+    complete = [
+        {
+            "date": f"2024-{month:02d}-01",
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.0,
+            "close": 10.0,
+            "volume": float(month * 100),
+        }
+        for month in (1, 2, 3)
+    ]
+
+    assert _aggregate_quarterly_display_bars(complete)[0]["volume"] == 600.0
+    assert _aggregate_quarterly_display_bars(complete[:2])[0]["volume"] is None
+    missing_volume = [dict(bar) for bar in complete]
+    missing_volume[1]["volume"] = None
+    assert _aggregate_quarterly_display_bars(missing_volume)[0]["volume"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -490,13 +514,8 @@ def test_corpus_structure_never_comes_from_the_live_right_edge(ticker):
 
 
 @pytest.mark.parametrize("ticker", CACHED_TICKERS)
-def test_corpus_lid_anchors_are_one_repeated_ceiling(ticker):
-    """Every selected lid is two members of one price zone, far apart in time.
-
-    Anchors inside one zone sit within ``zone_similarity_pct`` of the seed, so
-    the pair can never spread further than twice that. A lid drawn between two
-    unrelated price eras (the growth-trend failure mode) breaks both bounds.
-    """
+def test_corpus_lid_anchors_obey_their_boundary_family_contract(ticker):
+    """Zones stay same-level; sloped lids need a later confirming touch."""
     result = analyze_coil(_cached_bars(ticker))
     if result["resistance"] is None:
         assert result["status"] == "no_structure"
@@ -505,14 +524,24 @@ def test_corpus_lid_anchors_are_one_repeated_ceiling(ticker):
     assert len(anchors) == 2
     earlier, later = anchors
     spread = abs(later["price"] - earlier["price"]) / max(earlier["price"], later["price"])
-    assert spread <= 2 * DEFAULT_CONFIG.zone_similarity_pct / 100.0
-    # Separation is enforced in quarterly coordinates, but anchors report the
-    # source month of each quarterly high. Two quarters N apart are at least
-    # 3N-2 months apart (last month of the first, first month of the last), so
-    # a flat 3N floor would reject spec-compliant zones such as CBA.AX's
-    # 2025-06 -> 2026-04 pair (4 quarters, 10 months).
-    months_apart = later["idx"] - earlier["idx"]
-    assert months_apart >= 3 * DEFAULT_CONFIG.zone_min_separation_quarters - 2
+    family = result["active_lid"]["boundary_family"]
+    if family == "same_price_zone":
+        assert spread <= 2 * DEFAULT_CONFIG.zone_similarity_pct / 100.0
+        # Separation is enforced in quarterly coordinates, but anchors report
+        # the source month of each quarterly high.
+        months_apart = later["idx"] - earlier["idx"]
+        assert months_apart >= 3 * DEFAULT_CONFIG.zone_min_separation_quarters - 2
+    else:
+        assert family == "sloped_confirmed"
+        assert spread > DEFAULT_CONFIG.zone_similarity_pct / 100.0
+        assert result["active_lid"]["touch_count"] >= DEFAULT_CONFIG.sloped_min_touches
+        established = result["active_lid"]["established"]
+        confirmed = result["active_lid"]["confirmed"]
+        assert established is not None and confirmed is not None
+        assert established["date"] < confirmed["date"]
+        # The confirming touch is evidence, not an endpoint that can rotate the
+        # lid toward a release peak.
+        assert confirmed["date"] not in {point["date"] for point in anchors}
 
 
 @pytest.mark.parametrize("ticker", CACHED_TICKERS)
@@ -619,7 +648,7 @@ def test_bg_lifetime_ceiling_is_the_repeated_135_level():
 def test_algorithm_version_is_reported():
     result = analyze_coil(make_coil_bars())
 
-    assert ALGORITHM_VERSION == "2.3.0"
+    assert ALGORITHM_VERSION == "2.5.0"
     assert result["algorithm_version"] == ALGORITHM_VERSION
     assert result["analysis_metadata"]["algorithm_version"] == ALGORITHM_VERSION
 
@@ -677,14 +706,8 @@ def test_near_equal_tops_still_detected_as_majors():
     assert result["resistance"]["touch_count"] == 3
 
 
-def test_rising_lid_spanning_price_eras_is_not_one_zone():
-    """A lid rising 4%/yr is not a repeated ceiling.
-
-    Both of its confirmed tops are found, but they sit ~17% apart: two price
-    levels, not one level retested. v2.2 declines to draw a lid through them;
-    the human review workspace exists for exactly this override (see the
-    reviewed-lid tests below).
-    """
+def test_rising_lid_spanning_price_eras_uses_confirmed_sloped_family():
+    """A third later touch can confirm a line outside the 5% zone family."""
     spb = spb_for_end_slope(4.0)
     bars = make_coil_bars(slope_per_bar=spb)
     highs = [bars[20]["high"], bars[60]["high"]]
@@ -692,8 +715,151 @@ def test_rising_lid_spanning_price_eras_is_not_one_zone():
 
     result = analyze_coil(bars)
 
+    assert result["status"] == "coiling"
+    assert result["active_lid"]["boundary_family"] == "sloped_confirmed"
+    assert result["resistance"]["slope_pct_per_year"] == pytest.approx(4.0, abs=0.05)
+    assert result["active_lid"]["established"]["date"] == "2015-01-01"
+    assert result["active_lid"]["confirmed"]["date"] == "2018-05-01"
+    assert result["diagnostics"]["boundary_selection"]["selected_family"] == "sloped_confirmed"
+
+
+def test_falling_lid_uses_the_same_pre_established_boundary_contract():
+    bars = make_coil_bars(slope_per_bar=spb_for_end_slope(-2.0))
+
+    result = analyze_coil(bars)
+
+    assert result["status"] == "coiling"
+    assert result["active_lid"]["boundary_family"] == "sloped_confirmed"
+    assert result["resistance"]["slope_pct_per_year"] == pytest.approx(-2.0, abs=0.05)
+    assert result["pattern_anatomy"]["boundary"]["direction"] == "falling"
+    assert result["active_lid"]["established"]["date"] < result["active_lid"]["confirmed"]["date"]
+
+
+def test_release_peak_cannot_become_the_second_sloped_anchor():
+    bars = make_coil_bars(slope_per_bar=spb_for_end_slope(4.0))
+    # The first two old mountains establish a 4% line. Turn the third into a
+    # detached release peak; with no later confirmation it must not rotate or
+    # manufacture a diagonal boundary.
+    bars[100]["high"] *= 1.60
+
+    result = analyze_coil(bars)
+
     assert result["status"] == "no_structure"
-    assert result["resistance"] is None
+    assert result["active_lid"] is None
+    sloped = result["diagnostics"]["boundary_selection"]["families"]["sloped_confirmed"]
+    assert sloped["eligible_count"] == 0
+    assert sloped["rejection_counts"]["no_independent_confirmation"] >= 1
+
+
+def test_sloped_boundary_lifecycle_replays_before_and_after_breakout():
+    n = 126
+    slope_per_bar = spb_for_end_slope(4.0, n=n)
+    bars = make_coil_bars(n=n, slope_per_bar=slope_per_bar)
+
+    def lid(idx: int) -> float:
+        return 100.0 + slope_per_bar * (idx - 20)
+
+    for idx in range(120, 126):
+        bars[idx].update(
+            open=lid(idx) * 1.13,
+            high=lid(idx) * 1.18,
+            low=lid(idx) * 1.10,
+            close=lid(idx) * 1.15,
+        )
+
+    before = analyze_coil(bars, as_of=bars[119]["date"])
+    after = analyze_coil(bars)
+
+    assert before["active_lid"]["boundary_family"] == "sloped_confirmed"
+    assert before["lifecycle"] == "pre_breakout"
+    assert after["active_lid"]["boundary_family"] == "sloped_confirmed"
+    assert after["lifecycle"] == "post_breakout"
+    assert after["breakout"]["first_escape"] is not None
+    assert after["pattern_anatomy"]["actionability"]["state"] == "historical_or_late"
+
+
+def test_pattern_anatomy_separates_shape_phases_from_actionability():
+    result = analyze_coil(make_coil_bars())
+    anatomy = result["pattern_anatomy"]
+
+    assert anatomy["recognized"] is True
+    assert 0.0 <= anatomy["shape_score"] <= 100.0
+    assert anatomy["boundary"]["family"] == "same_price_zone"
+    assert anatomy["prior_trend"]["direction"] in {"up", "down", "flat"}
+    assert anatomy["base"]["duration_years"] > 0
+    assert anatomy["congestion"]["cycle_count"] >= 2
+    assert anatomy["compression"]["passes_current_gate"] is True
+    assert anatomy["breakout"]["state"] == "sealed"
+    assert anatomy["actionability"]["state"] == "ready"
+
+
+def test_ten_observable_years_is_the_actionability_boundary():
+    younger = analyze_coil(make_coil_bars(n=119))
+    mature = analyze_coil(make_coil_bars(n=120))
+
+    # The same clean geometry and lifecycle remain visible on both sides of
+    # the method boundary; only eligibility and the fresh grade are gated.
+    assert younger["active_lid"] is not None
+    assert mature["active_lid"] is not None
+    assert younger["lifecycle"] == mature["lifecycle"] == "pre_breakout"
+    assert (
+        younger["resistance"]["lid_grade"]
+        == mature["resistance"]["lid_grade"]
+        == "A"
+    )
+
+    assert younger["metrics"]["observable_history_years"] == 9.92
+    assert younger["metrics"]["maturity_pass"] is False
+    assert younger["grade"] is None
+    assert younger["pattern_anatomy"]["maturity"]["passes"] is False
+    assert younger["pattern_anatomy"]["actionability"]["state"] == "ineligible_history"
+    assert younger["pattern_anatomy"]["actionability"]["signal_state"] == "ready"
+
+    assert mature["metrics"]["observable_history_years"] == 10.0
+    assert mature["metrics"]["minimum_observable_history_years"] == 10.0
+    assert mature["metrics"]["maturity_pass"] is True
+    assert mature["grade"] == "A"
+    assert mature["pattern_anatomy"]["maturity"]["passes"] is True
+    assert mature["pattern_anatomy"]["actionability"]["state"] == "ready"
+
+
+def test_dbx_frozen_corpus_keeps_lid_and_provisional_escape_but_is_ineligible():
+    fixture = (
+        Path(__file__).parent
+        / "research_corpora"
+        / "amrut_reviewed_exemplars_2026-08-18"
+        / "source-market-data"
+        / "DBX.json"
+    )
+    if not fixture.exists():
+        pytest.skip("optional DBX frozen-corpus fixture is unavailable")
+    snapshot = json.loads(fixture.read_text(encoding="utf-8"))
+
+    result = analyze_coil(snapshot["bars"])
+
+    assert result["bar_count"] == 102
+    assert result["active_lid"] is not None
+    assert result["active_lid"]["boundary_family"] == "same_price_zone"
+    assert result["resistance"]["lid_grade"] == "A"
+    assert result["lifecycle"] == "pre_breakout"
+    assert result["breakout"]["state"] == "sealed"
+    assert result["breakout"]["provisional_escape"] is not None
+
+    assert result["metrics"]["observable_history_years"] == 8.5
+    assert result["metrics"]["maturity_pass"] is False
+    assert result["grade"] is None
+    anatomy = result["pattern_anatomy"]
+    assert anatomy["recognized"] is True
+    assert anatomy["maturity"] == {
+        "observable_history_years": 8.5,
+        "minimum_observable_history_years": 10.0,
+        "passes": False,
+    }
+    assert anatomy["actionability"]["eligible"] is False
+    assert anatomy["actionability"]["state"] == "ineligible_history"
+    assert anatomy["actionability"]["signal_state"] == "ready"
+    assert anatomy["actionability"]["score"] == 0.0
+    assert any("not action-eligible" in note for note in result["notes"])
 
 
 def test_wider_zone_tolerance_admits_the_same_rising_tops():
@@ -705,6 +871,7 @@ def test_wider_zone_tolerance_admits_the_same_rising_tops():
     result = analyze_coil(bars, config=wide)
 
     assert result["status"] == "coiling"
+    assert result["active_lid"]["boundary_family"] == "same_price_zone"
     assert result["resistance"]["slope_pct_per_year"] == pytest.approx(4.0, abs=0.05)
     assert [
         (point["date"], point["price"])
@@ -726,13 +893,15 @@ def test_wider_zone_tolerance_admits_the_same_rising_tops():
 def test_reviewed_lid_gets_the_same_slope_and_grade_math(slope_pct, depths, expected_grade):
     """Reviewed anchors bypass zone eligibility but not the lid math.
 
-    None of these rising lids is a price zone, so the algorithm declines them.
-    A reviewer pinning the same three tops must still get the constructed
-    slope, its grade band, and a band placement.
+    These rising lids are not price zones. The conservative sloped family may
+    recognize one when all three tops clear its prominence gates; regardless,
+    a reviewer pinning the same tops gets identical downstream math.
     """
     spb = spb_for_end_slope(slope_pct)
     bars = make_coil_bars(slope_per_bar=spb, depths=depths)
-    assert analyze_coil(bars)["status"] == "no_structure"
+    algorithm = analyze_coil(bars)
+    if algorithm["active_lid"] is not None:
+        assert algorithm["active_lid"]["boundary_family"] == "sloped_confirmed"
 
     result = analyze_coil(bars, review_override=lid_override(bars, (20, 60, 100)))
 
@@ -1006,6 +1175,16 @@ def test_completed_quarters_drops_only_a_trailing_partial_quarter():
     assert _completed_quarters([]) == []
 
 
+def test_quarter_end_month_is_not_complete_while_its_candle_is_live():
+    quarters = quarterly_bars([10.0, 11.0], last_month=9)
+    quarters[-1]["date"] = "2026-09-01"
+
+    assert _completed_quarters(quarters, today=date(2026, 9, 15)) == quarters[:-1]
+    assert _completed_quarters(quarters, today=date(2026, 10, 1)) == quarters
+    assert _completed_quarters(quarters, as_of="2026-09-15") == quarters[:-1]
+    assert _completed_quarters(quarters, as_of="2026-09-30") == quarters
+
+
 def test_cluster_price_zones_handles_empty_and_single_candidates():
     assert _cluster_price_zones([], DEFAULT_CONFIG) == []
 
@@ -1213,6 +1392,54 @@ def _with_partial_quarter(bars: list[dict]) -> list[dict]:
     ]
 
 
+def _with_ongoing_quarter_end_month(bars: list[dict]) -> list[dict]:
+    """Append a still-open July/August/September quarter with a live spike."""
+    return [dict(bar) for bar in bars] + [
+        {
+            "date": "2026-07-01",
+            "open": 100.0,
+            "high": 120.0,
+            "low": 98.0,
+            "close": 115.0,
+            "volume": 1e6,
+        },
+        {
+            "date": "2026-08-01",
+            "open": 115.0,
+            "high": 130.0,
+            "low": 110.0,
+            "close": 125.0,
+            "volume": 1e6,
+        },
+        {
+            "date": "2026-09-01",
+            "open": 125.0,
+            "high": 140.0,
+            "low": 120.0,
+            "close": 138.0,
+            "volume": 1e6,
+        },
+    ]
+
+
+def test_ongoing_quarter_end_month_never_becomes_a_top():
+    result = analyze_coil(
+        _with_ongoing_quarter_end_month(make_coil_bars()),
+        as_of="2026-09-15",
+    )
+
+    assert (
+        result["analysis_metadata"]["data_freshness"]["incomplete_last_quarter"]
+        is True
+    )
+    assert all(point["date"] < "2026-07-01" for point in result["points"])
+    assert all(high["date"] < "2026-07-01" for high in result["major_highs"])
+    assert all(
+        touch["date"] < "2026-07-01"
+        for touch in result["resistance"]["touches"]
+    )
+
+
 def test_incomplete_final_quarter_never_becomes_structure():
     """A 40% spike in the partial quarter must not move a single point.
 
@@ -1282,7 +1509,8 @@ def test_reviewed_charts_never_regress_to_a_live_price_anchor(ticker):
     right edge.
     """
     fixture = _review_fixture(ticker)
-    assert fixture.exists(), f"missing reviewed history fixture for {ticker}"
+    if not fixture.exists():
+        pytest.skip(f"optional reviewed history fixture is unavailable: {ticker}")
     bars = json.loads(fixture.read_text(encoding="utf-8"))["bars"]
 
     result = analyze_coil(bars)
@@ -1318,10 +1546,15 @@ def test_detect_display_major_highs_returns_the_capped_active_structure():
     assert [point.price for point in highs] == [pytest.approx(100.0)] * len(highs)
 
 
-def test_detect_display_major_highs_is_empty_without_structure():
+def test_detect_display_major_highs_includes_confirmed_sloped_structure():
     spb = spb_for_end_slope(4.0)
 
-    assert detect_display_major_highs(make_coil_bars(slope_per_bar=spb)) == []
+    highs = detect_display_major_highs(make_coil_bars(slope_per_bar=spb))
+    assert [point.date for point in highs] == [
+        "2011-09-01",
+        "2015-01-01",
+        "2018-05-01",
+    ]
     assert detect_display_major_highs([]) == []
 
 

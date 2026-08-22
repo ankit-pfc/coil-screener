@@ -2,8 +2,8 @@
 
 What "coiling" means here
 -------------------------
-A coiling setup is a long consolidation pressed under a flat-to-gently-rising
-lid, before the breakout has played out:
+A coiling setup is a long consolidation pressed under a coherent flat, rising,
+or falling boundary, before or through its breakout lifecycle:
 
 1. Structure  - at least two major tops (high-prominence swing highs) line up
    along one straight resistance line within a small tolerance band.
@@ -17,11 +17,12 @@ lid, before the breakout has played out:
    / ascending compression), so price is being squeezed into the lid.
 5. Loaded     - the last close sits near the lid, not mid-base.
 
-How the lid is chosen (v2.3)
+How the lid is chosen (v2.4)
 ----------------------------
-The lid is a **repeated historical ceiling**, never a line through the live
-price. The monthly series is aggregated into quarterly candles, a trailing
-partial quarter is dropped, and the confirmed quarterly mountains are
+The primary lid is a **repeated historical ceiling**, never a line through the live
+price. The monthly series is aggregated into quarterly candles; a trailing
+partial quarter and any quarter whose final monthly candle is still open are
+dropped, and the confirmed quarterly mountains are
 clustered by price into *zones*. The clustering pool has its own prominence
 gate (``zone_candidate_prominence_pct``), looser than the chart overlay's,
 because a touch of a ceiling inside a coil falls away far less than a
@@ -34,8 +35,14 @@ count, span, and start index. Every zone member is a confirmed two-sided
 quarterly mountain. The latest completed quarter gets no shortcut: until a
 later quarter confirms its rejection, it is current price evidence rather than
 structure. The winning zone's earliest and latest members anchor the line;
-interior members are touches. If no zone qualifies there is no lid, which is
-the right answer for a chart that never built a ceiling.
+interior members are touches.
+
+When no zone qualifies, a separate sloped-boundary family may supply the lid.
+It is chronological rather than endpoint-driven: two old mountains establish
+the line and a third, later confirmed mountain must retest that already-defined
+projection. Congestion cycles, pullbacks, fit error, trend shape, and price-era
+gates must all pass. Breakout scanning starts only after the confirming touch,
+so a release peak cannot become endpoint two and manufacture its own lid.
 
 Where the last close is allowed to matter: proximity to the lid, the +/-20%
 band that decides ``metrics.current_price_position``, the breakout state
@@ -53,15 +60,17 @@ drop to the valley separating it from its nearest same-height neighbor.
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import json
 import math
 from dataclasses import dataclass, replace
+from datetime import date as calendar_date
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
 SCHEMA_VERSION = 2
-ALGORITHM_VERSION = "2.3.0"
+ALGORITHM_VERSION = "2.5.0"
 ANALYSIS_INTERVAL = "3M"  # classification is quarterly-native regardless of view
 SOURCE = "timeseries"
 BARS_PER_YEAR = 12.0  # module operates on monthly bars
@@ -90,6 +99,11 @@ class CoilConfig:
     """Tunables for monthly bars; window/span/separation values are in bars."""
 
     min_bars: int = 60
+    # Geometry can be recognized on younger charts, but Amrut's DBX negative
+    # makes maturity a separate method-eligibility requirement: fewer than ten
+    # observed years may describe a clean lid and even a provisional escape,
+    # yet it is not a fresh setup the method can grade or action.
+    minimum_observable_history_years: float = 10.0
     # Swing-high pivots
     pivot_left: int = 3
     pivot_right: int = 3
@@ -165,6 +179,27 @@ class CoilConfig:
     # from today's price belongs to a different price era.
     regime_relevance_min_pct: float = 50.0  # last close must reach this % of lid value
     regime_relevance_max_pct: float = 400.0  # price far above an old lid = obsolete line
+    # Sloped boundary fallback (v2.4). This is deliberately a separate family
+    # from same-price zones. A line must be established by two old mountains
+    # and then confirmed by at least one later, independent mountain before it
+    # can classify a chart. That chronology prevents a release peak at the
+    # right edge from becoming the second endpoint of a newly invented lid.
+    sloped_boundaries_enabled: bool = True
+    sloped_min_establishment_span: int = 24  # monthly bars between first two touches
+    sloped_min_confirmation_gap: int = 12  # later touch after establishment
+    sloped_min_total_span: int = 60  # first -> confirming touch
+    sloped_min_touches: int = 3
+    # Just beyond the 5% horizontal-zone tolerance: the families do not overlap.
+    sloped_min_endpoint_change_pct: float = 5.1
+    sloped_min_abs_slope_pct_per_year: float = 0.75
+    sloped_max_abs_slope_pct_per_year: float = 20.0
+    sloped_touch_tolerance_pct: float = 7.0
+    sloped_max_fit_error_pct: float = 4.5
+    sloped_max_directional_efficiency: float = 0.62
+    sloped_min_pullback_depth_pct: float = 8.0
+    sloped_min_qualifying_pullbacks: int = 2
+    sloped_max_prebreak_close_violations: int = 0
+    sloped_candidate_diagnostic_limit: int = 5
     # Quarterly breakout state machine (v2). The escape band adapts to recent
     # quarterly true range so volatile charts are not flagged by noise.
     breakout_band_min_pct: float = 2.5
@@ -875,8 +910,15 @@ def _select_window_role_points(
 def _aggregate_quarterly_display_bars(
     monthly: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Aggregate monthly bars for the 3M overlay while retaining high origin."""
+    """Aggregate monthly bars while retaining origin and honest 3M volume.
+
+    Quarterly volume is available only when all three distinct constituent
+    calendar months are present and every monthly volume is known.  A partial
+    sum would make the review chart and breakout evidence disagree with the
+    canonical gold-label materializer.
+    """
     quarters: list[dict[str, Any]] = []
+    volume_meta: list[dict[str, Any]] = []
     for source_idx, bar in enumerate(monthly):
         text = str(bar["date"])
         year = int(text[:4])
@@ -884,6 +926,7 @@ def _aggregate_quarterly_display_bars(
         key = (year, (month - 1) // 3 + 1)
         if quarters and quarters[-1]["_quarter_key"] == key:
             quarter = quarters[-1]
+            meta = volume_meta[-1]
             if float(bar["high"]) > float(quarter["high"]):
                 quarter["high"] = float(bar["high"])
                 quarter["_high_source_idx"] = source_idx
@@ -892,7 +935,14 @@ def _aggregate_quarterly_display_bars(
             quarter["date"] = text
             quarter["_close_source_idx"] = source_idx
             quarter["_last_month"] = month
+            meta["months"].add(month)
+            volume = bar.get("volume")
+            if volume is None:
+                meta["complete"] = False
+            else:
+                meta["sum"] += float(volume)
         else:
+            volume = bar.get("volume")
             quarters.append(
                 {
                     "_quarter_key": key,
@@ -904,18 +954,75 @@ def _aggregate_quarterly_display_bars(
                     "high": float(bar["high"]),
                     "low": float(bar["low"]),
                     "close": float(bar["close"]),
-                    "volume": bar.get("volume"),
+                    "volume": None,
                 }
             )
+            volume_meta.append(
+                {
+                    "months": {month},
+                    "sum": float(volume) if volume is not None else 0.0,
+                    "complete": volume is not None,
+                }
+            )
+    for quarter, meta in zip(quarters, volume_meta):
+        quarter_number = int(quarter["_quarter_key"][1])
+        expected_months = {
+            quarter_number * 3 - 2,
+            quarter_number * 3 - 1,
+            quarter_number * 3,
+        }
+        if meta["complete"] and meta["months"] == expected_months:
+            quarter["volume"] = meta["sum"]
     return quarters
 
 
-def _quarter_is_complete(quarter: dict[str, Any]) -> bool:
-    """A quarter is complete when it contains its calendar-final month."""
-    return int(quarter["_last_month"]) % 3 == 0
+def _month_is_complete(
+    year: int,
+    month: int,
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> bool:
+    """Whether a monthly candle has actually closed.
+
+    Live analysis never treats the current calendar month as complete, even
+    when it is March, June, September, or December. Historical ``as_of`` runs
+    may include that month only when the cutoff reaches its calendar end.
+    """
+    if as_of:
+        try:
+            cutoff = calendar_date.fromisoformat(str(as_of)[:10])
+        except ValueError:
+            return False
+        month_end = calendar_date(year, month, calendar.monthrange(year, month)[1])
+        return cutoff >= month_end
+    live_date = today or calendar_date.today()
+    return (year, month) < (live_date.year, live_date.month)
 
 
-def _completed_quarters(quarterly: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _quarter_is_complete(
+    quarter: dict[str, Any],
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> bool:
+    """A quarter is complete only after its calendar-final month has closed."""
+    month = int(quarter["_last_month"])
+    if month % 3 != 0:
+        return False
+    try:
+        year = int(str(quarter["date"])[:4])
+    except (TypeError, ValueError):
+        return False
+    return _month_is_complete(year, month, as_of=as_of, today=today)
+
+
+def _completed_quarters(
+    quarterly: list[dict[str, Any]],
+    *,
+    as_of: Optional[str] = None,
+    today: Optional[calendar_date] = None,
+) -> list[dict[str, Any]]:
     """The structure series: quarterly bars minus a trailing partial quarter.
 
     Invariant (v2.2): nothing inside the incomplete final quarter may become a
@@ -924,7 +1031,9 @@ def _completed_quarters(quarterly: list[dict[str, Any]]) -> list[dict[str, Any]]
     The full series is still used for the last close, the breakout state
     machine's provisional escape, and chart rendering.
     """
-    if quarterly and not _quarter_is_complete(quarterly[-1]):
+    if quarterly and not _quarter_is_complete(
+        quarterly[-1], as_of=as_of, today=today
+    ):
         return quarterly[:-1]
     return list(quarterly)
 
@@ -932,9 +1041,11 @@ def _completed_quarters(quarterly: list[dict[str, Any]]) -> list[dict[str, Any]]
 def _last_structural_month_idx(
     quarterly: list[dict[str, Any]],
     monthly_last_idx: int,
+    *,
+    as_of: Optional[str] = None,
 ) -> int:
     """Last monthly index that belongs to a completed quarter."""
-    completed = _completed_quarters(quarterly)
+    completed = _completed_quarters(quarterly, as_of=as_of)
     if not completed:
         return -1
     if len(completed) == len(quarterly):
@@ -967,6 +1078,18 @@ def _quarterly_scaled_config(config: CoilConfig) -> CoilConfig:
             math.ceil(config.display_fast_rejection_bars / 3),
         ),
         min_anchor_span=max(1, math.ceil(config.min_anchor_span / 3)),
+        sloped_min_establishment_span=max(
+            1,
+            math.ceil(config.sloped_min_establishment_span / 3),
+        ),
+        sloped_min_confirmation_gap=max(
+            1,
+            math.ceil(config.sloped_min_confirmation_gap / 3),
+        ),
+        sloped_min_total_span=max(
+            1,
+            math.ceil(config.sloped_min_total_span / 3),
+        ),
         stale_line_months=max(1, math.ceil(config.stale_line_months / 3)),
         broken_out_max_age=max(1, math.ceil(config.broken_out_max_age / 3)),
         touch_cluster_bars=max(1, math.ceil(config.touch_cluster_bars / 3)),
@@ -1024,6 +1147,7 @@ def _cap_major_highs(
 def detect_display_major_highs(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
+    as_of: Optional[str] = None,
 ) -> list[SwingPoint]:
     """Detect overlay mountains on the same quarterly candles the user sees.
 
@@ -1032,11 +1156,15 @@ def detect_display_major_highs(
     remapped to the source month that supplied the quarter's high so API dates
     remain precise while the frontend still lands on the correct 3M candle.
 
-    v2.2: the points are the members of the selected lid zone, capped to the
-    latest ``display_max_highs`` for the legacy overlay contract. An empty
-    list means no zone qualified, i.e. the chart has no lid.
+    v2.4: the points are the touches of the selected boundary family. Every
+    structural point stays visible even when a hypothesis has more than
+    ``display_max_highs`` members;
+    that setting only limits optional non-member backfill for the legacy
+    overlay contract. Ongoing monthly/quarterly candles are never returned.
+    An empty list means neither a zone nor a pre-established sloped boundary
+    qualified, i.e. the chart has no active lid.
     """
-    structure = _analyze_quarterly_structure(bars, config)
+    structure = _analyze_quarterly_structure(bars, config, as_of=as_of)
     if structure is None:
         return []
     return [
@@ -1267,6 +1395,8 @@ def _run_breakout_state_machine(
     value_at: Any,
     start_idx: int,
     config: CoilConfig,
+    *,
+    as_of: Optional[str] = None,
 ) -> BreakoutAssessment:
     """Walk completed quarterly closes against the lid.
 
@@ -1301,7 +1431,7 @@ def _run_breakout_state_machine(
         close = float(bar["close"])
         low = float(bar["low"])
         high = float(bar["high"])
-        complete = q < last_idx or _quarter_is_complete(bar)
+        complete = q < last_idx or _quarter_is_complete(bar, as_of=as_of)
         above_band = close > threshold
 
         if not complete:
@@ -1434,6 +1564,11 @@ class LidHypothesis:
     breakout: BreakoutAssessment
     score: float = 0.0
     reject_reason: Optional[str] = None
+    family: str = "same_price_zone"
+    established_idx: Optional[int] = None
+    confirmed_idx: Optional[int] = None
+    selection_reason: Optional[str] = None
+    component_scores: Optional[dict[str, float]] = None
 
     def value_at(self, idx: int) -> float:
         return self.intercept + self.slope_per_bar * idx
@@ -1618,10 +1753,272 @@ def _select_lid_zone(
     return ranked[0], rejected + runners_up
 
 
+def _directional_efficiency(values: list[float]) -> float:
+    """Net log-price travel divided by total travel (1=smooth trend)."""
+    clean = [float(value) for value in values if value > 0]
+    if len(clean) < 2:
+        return 1.0
+    logs = [math.log(value) for value in clean]
+    travelled = sum(abs(right - left) for left, right in zip(logs, logs[1:]))
+    if travelled <= 0:
+        return 0.0
+    return abs(logs[-1] - logs[0]) / travelled
+
+
+def _sloped_pullback_depths(
+    quarterly: list[dict[str, Any]],
+    touches: list[SwingPoint],
+    value_at: Any,
+) -> list[float]:
+    """Deepest dip below a candidate line between consecutive touches."""
+    depths: list[float] = []
+    for left, right in zip(touches, touches[1:]):
+        if right.idx - left.idx < 2:
+            continue
+        low_idx = min(
+            range(left.idx + 1, right.idx),
+            key=lambda idx: float(quarterly[idx]["low"]),
+        )
+        line_value = float(value_at(low_idx))
+        if line_value <= 0:
+            continue
+        depth = (line_value - float(quarterly[low_idx]["low"])) / line_value * 100.0
+        depths.append(max(0.0, depth))
+    return depths
+
+
+def _sloped_boundary_candidates(
+    quarterly: list[dict[str, Any]],
+    completed: list[dict[str, Any]],
+    mountains: list[SwingPoint],
+    qconfig: CoilConfig,
+    config: CoilConfig,
+    *,
+    as_of: Optional[str] = None,
+) -> tuple[list[LidHypothesis], dict[str, int]]:
+    """High-confidence diagonal lids established before their confirming touch.
+
+    Each candidate starts with two old, well-separated mountains. At least one
+    later confirmed mountain must land on their already-defined projection.
+    Breakout evaluation begins only after that confirming touch. This temporal
+    ordering is the key release-peak guard: the newest high cannot create a
+    boundary merely by serving as endpoint two.
+    """
+    rejected: dict[str, int] = {}
+
+    def reject(reason: str) -> None:
+        rejected[reason] = rejected.get(reason, 0) + 1
+
+    if not config.sloped_boundaries_enabled or len(mountains) < config.sloped_min_touches:
+        return [], rejected
+
+    candidates: list[LidHypothesis] = []
+    tolerance = max(0.0, config.sloped_touch_tolerance_pct) / 100.0
+    completed_last_idx = len(completed) - 1
+    full_last_idx = len(quarterly) - 1
+
+    for a_idx, first in enumerate(mountains):
+        for second in mountains[a_idx + 1 :]:
+            establishment_span = second.idx - first.idx
+            if establishment_span < qconfig.sloped_min_establishment_span:
+                reject("establishment_too_short")
+                continue
+            endpoint_change = (
+                abs(second.price - first.price) / max(first.price, second.price) * 100.0
+            )
+            if endpoint_change < config.sloped_min_endpoint_change_pct:
+                reject("same_price_zone_candidate")
+                continue
+
+            slope = (second.price - first.price) / establishment_span
+            value_at_completed_end = first.price + slope * (completed_last_idx - first.idx)
+            value_at_full_end = first.price + slope * (full_last_idx - first.idx)
+            if value_at_completed_end <= 0 or value_at_full_end <= 0:
+                reject("non_positive_projection")
+                continue
+            slope_pct_per_year = slope * 4.0 / value_at_completed_end * 100.0
+            abs_slope = abs(slope_pct_per_year)
+            if not (
+                config.sloped_min_abs_slope_pct_per_year
+                <= abs_slope
+                <= config.sloped_max_abs_slope_pct_per_year
+            ):
+                reject("slope_outside_family_band")
+                continue
+
+            def established_value_at(idx: int) -> float:
+                return first.price + slope * (idx - first.idx)
+
+            later_touches = []
+            for point in mountains:
+                if point.idx - second.idx < qconfig.sloped_min_confirmation_gap:
+                    continue
+                line_value = established_value_at(point.idx)
+                if line_value <= 0:
+                    continue
+                if abs(point.price - line_value) / line_value <= tolerance:
+                    later_touches.append(point)
+            if not later_touches:
+                reject("no_independent_confirmation")
+                continue
+
+            touches = _cluster_touches(
+                [first, second, *later_touches],
+                qconfig.touch_cluster_bars,
+            )
+            if len(touches) < config.sloped_min_touches:
+                reject("too_few_independent_touches")
+                continue
+            confirming = touches[-1]
+            total_span = confirming.idx - first.idx
+            if total_span < qconfig.sloped_min_total_span:
+                reject("total_span_too_short")
+                continue
+
+            fit_error_pct = _fit_error_pct(touches, slope, first.price - slope * first.idx)
+            if fit_error_pct > config.sloped_max_fit_error_pct:
+                reject("fit_error_too_large")
+                continue
+
+            prebreak_violations = []
+            close_tolerance = 1.0 + config.break_tolerance_pct / 100.0
+            for idx in range(first.idx, confirming.idx + 1):
+                line_value = established_value_at(idx)
+                if line_value <= 0 or float(completed[idx]["close"]) > line_value * close_tolerance:
+                    prebreak_violations.append(idx)
+            if len(prebreak_violations) > config.sloped_max_prebreak_close_violations:
+                reject("pre_confirmation_close_escape")
+                continue
+
+            pullback_depths = _sloped_pullback_depths(
+                completed,
+                touches,
+                established_value_at,
+            )
+            qualifying_pullbacks = sum(
+                depth >= config.sloped_min_pullback_depth_pct for depth in pullback_depths
+            )
+            if qualifying_pullbacks < config.sloped_min_qualifying_pullbacks:
+                reject("insufficient_congestion_cycles")
+                continue
+
+            candidate_closes = [
+                float(completed[idx]["close"])
+                for idx in range(first.idx, confirming.idx + 1)
+            ]
+            trend_r2 = _log_trend_r2(candidate_closes)
+            if trend_r2 is not None and trend_r2 >= config.max_base_trend_r2:
+                reject("steady_compounding_trend")
+                continue
+            efficiency = _directional_efficiency(candidate_closes)
+            if efficiency > config.sloped_max_directional_efficiency:
+                reject("too_directionally_efficient")
+                continue
+
+            touch_score = _clamp01((len(touches) - 1) / 4.0)
+            span_score = _clamp01(total_span / max(1.0, 2.0 * qconfig.sloped_min_total_span))
+            fit_score = _clamp01(1.0 - fit_error_pct / max(0.01, config.sloped_max_fit_error_pct))
+            congestion_score = _clamp01(
+                1.0 - efficiency / max(0.01, config.sloped_max_directional_efficiency)
+            )
+            pullback_score = _clamp01(
+                qualifying_pullbacks / max(1.0, config.sloped_min_qualifying_pullbacks + 1.0)
+            )
+            component_scores = {
+                "touches": touch_score,
+                "span": span_score,
+                "fit": fit_score,
+                "congestion": congestion_score,
+                "pullbacks": pullback_score,
+            }
+            score = (
+                0.25 * touch_score
+                + 0.20 * span_score
+                + 0.20 * fit_score
+                + 0.20 * congestion_score
+                + 0.15 * pullback_score
+            )
+            relevance_pct = float(quarterly[-1]["close"]) / value_at_full_end * 100.0
+            if relevance_pct < config.regime_relevance_min_pct:
+                reject("different_price_era_below_boundary")
+                continue
+            if relevance_pct > config.regime_relevance_max_pct:
+                reject("obsolete_boundary_long_since_escaped")
+                continue
+            role_points = [
+                RolePoint(
+                    point=point,
+                    role=ROLE_MAJOR_TOP,
+                    evidence={
+                        "boundary_family": "sloped_confirmed",
+                        "establishment_anchor": point.idx in {first.idx, second.idx},
+                        "confirmation_touch": point.idx >= later_touches[0].idx,
+                        "line_error_pct": round(
+                            abs(point.price - established_value_at(point.idx))
+                            / established_value_at(point.idx)
+                            * 100.0,
+                            2,
+                        ),
+                    },
+                )
+                for point in touches
+            ]
+            breakout = _run_breakout_state_machine(
+                quarterly,
+                established_value_at,
+                confirming.idx + 1,
+                config,
+                as_of=as_of,
+            )
+            candidates.append(
+                LidHypothesis(
+                    window_start=first.idx,
+                    role_points=role_points,
+                    # The line is fixed by the first two touches. Later points
+                    # confirm it but never rotate it toward the release move.
+                    anchors=[first, second],
+                    ejected=[],
+                    slope_per_bar=slope,
+                    intercept=first.price - slope * first.idx,
+                    value_at_last_bar=value_at_full_end,
+                    slope_pct_per_year=slope * 4.0 / value_at_full_end * 100.0,
+                    fit_error_pct=fit_error_pct,
+                    breakout=breakout,
+                    score=score,
+                    family="sloped_confirmed",
+                    established_idx=second.idx,
+                    confirmed_idx=confirming.idx,
+                    component_scores=component_scores,
+                )
+            )
+
+    # Several establishment pairs can describe the same confirmed touch set.
+    # Keep the best-scoring version of each endpoint pair, then prefer stronger,
+    # longer, more frequently confirmed histories. No last-price term appears.
+    deduped: dict[tuple[int, int], LidHypothesis] = {}
+    for candidate in candidates:
+        key = (candidate.anchors[0].idx, candidate.anchors[1].idx)
+        previous = deduped.get(key)
+        if previous is None or candidate.score > previous.score:
+            deduped[key] = candidate
+    ranked = sorted(
+        deduped.values(),
+        key=lambda candidate: (
+            -candidate.score,
+            -(candidate.confirmed_idx or candidate.anchors[-1].idx),
+            -(candidate.anchors[-1].idx - candidate.anchors[0].idx),
+            candidate.anchors[0].idx,
+        ),
+    )
+    return ranked, rejected
+
+
 def _hypothesis_from_zone(
     quarterly: list[dict[str, Any]],
     zone: LidZone,
     config: CoilConfig,
+    *,
+    as_of: Optional[str] = None,
 ) -> Optional[LidHypothesis]:
     """Fit the lid through a zone's earliest and latest member.
 
@@ -1656,6 +2053,18 @@ def _hypothesis_from_zone(
         )
         for member in zone.members
     ]
+    touch_score = _clamp01(zone.member_count / 4.0)
+    span_score = _clamp01(zone.span / 40.0)
+    prominence_score = _clamp01(
+        sum(member.prominence_pct for member in zone.members)
+        / max(1, zone.member_count)
+        / 40.0
+    )
+    component_scores = {
+        "touches": touch_score,
+        "span": span_score,
+        "prominence": prominence_score,
+    }
     return LidHypothesis(
         window_start=anchors[0].idx,
         role_points=role_points,
@@ -1666,7 +2075,18 @@ def _hypothesis_from_zone(
         value_at_last_bar=value_at_last,
         slope_pct_per_year=slope * 4.0 / value_at_last * 100.0,
         fit_error_pct=_fit_error_pct(anchors, slope, intercept),
-        breakout=_run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config),
+        breakout=_run_breakout_state_machine(
+            quarterly,
+            value_at,
+            anchors[0].idx,
+            config,
+            as_of=as_of,
+        ),
+        score=0.45 * touch_score + 0.35 * span_score + 0.20 * prominence_score,
+        family="same_price_zone",
+        established_idx=anchors[-1].idx,
+        confirmed_idx=zone.members[-1].idx,
+        component_scores=component_scores,
     )
 
 
@@ -1708,44 +2128,146 @@ def _rejected_zone_diagnostics(zones: list[LidZone]) -> list[dict[str, Any]]:
     ]
 
 
-def _analyze_quarterly_structure(
+def _boundary_hypothesis_diagnostic(hypothesis: LidHypothesis) -> dict[str, Any]:
+    points = [role_point.point for role_point in hypothesis.role_points]
+    point_by_idx = {point.idx: point for point in points}
+    established = point_by_idx.get(hypothesis.established_idx or -1)
+    confirmed = point_by_idx.get(hypothesis.confirmed_idx or -1)
+    return {
+        "family": hypothesis.family,
+        "anchors": [_point_dict(point) for point in hypothesis.anchors],
+        "touches": [_point_dict(point) for point in points],
+        "touch_count": len(points),
+        "established": _point_dict(established) if established else None,
+        "confirmed": _point_dict(confirmed) if confirmed else None,
+        "slope_pct_per_year": round(hypothesis.slope_pct_per_year, 2),
+        "fit_error_pct": round(hypothesis.fit_error_pct, 3),
+        "score": round(hypothesis.score, 3),
+        "component_scores": {
+            key: round(value, 3)
+            for key, value in (hypothesis.component_scores or {}).items()
+        },
+        "breakout_state": hypothesis.breakout.state,
+    }
+
+
+def _detect_quarterly_structure(
     bars: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
-) -> Optional[QuarterlyStructure]:
-    """Full-history quarterly detection + lid-zone selection (v2.3).
-
-    The lid is the most recent repeated ceiling: a price zone touched at least
-    twice by confirmed mountains, well separated in time. Neither the
-    incomplete final quarter nor an unconfirmed latest completed quarter can
-    contribute to that choice. Nothing about the last close ranks it — only the
-    era-relevance filter consults price at all. When no zone qualifies there is
-    no lid, which is the correct answer for a trending chart that has never
-    built a ceiling.
-    """
+    *,
+    as_of: Optional[str] = None,
+) -> tuple[Optional[QuarterlyStructure], dict[str, Any]]:
+    """Detect both boundary families and return explicit selection evidence."""
+    diagnostics: dict[str, Any] = {
+        "policy": "same_price_zone_then_confirmed_sloped_fallback",
+        "selected_family": None,
+        "selection_reason": None,
+        "families": {
+            "same_price_zone": {
+                "eligible_count": 0,
+                "selected": None,
+                "rejected": [],
+            },
+            "sloped_confirmed": {
+                "eligible_count": 0,
+                "selected": None,
+                "candidates": [],
+                "rejection_counts": {},
+            },
+        },
+    }
     if len(bars) < 2:
-        return None
+        diagnostics["selection_reason"] = "fewer than two source bars"
+        return None, diagnostics
     quarterly = _aggregate_quarterly_display_bars(bars)
     if len(quarterly) < 3:
-        return None
-    completed = _completed_quarters(quarterly)
+        diagnostics["selection_reason"] = "fewer than three quarterly bars"
+        return None, diagnostics
+    completed = _completed_quarters(quarterly, as_of=as_of)
     if len(completed) < 2:
-        return None
+        diagnostics["selection_reason"] = "fewer than two completed quarters"
+        return None, diagnostics
     qconfig = _quarterly_scaled_config(config)
     last_close = float(quarterly[-1]["close"])
 
     zone, rejected_zones = _select_lid_zone(completed, qconfig, config, last_close)
-    if zone is None:
-        return None
-    hypothesis = _hypothesis_from_zone(quarterly, zone, config)
-    if hypothesis is None:
-        return None
-    return _finalize_structure(
+    rejected_zone_details = _rejected_zone_diagnostics(rejected_zones)
+    zone_hypothesis = (
+        _hypothesis_from_zone(quarterly, zone, config, as_of=as_of)
+        if zone is not None
+        else None
+    )
+    zone_family = diagnostics["families"]["same_price_zone"]
+    zone_family["eligible_count"] = 1 if zone_hypothesis is not None else 0
+    zone_family["selected"] = (
+        _boundary_hypothesis_diagnostic(zone_hypothesis)
+        if zone_hypothesis is not None
+        else None
+    )
+    zone_family["rejected"] = rejected_zone_details
+
+    mountains = _mountain_candidates(completed, qconfig)
+    sloped_candidates, sloped_rejections = _sloped_boundary_candidates(
+        quarterly,
+        completed,
+        mountains,
+        qconfig,
+        config,
+        as_of=as_of,
+    )
+    sloped_family = diagnostics["families"]["sloped_confirmed"]
+    sloped_family["eligible_count"] = len(sloped_candidates)
+    sloped_family["candidates"] = [
+        _boundary_hypothesis_diagnostic(candidate)
+        for candidate in sloped_candidates[: max(0, config.sloped_candidate_diagnostic_limit)]
+    ]
+    sloped_family["rejection_counts"] = sloped_rejections
+
+    # Family priority is intentionally conservative for the first release. The
+    # horizontal detector keeps every existing decision; a diagonal line is
+    # promoted only when no same-price zone qualifies and its chronology,
+    # congestion, and pullback gates all passed above.
+    if zone_hypothesis is not None:
+        hypothesis = zone_hypothesis
+        hypothesis.selection_reason = "eligible same-price zone has conservative family priority"
+    elif sloped_candidates:
+        hypothesis = sloped_candidates[0]
+        hypothesis.selection_reason = (
+            "no same-price zone qualified; selected highest-confidence "
+            "pre-established sloped boundary"
+        )
+    else:
+        diagnostics["selection_reason"] = (
+            "no same-price zone or independently confirmed sloped boundary qualified"
+        )
+        return None, diagnostics
+
+    diagnostics["selected_family"] = hypothesis.family
+    diagnostics["selection_reason"] = hypothesis.selection_reason
+    selected_details = _boundary_hypothesis_diagnostic(hypothesis)
+    diagnostics["families"][hypothesis.family]["selected"] = selected_details
+    finalized = _finalize_structure(
         bars,
         quarterly,
         hypothesis,
-        _rejected_zone_diagnostics(rejected_zones),
+        rejected_zone_details,
         config,
     )
+    if finalized is None:
+        diagnostics["selected_family"] = None
+        diagnostics["selection_reason"] = "selected boundary could not be remapped to monthly bars"
+    return finalized, diagnostics
+
+
+def _analyze_quarterly_structure(
+    bars: list[dict[str, Any]],
+    config: CoilConfig = DEFAULT_CONFIG,
+    *,
+    as_of: Optional[str] = None,
+) -> Optional[QuarterlyStructure]:
+    """Compatibility wrapper for callers that only need the active structure."""
+    structure, _ = _detect_quarterly_structure(bars, config, as_of=as_of)
+    return structure
 
 
 def _finalize_structure(
@@ -1817,6 +2339,8 @@ def _structure_from_review_override(
     bars: list[dict[str, Any]],
     override_points: list[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
+    *,
+    as_of: Optional[str] = None,
 ) -> Optional[QuarterlyStructure]:
     """Effective structure from approved human-review points.
 
@@ -1844,7 +2368,7 @@ def _structure_from_review_override(
         return None
     month_by_prefix = {str(bar["date"])[:7]: idx for idx, bar in enumerate(bars)}
     month_to_q = _month_to_quarter_map(bars, quarterly)
-    last_structural_q = len(_completed_quarters(quarterly)) - 1
+    last_structural_q = len(_completed_quarters(quarterly, as_of=as_of)) - 1
 
     explicit_membership = any(bool(point.get("lid_member")) for point in override_points)
     role_points: list[RolePoint] = []
@@ -1896,7 +2420,18 @@ def _structure_from_review_override(
     def value_at(idx: int) -> float:
         return intercept + slope * idx
 
-    breakout = _run_breakout_state_machine(quarterly, value_at, anchors[0].idx, config)
+    breakout = _run_breakout_state_machine(
+        quarterly,
+        value_at,
+        # A reviewed boundary does not exist before its final construction
+        # anchor. Scanning from anchor one lets ordinary pre-establishment
+        # price action manufacture a historical breakout (especially on long
+        # rising/falling secular lines). Start after confirmation, matching
+        # the automatic sloped-family chronology contract.
+        anchors[-1].idx + 1,
+        config,
+        as_of=as_of,
+    )
     hypothesis = LidHypothesis(
         window_start=anchors[0].idx,
         role_points=role_points,
@@ -1908,6 +2443,10 @@ def _structure_from_review_override(
         slope_pct_per_year=slope * 4.0 / value_at_last * 100.0,
         fit_error_pct=_fit_error_pct(anchors, slope, intercept),
         breakout=breakout,
+        family="human_review",
+        established_idx=anchors[1].idx,
+        confirmed_idx=anchors[-1].idx,
+        selection_reason="approved human boundary override",
     )
     return _finalize_structure(bars, quarterly, hypothesis, [], config)
 
@@ -2021,6 +2560,317 @@ def _role_point_dict(rp: RolePoint, lid_member: bool) -> dict[str, Any]:
     }
 
 
+def _median(values: list[float]) -> Optional[float]:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def _annualized_return_pct(closes: list[float], months: int) -> Optional[float]:
+    if len(closes) < 2 or closes[0] <= 0 or closes[-1] <= 0 or months <= 0:
+        return None
+    years = months / BARS_PER_YEAR
+    if years <= 0:
+        return None
+    return ((closes[-1] / closes[0]) ** (1.0 / years) - 1.0) * 100.0
+
+
+def _pattern_anatomy(
+    bars: list[dict[str, Any]],
+    active: LidHypothesis,
+    lid: ActiveLidFit,
+    touches: list[SwingPoint],
+    pullbacks: list[dict[str, Any]],
+    *,
+    depth_rule: bool,
+    compression_ok: bool,
+    pressed: bool,
+    last_depth_ratio: Optional[float],
+    volume_ratio: Optional[float],
+    base_trend_r2: Optional[float],
+    support: Optional[dict[str, Any]],
+    lifecycle: str,
+    grade: Optional[str],
+    proximity_pct: float,
+    price_position: str,
+    coil_score: float,
+    observable_history_years: float,
+    minimum_observable_history_years: float,
+    maturity_pass: bool,
+) -> dict[str, Any]:
+    """Explain the full pattern without conflating shape and actionability."""
+    first_idx = lid.points[0].idx
+    last_idx = len(bars) - 1
+    breakout_date = (
+        str(active.breakout.first_escape.get("date", ""))
+        if active.breakout.first_escape
+        else ""
+    )
+    breakout_idx = next(
+        (
+            idx
+            for idx, bar in enumerate(bars)
+            if breakout_date and str(bar["date"])[:7] == breakout_date[:7]
+        ),
+        None,
+    )
+    base_end_idx = max(first_idx, (breakout_idx - 1) if breakout_idx is not None else last_idx)
+    base_bars = bars[first_idx : base_end_idx + 1]
+    base_closes = [float(bar["close"]) for bar in base_bars]
+    base_efficiency = _directional_efficiency(base_closes)
+    base_pullbacks = [point for point in pullbacks if point["idx"] <= base_end_idx]
+    time_under = 0.0
+    if base_bars:
+        under_count = sum(
+            float(bar["close"])
+            <= lid.value_at(first_idx + offset) * (1.0 + 0.025)
+            for offset, bar in enumerate(base_bars)
+            if lid.value_at(first_idx + offset) > 0
+        )
+        time_under = under_count / len(base_bars)
+
+    direction_changes = 0
+    prior_sign = 0
+    for left, right in zip(base_closes, base_closes[1:]):
+        sign = 1 if right > left else (-1 if right < left else 0)
+        if sign and prior_sign and sign != prior_sign:
+            direction_changes += 1
+        if sign:
+            prior_sign = sign
+
+    cycle_score = _clamp01(len(base_pullbacks) / 3.0)
+    congestion_score = _clamp01(
+        0.40 * (1.0 - base_efficiency)
+        + 0.35 * cycle_score
+        + 0.25 * time_under
+    )
+
+    depths = [float(point["depth_pct"]) for point in base_pullbacks]
+    if len(depths) >= 2 and depths[0] > 0:
+        depth_improvement = _clamp01((depths[0] - depths[-1]) / depths[0])
+    elif len(depths) == 1 and depth_rule:
+        # One shallow pullback is limited evidence, not a sequence.
+        depth_improvement = 0.25
+    else:
+        depth_improvement = 0.0
+    range_pcts = [
+        (float(bar["high"]) - float(bar["low"])) / float(bar["close"]) * 100.0
+        for bar in base_bars
+        if float(bar["close"]) > 0
+    ]
+    third = max(1, len(range_pcts) // 3) if range_pcts else 1
+    early_range = _median(range_pcts[:third])
+    late_range = _median(range_pcts[-third:])
+    range_contraction_ratio = (
+        late_range / early_range
+        if early_range is not None and late_range is not None and early_range > 0
+        else None
+    )
+    range_score = (
+        _clamp01(1.0 - range_contraction_ratio)
+        if range_contraction_ratio is not None
+        else 0.0
+    )
+    support_converging = bool(support and support.get("converging"))
+    compression_present = (
+        len(depths) >= 2
+        and depth_rule
+    ) or (
+        range_contraction_ratio is not None
+        and range_contraction_ratio <= 0.80
+        and support_converging
+    )
+    compression_score = _clamp01(
+        0.50 * depth_improvement
+        + 0.30 * range_score
+        + 0.20 * (1.0 if support_converging else 0.0)
+    )
+
+    prior_start = max(0, first_idx - 60)
+    prior_bars = bars[prior_start : first_idx + 1]
+    prior_closes = [float(bar["close"]) for bar in prior_bars]
+    prior_annualized = _annualized_return_pct(
+        prior_closes,
+        max(0, first_idx - prior_start),
+    )
+    if prior_annualized is None:
+        prior_direction = "insufficient_history"
+    elif prior_annualized > 2.0:
+        prior_direction = "up"
+    elif prior_annualized < -2.0:
+        prior_direction = "down"
+    else:
+        prior_direction = "flat"
+
+    slope = lid.slope_pct_per_year
+    boundary_direction = "rising" if slope > 0.5 else ("falling" if slope < -0.5 else "flat")
+    boundary_quality = _clamp01(active.score)
+    duration_score = _clamp01((base_end_idx - first_idx) / (10.0 * BARS_PER_YEAR))
+    shape_score = round(
+        100.0
+        * (
+            0.30 * boundary_quality
+            + 0.30 * congestion_score
+            + 0.25 * compression_score
+            + 0.15 * duration_score
+        ),
+        1,
+    )
+
+    signal_action_state = {
+        LIFECYCLE_FORMING: "watch",
+        LIFECYCLE_PRE_BREAKOUT: "ready",
+        LIFECYCLE_BREAKING_OUT: "breakout_now",
+        LIFECYCLE_POST_BREAKOUT: "historical_or_late",
+    }.get(lifecycle, "none")
+    proximity_score = _clamp01((proximity_pct - 60.0) / 40.0)
+    signal_action_score = 100.0 * (
+        0.45 * proximity_score
+        + 0.30 * compression_score
+        + 0.25 * boundary_quality
+    )
+    if lifecycle == LIFECYCLE_BREAKING_OUT:
+        signal_action_score = max(70.0, signal_action_score)
+    elif lifecycle == LIFECYCLE_POST_BREAKOUT:
+        signal_action_score = min(35.0, signal_action_score)
+    elif lifecycle == LIFECYCLE_FORMING:
+        signal_action_score = min(55.0, signal_action_score)
+    action_state = signal_action_state if maturity_pass else "ineligible_history"
+    action_score = signal_action_score if maturity_pass else 0.0
+    action_reasons = [
+        f"lifecycle={lifecycle}",
+        f"price_position={price_position}",
+        "compression measured from pullback/range evidence"
+        if depth_rule
+        else (
+            "proximity override supplies readiness, not compression evidence"
+            if pressed
+            else "compression evidence is incomplete"
+        ),
+    ]
+    if not maturity_pass:
+        action_reasons.append(
+            f"observable history {observable_history_years:.2f}y is below "
+            f"the {minimum_observable_history_years:.2f}y method minimum"
+        )
+
+    return {
+        "recognized": True,
+        "shape_score": shape_score,
+        "legacy_coil_score": coil_score,
+        "maturity": {
+            "observable_history_years": round(observable_history_years, 2),
+            "minimum_observable_history_years": round(
+                minimum_observable_history_years, 2
+            ),
+            "passes": maturity_pass,
+        },
+        "boundary": {
+            "family": active.family,
+            "direction": boundary_direction,
+            "slope_pct_per_year": round(slope, 2),
+            "score": round(active.score * 100.0, 1),
+            "fit_error_pct": round(active.fit_error_pct, 3),
+            "anchors": [_point_dict(point) for point in lid.points],
+            "touches": [_point_dict(point) for point in touches],
+            "established_date": next(
+                (
+                    str(role.point.date)
+                    for role in active.role_points
+                    if role.point.idx == active.established_idx
+                ),
+                None,
+            ),
+            "confirmed_date": next(
+                (
+                    str(role.point.date)
+                    for role in active.role_points
+                    if role.point.idx == active.confirmed_idx
+                ),
+                None,
+            ),
+            "selection_reason": active.selection_reason,
+            "component_scores": {
+                key: round(value * 100.0, 1)
+                for key, value in (active.component_scores or {}).items()
+            },
+        },
+        "prior_trend": {
+            "start": str(prior_bars[0]["date"]) if prior_bars else None,
+            "end": str(prior_bars[-1]["date"]) if prior_bars else None,
+            "direction": prior_direction,
+            "annualized_return_pct": (
+                round(prior_annualized, 2) if prior_annualized is not None else None
+            ),
+            "log_trend_r2": (
+                round(_log_trend_r2(prior_closes), 3) if len(prior_closes) >= 3 else None
+            ),
+        },
+        "base": {
+            "start": str(bars[first_idx]["date"]),
+            "end": str(bars[base_end_idx]["date"]),
+            "duration_years": round((base_end_idx - first_idx) / BARS_PER_YEAR, 2),
+            "high": round(max(float(bar["high"]) for bar in base_bars), 4),
+            "low": round(min(float(bar["low"]) for bar in base_bars), 4),
+            "log_trend_r2": round(base_trend_r2, 3) if base_trend_r2 is not None else None,
+        },
+        "congestion": {
+            "present": len(base_pullbacks) >= 2 and base_efficiency <= 0.70,
+            "score": round(congestion_score * 100.0, 1),
+            "cycle_count": len(base_pullbacks),
+            "direction_change_count": direction_changes,
+            "directional_efficiency": round(base_efficiency, 3),
+            "time_under_boundary_pct": round(time_under * 100.0, 1),
+        },
+        "compression": {
+            "present": compression_present,
+            "passes_current_gate": compression_ok,
+            "qualified_by_proximity_override": pressed and not depth_rule,
+            "score": round(compression_score * 100.0, 1),
+            "pullback_depths_pct": depths,
+            "last_depth_ratio": (
+                round(last_depth_ratio, 3) if last_depth_ratio is not None else None
+            ),
+            "range_contraction_ratio": (
+                round(range_contraction_ratio, 3)
+                if range_contraction_ratio is not None
+                else None
+            ),
+            "support_converging": support_converging,
+            "volume_contraction_ratio": (
+                round(volume_ratio, 3) if volume_ratio is not None else None
+            ),
+        },
+        "breakout": {
+            "state": active.breakout.state,
+            "first_escape": active.breakout.first_escape,
+            "confirmed": active.breakout.confirmed,
+            "retest": active.breakout.retest,
+            "failed_breakouts": active.breakout.failed_breakouts,
+            "provisional_escape": active.breakout.provisional_escape,
+        },
+        "actionability": {
+            "state": action_state,
+            "score": round(_clamp01(action_score / 100.0) * 100.0, 1),
+            "eligible": maturity_pass,
+            # Preserve the otherwise-current signal for diagnosis without
+            # presenting it as actionable while the maturity guard fails.
+            "signal_state": signal_action_state,
+            "signal_score": round(
+                _clamp01(signal_action_score / 100.0) * 100.0, 1
+            ),
+            "grade": grade,
+            "proximity_pct": round(proximity_pct, 2),
+            "price_position": price_position,
+            "reasons": action_reasons,
+        },
+    }
+
+
 def analyze_coil(
     bars: Iterable[dict[str, Any]],
     config: CoilConfig = DEFAULT_CONFIG,
@@ -2030,7 +2880,8 @@ def analyze_coil(
     """Full analysis of one monthly bar series. JSON-ready dict, schema v2.
 
     Detection runs over the complete history in quarterly coordinates; the
-    active lid is the winning price zone (see the module docstring) and
+    active lid is the winning same-price zone or conservative confirmed-sloped
+    fallback, and
     everything downstream — grading, compression, proximity, breakout
     lifecycle, score — derives from that one line. ``lifecycle``:
     no_structure | forming | pre_breakout | breaking_out | post_breakout.
@@ -2039,13 +2890,24 @@ def analyze_coil(
     gate passes; ``notes`` explains gates that failed or the grade rationale.
     ``metrics.current_price_position`` (v2.2) reports which side of the
     +/-20% band the last close sits on; outside the band the lid is still
-    returned for diagnosis but never graded. The obsolete pair search is
+    returned for diagnosis but never graded. Shape anatomy and current
+    actionability are emitted separately. The obsolete monthly pair search is
     reported under ``diagnostics`` only.
     """
     clean = _clean_bars(bars, as_of)
+    observable_history_years = (
+        len({str(bar["date"])[:7] for bar in clean}) / BARS_PER_YEAR
+        if clean
+        else 0.0
+    )
+    maturity_pass = (
+        observable_history_years >= config.minimum_observable_history_years
+    )
     last_bar_date = clean[-1]["date"] if clean else as_of
     quarterly = _aggregate_quarterly_display_bars(clean) if clean else []
-    incomplete_last_quarter = bool(quarterly) and not _quarter_is_complete(quarterly[-1])
+    incomplete_last_quarter = bool(quarterly) and not _quarter_is_complete(
+        quarterly[-1], as_of=as_of
+    )
     result: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "algorithm_version": ALGORITHM_VERSION,
@@ -2076,7 +2938,34 @@ def analyze_coil(
         "resistance": None,
         "support": None,
         "metrics": None,
-        "diagnostics": {"pair_search": None, "rejected_hypotheses": []},
+        "pattern_anatomy": {
+            "recognized": False,
+            "shape_score": 0.0,
+            "maturity": {
+                "observable_history_years": round(observable_history_years, 2),
+                "minimum_observable_history_years": round(
+                    config.minimum_observable_history_years, 2
+                ),
+                "passes": maturity_pass,
+            },
+            "boundary": None,
+            "prior_trend": None,
+            "base": None,
+            "congestion": None,
+            "compression": None,
+            "breakout": None,
+            "actionability": {
+                "state": "none",
+                "score": 0.0,
+                "eligible": False,
+                "reasons": ["no qualified boundary"],
+            },
+        },
+        "diagnostics": {
+            "pair_search": None,
+            "rejected_hypotheses": [],
+            "boundary_selection": None,
+        },
         "notes": [],
     }
     if len(clean) < config.min_bars:
@@ -2103,14 +2992,22 @@ def analyze_coil(
             "lid_grade": grade_for_slope(pair_fit.slope_pct_per_year, config),
         }
 
-    structure = _analyze_quarterly_structure(clean, config)
+    structure, boundary_diagnostics = _detect_quarterly_structure(
+        clean,
+        config,
+        as_of=as_of,
+    )
+    result["diagnostics"]["boundary_selection"] = boundary_diagnostics
 
     # Approved human reviews override the algorithm's structure. The raw
     # algorithm result is retained for comparison and future calibration;
     # slope, grade, and lifecycle are recomputed from the reviewed anchors.
     if review_override and review_override.get("points"):
         overridden = _structure_from_review_override(
-            clean, review_override["points"], config
+            clean,
+            review_override["points"],
+            config,
+            as_of=as_of,
         )
         if overridden is not None:
             algorithm_summary = None
@@ -2152,7 +3049,9 @@ def analyze_coil(
     # interior members (structure that does not move the line), plus minor
     # swing highs inside the regime that land within the touch tolerance.
     # Nothing inside the incomplete final quarter may be a touch.
-    structural_month_limit = _last_structural_month_idx(quarterly, last_idx)
+    structural_month_limit = _last_structural_month_idx(
+        quarterly, last_idx, as_of=as_of
+    )
     touch_tol = config.touch_tolerance_pct / 100.0
     extra_touches: list[SwingPoint] = [
         rp.point
@@ -2204,6 +3103,28 @@ def analyze_coil(
 
     span_years = compat_fit.span_bars / BARS_PER_YEAR
     lid_grade = grade_for_slope(lid.slope_pct_per_year, config)
+    established_month = next(
+        (
+            monthly_role.point
+            for monthly_role, quarterly_role in zip(
+                structure.role_points_monthly,
+                active.role_points,
+            )
+            if quarterly_role.point.idx == active.established_idx
+        ),
+        None,
+    )
+    confirmed_month = next(
+        (
+            monthly_role.point
+            for monthly_role, quarterly_role in zip(
+                structure.role_points_monthly,
+                active.role_points,
+            )
+            if quarterly_role.point.idx == active.confirmed_idx
+        ),
+        None,
+    )
     result["resistance"] = {
         "from": _point_dict(compat_fit.anchor_a),
         "to": _point_dict(compat_fit.anchor_b),
@@ -2215,6 +3136,8 @@ def analyze_coil(
         "span_years": round(span_years, 2),
         "wick_overshoots": 0,
         "fit_score": round(active.score, 3),
+        "boundary_family": active.family,
+        "selection_reason": active.selection_reason,
         # Slope band of the lid alone (A/B/C/None) — how the team grades a
         # chart. The top-level ``grade`` additionally requires the coil gates
         # (sealed, wound, loaded), so a B lid mid-base shows lid_grade "B"
@@ -2248,6 +3171,14 @@ def analyze_coil(
         "touches": [_point_dict(t) for t in touches],  # oldest -> newest
         "touch_count": len(touches),
         "span_years": round(span_years, 2),
+        "boundary_family": active.family,
+        "selection_reason": active.selection_reason,
+        "established": _point_dict(established_month) if established_month else None,
+        "confirmed": _point_dict(confirmed_month) if confirmed_month else None,
+        "component_scores": {
+            key: round(value, 3)
+            for key, value in (active.component_scores or {}).items()
+        },
         "source": SOURCE,
     }
 
@@ -2298,6 +3229,11 @@ def analyze_coil(
             volume_ratio = late / early
 
     result["metrics"] = {
+        "observable_history_years": round(observable_history_years, 2),
+        "minimum_observable_history_years": round(
+            config.minimum_observable_history_years, 2
+        ),
+        "maturity_pass": maturity_pass,
         "proximity_pct": round(proximity_pct, 2),
         "current_price_position": price_position,
         "base_years": round(base_years, 2),
@@ -2372,6 +3308,16 @@ def analyze_coil(
         )
     result["lifecycle"] = lifecycle
     result["status"] = _lifecycle_to_status(lifecycle)
+    if not maturity_pass:
+        # Maturity is an eligibility guard, not a geometry/lifecycle gate.
+        # Keep the recognized line and apparent breakout state visible, while
+        # preventing a younger chart from surfacing as a fresh graded setup.
+        result["grade"] = None
+        result["notes"].append(
+            f"observable history {observable_history_years:.2f}y is below the "
+            f"{config.minimum_observable_history_years:.2f}y method minimum — "
+            "geometry retained but setup is not action-eligible"
+        )
     if sm.provisional_escape is not None:
         result["notes"].append(
             "partial quarter closed above the band — provisional only, not a breakout"
@@ -2397,6 +3343,30 @@ def analyze_coil(
     span_score = _clamp01(span_years / 10.0)
     result["coil_score"] = round(
         100.0 * (0.30 * flat + 0.20 * touch_score + 0.20 * compress + 0.15 * prox + 0.15 * span_score), 1
+    )
+    result["pattern_anatomy"] = _pattern_anatomy(
+        clean,
+        active,
+        lid,
+        touches,
+        pullbacks,
+        depth_rule=depth_rule,
+        compression_ok=compression_ok,
+        pressed=pressed,
+        last_depth_ratio=last_depth_ratio,
+        volume_ratio=volume_ratio,
+        base_trend_r2=base_trend_r2,
+        support=result.get("support"),
+        lifecycle=lifecycle,
+        grade=result["grade"],
+        proximity_pct=proximity_pct,
+        price_position=price_position,
+        coil_score=result["coil_score"],
+        observable_history_years=observable_history_years,
+        minimum_observable_history_years=(
+            config.minimum_observable_history_years
+        ),
+        maturity_pass=maturity_pass,
     )
     return result
 
