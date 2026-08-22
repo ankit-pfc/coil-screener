@@ -62,6 +62,13 @@ We are intentionally starting with a lightweight setup so we can get the monthly
 - `first_pass_results.csv`: initial live output from the starter ticker list
 - `app.py`: FastAPI backend for the screener and chart endpoints
 - `static/`: plain HTML/CSS/JS review UI
+- `gold_labels.py`: frozen-candle whole-pattern gold-label contract
+- `automatic_exemplar_evaluator.py`: detector-only point-in-time benchmark runner
+- `eodhd_ingestion.py`: frozen EODHD monthly-OHLCV adapter with pushed-SHA checks
+
+The candidate engine, benchmark rules, EODHD snapshot workflow, and exact-SHA
+rerun policy are documented in
+[`docs/detector-only-exemplar-benchmark.md`](docs/detector-only-exemplar-benchmark.md).
 
 ## Environment
 
