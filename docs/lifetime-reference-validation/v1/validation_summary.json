@@ -1,0 +1,198 @@
+{
+  "as_of": null,
+  "experimental": true,
+  "outcome_revealed_comparison": true,
+  "results": [
+    {
+      "comparison": "1070.HK.comparison.json",
+      "detection": "1070.HK.detection.json",
+      "image": "1070.HK.png",
+      "metrics": {
+        "detected_primary_anchor_dates": [
+          "2010-01-01",
+          "2015-04-01"
+        ],
+        "detected_structure_count": 3,
+        "direction_match": true,
+        "reference_anchor_rms_error_pct": 8.71,
+        "reference_primary_anchor_dates": [
+          "2010-01-01",
+          "2015-04-01",
+          "2020-10-01",
+          "2024-06-01"
+        ]
+      },
+      "replays": {
+        "firstActionableDate": {
+          "as_of": "2024-12-31",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2010-01-01",
+            "2015-04-01"
+          ],
+          "reference_anchor_rms_error_pct": 8.71
+        },
+        "firstRecognizableDate": {
+          "as_of": "2021-03-31",
+          "assessment": "no_line_yet",
+          "direction_match": null,
+          "primary_anchor_dates": [],
+          "reference_anchor_rms_error_pct": null
+        },
+        "firstWatchDate": {
+          "as_of": "2024-06-01",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2010-01-01",
+            "2015-04-01"
+          ],
+          "reference_anchor_rms_error_pct": 8.71
+        }
+      },
+      "ticker": "1070.HK"
+    },
+    {
+      "comparison": "0836.HK.comparison.json",
+      "detection": "0836.HK.detection.json",
+      "image": "0836.HK.png",
+      "metrics": {
+        "detected_primary_anchor_dates": [
+          "2007-10-01",
+          "2021-12-01"
+        ],
+        "detected_structure_count": 3,
+        "direction_match": true,
+        "reference_anchor_rms_error_pct": 0.0,
+        "reference_primary_anchor_dates": [
+          "2007-10-01",
+          "2021-12-01"
+        ]
+      },
+      "replays": {
+        "firstRecognizableDate": {
+          "as_of": "2022-03-31",
+          "assessment": "different_geometry",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2007-10-01",
+            "2013-05-01"
+          ],
+          "reference_anchor_rms_error_pct": 30.95
+        },
+        "firstWatchDate": {
+          "as_of": "2024-06-01",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2007-10-01",
+            "2021-12-01"
+          ],
+          "reference_anchor_rms_error_pct": 0.0
+        }
+      },
+      "ticker": "0836.HK"
+    },
+    {
+      "comparison": "GMDCLTD.NS.comparison.json",
+      "detection": "GMDCLTD.NS.detection.json",
+      "image": "GMDCLTD.NS.png",
+      "metrics": {
+        "detected_primary_anchor_dates": [
+          "2007-11-01",
+          "2024-02-01"
+        ],
+        "detected_structure_count": 2,
+        "direction_match": true,
+        "reference_anchor_rms_error_pct": 0.0,
+        "reference_primary_anchor_dates": [
+          "2007-11-01",
+          "2024-02-01"
+        ]
+      },
+      "replays": {
+        "firstActionableDate": {
+          "as_of": "2025-09-30",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2007-11-01",
+            "2024-02-01"
+          ],
+          "reference_anchor_rms_error_pct": 0.0
+        },
+        "firstRecognizableDate": {
+          "as_of": "2024-06-30",
+          "assessment": "different_geometry",
+          "direction_match": false,
+          "primary_anchor_dates": [
+            "2007-11-01",
+            "2022-04-01"
+          ],
+          "reference_anchor_rms_error_pct": 40.27
+        },
+        "firstWatchDate": {
+          "as_of": "2025-03-01",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2007-11-01",
+            "2024-02-01"
+          ],
+          "reference_anchor_rms_error_pct": 0.0
+        }
+      },
+      "ticker": "GMDCLTD.NS"
+    },
+    {
+      "comparison": "0981.HK.comparison.json",
+      "detection": "0981.HK.detection.json",
+      "image": "0981.HK.png",
+      "metrics": {
+        "detected_primary_anchor_dates": [
+          "2004-03-01",
+          "2020-07-01"
+        ],
+        "detected_structure_count": 1,
+        "direction_match": true,
+        "reference_anchor_rms_error_pct": 0.0,
+        "reference_primary_anchor_dates": [
+          "2004-03-01",
+          "2020-07-01"
+        ]
+      },
+      "replays": {
+        "firstActionableDate": {
+          "as_of": "2025-03-31",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2004-03-01",
+            "2020-07-01"
+          ],
+          "reference_anchor_rms_error_pct": 0.0
+        },
+        "firstRecognizableDate": {
+          "as_of": "2020-12-31",
+          "assessment": "no_line_yet",
+          "direction_match": null,
+          "primary_anchor_dates": [],
+          "reference_anchor_rms_error_pct": null
+        },
+        "firstWatchDate": {
+          "as_of": "2024-12-01",
+          "assessment": "geometry_aligned",
+          "direction_match": true,
+          "primary_anchor_dates": [
+            "2004-03-01",
+            "2020-07-01"
+          ],
+          "reference_anchor_rms_error_pct": 0.0
+        }
+      },
+      "ticker": "0981.HK"
+    }
+  ],
+  "source": "amrut_portfolio_exemplars_2026-08-21.csv"
+}

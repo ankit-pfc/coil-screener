@@ -1,0 +1,132 @@
+{
+  "comparison_only": true,
+  "reference_setup": {
+    "company": "Semiconductor Manufacturing International Corporation",
+    "currency": "HKD",
+    "exchange": "HKEX",
+    "expectedLifecycle": "post_breakout_retest_and_go",
+    "firstActionableDate": "2025-03-31",
+    "firstRecognizableDate": "2020-12-31",
+    "firstWatchDate": "2024-12-01",
+    "groundTruthScope": "Source-confirmed positive pattern and source geometry; not a population-level precision/recall claim or investment signal.",
+    "interval": "3M",
+    "knownOutcome": true,
+    "lines": [
+      {
+        "confidence": "estimated",
+        "constructionAnchors": [
+          {
+            "date": "2004-03-01",
+            "price": 25.5
+          },
+          {
+            "date": "2020-07-01",
+            "price": 44.8
+          }
+        ],
+        "from": {
+          "date": "2004-03-01",
+          "price": 25.5
+        },
+        "id": "primary-rising-lid",
+        "role": "primary_lid",
+        "summary": "The listing-era top and 2020 secular peak define the rising outer boundary.",
+        "to": {
+          "date": "2026-08-01",
+          "price": 52.6
+        }
+      }
+    ],
+    "phases": [
+      {
+        "detectorCues": [
+          "accept an old anchor when a later major top confirms the same line family"
+        ],
+        "endDate": "2004-12-31",
+        "kind": "prior_trend",
+        "startDate": "2004-01-01",
+        "summary": "The listing peak supplies the left secular anchor before a long decline."
+      },
+      {
+        "detectorCues": [
+          "detect the full rounded base",
+          "avoid requiring a flat price zone"
+        ],
+        "endDate": "2019-12-31",
+        "kind": "base",
+        "startDate": "2005-01-01",
+        "summary": "A 15-year rounded recovery develops through successively higher regimes."
+      },
+      {
+        "detectorCues": [
+          "use two secular anchors plus intervening containment",
+          "reject the later release peak as an anchor"
+        ],
+        "endDate": "2024-09-30",
+        "kind": "congestion",
+        "startDate": "2020-01-01",
+        "summary": "The 2020 peak confirms the rising lid; the 2021-24 reset builds below it."
+      },
+      {
+        "detectorCues": [
+          "measure rising support and reduced distance to lid"
+        ],
+        "endDate": "2024-12-31",
+        "kind": "compression",
+        "startDate": "2023-01-01",
+        "summary": "Price forms higher lows and accelerates back toward the projected line."
+      },
+      {
+        "detectorCues": [
+          "record first completed close above line",
+          "require follow-through rather than the high alone"
+        ],
+        "endDate": "2025-09-30",
+        "kind": "breakout",
+        "startDate": "2025-01-01",
+        "summary": "Quarterly closes clear the line with strong range and volume expansion."
+      },
+      {
+        "detectorCues": [
+          "detect boundary retest proximity",
+          "distinguish hold from reabsorption"
+        ],
+        "endDate": "2026-03-31",
+        "kind": "retest",
+        "startDate": "2025-10-01",
+        "summary": "Price pulls back to roughly 50 HKD, testing the former lid from above."
+      },
+      {
+        "detectorCues": [
+          "label retest-and-go separately from the original trigger",
+          "keep current-quarter claims provisional"
+        ],
+        "endDate": "2026-08-21",
+        "kind": "post_breakout",
+        "startDate": "2026-04-01",
+        "summary": "Price re-expands after the retest; Q3 remains incomplete."
+      }
+    ],
+    "recognitionTechnique": {
+      "boundaryFamily": "two-anchor secular rising lid",
+      "confirmation": "Completed-quarter acceptance above the projected line, followed by a successful line retest.",
+      "invalidation": "Sustained closes below the former lid after retest would signal failed acceptance.",
+      "plot": "Join 2004 and 2020; intermediate price stays contained and the 2025-26 highs are release evidence only.",
+      "spot": "An old listing peak and a later secular peak cap a rounded recovery with rising support."
+    },
+    "referenceId": "AI-20260821-S08-0981.HK",
+    "scale": "linear",
+    "schemaVersion": 1,
+    "sourceCapturedAt": "2026-08-21T14:22:00+05:30",
+    "sourceCapturedAtEstimated": false,
+    "sourceImageHeight": 1496,
+    "sourceImageName": "smic-3m-annotated.jpg",
+    "sourceImagePath": "docs/amrut-interviews/intakes/AI-20260821-S08/media/smic-3m-annotated.jpg",
+    "sourceImageSha256": "f18e59e296db3f4a442ad5d0ff53940ef7571092defe128819ea1d54d732d691",
+    "sourceImageWidth": 2428,
+    "sourceIngestedAt": "2026-08-21T14:24:00+05:30",
+    "staleAfter": "2026-08-21"
+  },
+  "source": "amrut_portfolio_exemplars_2026-08-21.csv",
+  "ticker": "0981.HK"
+}

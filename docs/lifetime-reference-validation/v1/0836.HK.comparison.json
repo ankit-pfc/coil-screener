@@ -1,0 +1,113 @@
+{
+  "comparison_only": true,
+  "reference_setup": {
+    "company": "China Resources Power Holdings Co. Ltd.",
+    "currency": "HKD",
+    "exchange": "HKEX",
+    "expectedLifecycle": "forming_after_failed_attempt",
+    "firstActionableDate": null,
+    "firstRecognizableDate": "2022-03-31",
+    "firstWatchDate": "2024-06-01",
+    "groundTruthScope": "Source-confirmed positive pattern and source geometry; not a population-level precision/recall claim or investment signal.",
+    "interval": "3M",
+    "knownOutcome": true,
+    "lines": [
+      {
+        "confidence": "estimated",
+        "constructionAnchors": [
+          {
+            "date": "2007-10-01",
+            "price": 32.40826
+          },
+          {
+            "date": "2021-12-01",
+            "price": 28.85
+          }
+        ],
+        "from": {
+          "date": "2007-12-01",
+          "price": 32.40826
+        },
+        "id": "primary-descending-lid",
+        "role": "primary_lid",
+        "summary": "The 2007 and 2021 outer peaks define a descending ceiling still above current price.",
+        "to": {
+          "date": "2026-08-01",
+          "price": 27.65
+        }
+      }
+    ],
+    "phases": [
+      {
+        "detectorCues": [
+          "require a meaningful post-top decline before reusing the high as a lid anchor"
+        ],
+        "endDate": "2007-12-31",
+        "kind": "prior_trend",
+        "startDate": "2004-01-01",
+        "summary": "The first secular advance culminates in the 2007 major top."
+      },
+      {
+        "detectorCues": [
+          "retain full-history context",
+          "do not split each lower price zone into a new primary pattern"
+        ],
+        "endDate": "2020-12-31",
+        "kind": "base",
+        "startDate": "2008-01-01",
+        "summary": "Several large cycles rebuild below the old high across a 13-year base."
+      },
+      {
+        "detectorCues": [
+          "score multi-cycle containment",
+          "allow broad rather than textbook-tight congestion"
+        ],
+        "endDate": "2026-08-21",
+        "kind": "congestion",
+        "startDate": "2012-01-01",
+        "summary": "Rallies repeatedly stall below the descending outer line while lows cycle through broad support."
+      },
+      {
+        "detectorCues": [
+          "distinguish an attempted break from a confirmed release",
+          "track re-entry below the boundary"
+        ],
+        "endDate": "2022-06-30",
+        "kind": "breakout",
+        "startDate": "2021-01-01",
+        "summary": "The 2021-22 push tests the line but fails to sustain acceptance above it."
+      },
+      {
+        "detectorCues": [
+          "return lifecycle to forming after reabsorption",
+          "do not label an old lower flat shelf as the active lid"
+        ],
+        "endDate": "2026-08-21",
+        "kind": "base",
+        "startDate": "2022-07-01",
+        "summary": "Price is reabsorbed into the base and remains below the projected lid."
+      }
+    ],
+    "recognitionTechnique": {
+      "boundaryFamily": "descending outer lid with failed attempt",
+      "confirmation": "Demand completed-quarter persistence above the projected line and explicitly test later re-entry.",
+      "invalidation": "Sustained reabsorption below the line cancels post-breakout status while preserving the historical pattern.",
+      "plot": "Use the 2007 and 2021 outer peaks; the 2024 lower peak is evidence of containment, not a replacement lid.",
+      "spot": "Two secular peaks and intermediate contained cycles define a line above a broad base."
+    },
+    "referenceId": "AI-20260821-S08-0836.HK",
+    "scale": "linear",
+    "schemaVersion": 1,
+    "sourceCapturedAt": "2026-08-21T14:19:00+05:30",
+    "sourceCapturedAtEstimated": false,
+    "sourceImageHeight": 1496,
+    "sourceImageName": "china-resources-power-3m-annotated.png",
+    "sourceImagePath": "docs/amrut-interviews/intakes/AI-20260821-S08/media/china-resources-power-3m-annotated.png",
+    "sourceImageSha256": "6bcfda08894a1a79d4f6605468c1cb8f74a591c7fcccce2ddd042650d0d17a67",
+    "sourceImageWidth": 2428,
+    "sourceIngestedAt": "2026-08-21T14:24:00+05:30",
+    "staleAfter": "2026-08-21"
+  },
+  "source": "amrut_portfolio_exemplars_2026-08-21.csv",
+  "ticker": "0836.HK"
+}

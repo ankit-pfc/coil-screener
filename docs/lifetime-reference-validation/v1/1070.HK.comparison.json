@@ -1,0 +1,131 @@
+{
+  "comparison_only": true,
+  "reference_setup": {
+    "company": "TCL Electronics Holdings Limited",
+    "currency": "HKD",
+    "exchange": "HKEX",
+    "expectedLifecycle": "post_breakout",
+    "firstActionableDate": "2024-12-31",
+    "firstRecognizableDate": "2021-03-31",
+    "firstWatchDate": "2024-06-01",
+    "groundTruthScope": "Source-confirmed positive pattern and source geometry; not a population-level precision/recall claim or investment signal.",
+    "interval": "3M",
+    "knownOutcome": true,
+    "lines": [
+      {
+        "confidence": "estimated",
+        "constructionAnchors": [
+          {
+            "date": "2010-01-01",
+            "price": 8.96701
+          },
+          {
+            "date": "2015-04-01",
+            "price": 8.65511
+          },
+          {
+            "date": "2020-10-01",
+            "price": 7.89
+          },
+          {
+            "date": "2024-06-01",
+            "price": 6.97
+          }
+        ],
+        "from": {
+          "date": "2005-12-01",
+          "price": 9.45
+        },
+        "id": "primary-descending-lid",
+        "role": "primary_lid",
+        "summary": "A shallow descending lid connects the 2005-2024 recovery peaks before the 2024-26 expansion.",
+        "to": {
+          "date": "2026-08-01",
+          "price": 7.6
+        }
+      }
+    ],
+    "phases": [
+      {
+        "detectorCues": [
+          "separate the 2003 extreme from the later actionable lid"
+        ],
+        "endDate": "2004-12-31",
+        "kind": "prior_trend",
+        "startDate": "2002-01-01",
+        "summary": "The listing-era surge and collapse establish the high-volatility predecessor regime."
+      },
+      {
+        "detectorCues": [
+          "find the first complete recovery cycle",
+          "measure the deep reset after each lid test"
+        ],
+        "endDate": "2014-12-31",
+        "kind": "base",
+        "startDate": "2005-01-01",
+        "summary": "Price rebuilds from the 2008-09 trough through repeated but capped rallies."
+      },
+      {
+        "detectorCues": [
+          "prefer the long sloped family over same-price buckets",
+          "count separated cycles rather than adjacent candles"
+        ],
+        "endDate": "2023-12-31",
+        "kind": "congestion",
+        "startDate": "2010-01-01",
+        "summary": "The 2010, 2015 and 2020-21 peaks respect a slowly falling cross-era ceiling."
+      },
+      {
+        "detectorCues": [
+          "track rising closes and shallower pullbacks",
+          "raise watch state as distance to lid contracts"
+        ],
+        "endDate": "2024-09-30",
+        "kind": "compression",
+        "startDate": "2022-01-01",
+        "summary": "The final lower base tightens while price returns to the projected lid."
+      },
+      {
+        "detectorCues": [
+          "require close-based persistence",
+          "record the first lid acceptance before the later vertical move"
+        ],
+        "endDate": "2025-12-31",
+        "kind": "breakout",
+        "startDate": "2024-10-01",
+        "summary": "Completed quarterly closes clear the lid and accelerate with range and volume expansion."
+      },
+      {
+        "detectorCues": [
+          "separate pattern quality from current actionability",
+          "exclude the release peak from lid construction"
+        ],
+        "endDate": "2026-08-21",
+        "kind": "post_breakout",
+        "startDate": "2026-01-01",
+        "summary": "Price extends far above the former ceiling; this is an outcome state, not a fresh pre-breakout grade."
+      }
+    ],
+    "recognitionTechnique": {
+      "boundaryFamily": "descending cross-era lid",
+      "confirmation": "Two completed-quarter closes above the line distinguish release from a wick.",
+      "invalidation": "A move back below the lid without prompt recovery is a reabsorption/failed-breakout state.",
+      "plot": "Join the outer 2010/2015/2020-21/2024 region and extend it; never anchor to the 2026 release peak.",
+      "spot": "Repeated lower highs cap a long, low base before a decisive expansion."
+    },
+    "referenceId": "AI-20260821-S08-1070.HK",
+    "scale": "linear",
+    "schemaVersion": 1,
+    "sourceCapturedAt": "2026-08-21T14:19:00+05:30",
+    "sourceCapturedAtEstimated": false,
+    "sourceImageHeight": 1496,
+    "sourceImageName": "tcl-electronics-3m-annotated.png",
+    "sourceImagePath": "docs/amrut-interviews/intakes/AI-20260821-S08/media/tcl-electronics-3m-annotated.png",
+    "sourceImageSha256": "510577a890020271af7a87a6cab76526d28ea02f7b8e3f5df737fc863816544b",
+    "sourceImageWidth": 2428,
+    "sourceIngestedAt": "2026-08-21T14:24:00+05:30",
+    "staleAfter": "2026-08-21"
+  },
+  "source": "amrut_portfolio_exemplars_2026-08-21.csv",
+  "ticker": "1070.HK"
+}

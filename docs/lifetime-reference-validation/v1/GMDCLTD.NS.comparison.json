@@ -1,0 +1,137 @@
+{
+  "comparison_only": true,
+  "reference_setup": {
+    "company": "Gujarat Mineral Development Corporation Limited",
+    "currency": "INR",
+    "exchange": "NSE",
+    "expectedLifecycle": "post_breakout",
+    "firstActionableDate": "2025-09-30",
+    "firstRecognizableDate": "2024-06-30",
+    "firstWatchDate": "2025-03-01",
+    "groundTruthScope": "Source-confirmed positive pattern and source geometry; not a population-level precision/recall claim or investment signal.",
+    "interval": "3M",
+    "knownOutcome": true,
+    "lines": [
+      {
+        "confidence": "estimated",
+        "constructionAnchors": [
+          {
+            "date": "2007-11-01",
+            "price": 316.17499
+          },
+          {
+            "date": "2024-02-01",
+            "price": 506.0
+          }
+        ],
+        "from": {
+          "date": "2007-12-01",
+          "price": 316.17499
+        },
+        "id": "primary-rising-lid",
+        "role": "primary_lid",
+        "summary": "A long rising outer ceiling links the 2007 and 2024 secular peaks.",
+        "to": {
+          "date": "2026-08-01",
+          "price": 537.0
+        }
+      },
+      {
+        "confidence": "estimated",
+        "from": {
+          "date": "2008-03-01",
+          "price": 215.0
+        },
+        "id": "nested-breakout-floor",
+        "role": "breakout_level",
+        "summary": "The old 200-230 ceiling becomes a nested breakout floor and trade-management reference.",
+        "to": {
+          "date": "2026-08-01",
+          "price": 231.0
+        }
+      }
+    ],
+    "phases": [
+      {
+        "detectorCues": [
+          "identify the major top by its subsequent deep decline"
+        ],
+        "endDate": "2007-12-31",
+        "kind": "prior_trend",
+        "startDate": "2002-01-01",
+        "summary": "A steep commodity-cycle advance creates the first secular top near 316 INR."
+      },
+      {
+        "detectorCues": [
+          "detect a nested horizontal ceiling",
+          "preserve the outer rising ceiling simultaneously"
+        ],
+        "endDate": "2021-12-31",
+        "kind": "base",
+        "startDate": "2008-01-01",
+        "summary": "Multiple deep cycles congest mostly below the old 200-230 price shelf."
+      },
+      {
+        "detectorCues": [
+          "classify the shelf as a first-stage breakout",
+          "carry it forward as support rather than the primary lid"
+        ],
+        "endDate": "2023-12-31",
+        "kind": "breakout",
+        "startDate": "2022-01-01",
+        "summary": "Price first accepts above the old horizontal shelf and establishes a higher regime."
+      },
+      {
+        "detectorCues": [
+          "recognize nested compression",
+          "track support conversion and distance to the outer lid"
+        ],
+        "endDate": "2025-06-30",
+        "kind": "compression",
+        "startDate": "2024-01-01",
+        "summary": "Pullbacks hold above the old shelf while price coils beneath the rising outer boundary."
+      },
+      {
+        "detectorCues": [
+          "confirm above the outer boundary",
+          "record the breakout line separately from later stop annotations"
+        ],
+        "endDate": "2026-06-30",
+        "kind": "breakout",
+        "startDate": "2025-07-01",
+        "summary": "A second-stage release clears the rising lid and expands toward 600+ INR."
+      },
+      {
+        "detectorCues": [
+          "never learn universal stop levels from annotations",
+          "keep incomplete-quarter evidence provisional"
+        ],
+        "endDate": "2026-08-21",
+        "kind": "post_breakout",
+        "startDate": "2026-07-01",
+        "summary": "The incomplete Q3 candle remains above the former lid; chart notes 190/350/469.75 are position-specific management, not detector thresholds."
+      }
+    ],
+    "recognitionTechnique": {
+      "boundaryFamily": "nested horizontal release plus rising secular lid",
+      "confirmation": "Recognize the outer-lid close/hold as the second-stage release.",
+      "invalidation": "Loss of the converted shelf invalidates the nested setup; portfolio stop notes remain example-specific.",
+      "plot": "Maintain both the 2007-2024 rising lid and the 200-230 shelf; neither line substitutes for the other.",
+      "spot": "A first-stage range breakout becomes support while price compresses under an older rising ceiling."
+    },
+    "referenceId": "AI-20260821-S08-GMDCLTD.NS",
+    "scale": "linear",
+    "schemaVersion": 1,
+    "sourceCapturedAt": "2026-08-21T14:23:00+05:30",
+    "sourceCapturedAtEstimated": false,
+    "sourceImageHeight": 1496,
+    "sourceImageName": "gmdc-3m-annotated.png",
+    "sourceImagePath": "docs/amrut-interviews/intakes/AI-20260821-S08/media/gmdc-3m-annotated.png",
+    "sourceImageSha256": "e4722d703f0493c9f383c5d1287e91268f519c213418bbf88a699533fa4e4c4b",
+    "sourceImageWidth": 2428,
+    "sourceIngestedAt": "2026-08-21T14:24:00+05:30",
+    "staleAfter": "2026-08-21"
+  },
+  "source": "amrut_portfolio_exemplars_2026-08-21.csv",
+  "ticker": "GMDCLTD.NS"
+}

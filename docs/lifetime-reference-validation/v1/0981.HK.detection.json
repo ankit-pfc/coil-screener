@@ -1,0 +1,366 @@
+{
+  "algorithm_version": "lifetime-reference-exp-0.1",
+  "as_of": null,
+  "config": {
+    "child_zone_lower_pct": 20.0,
+    "child_zone_min_below_parent_pct": 8.0,
+    "child_zone_three_touch_span_years": 3.0,
+    "child_zone_two_touch_span_years": 6.0,
+    "child_zone_upper_pct": 5.0,
+    "confirmed_touch_count": 3,
+    "containment_buffer_pct": 8.0,
+    "descending_continuity_floor": 0.7,
+    "local_high_window_quarters": 4,
+    "max_slope_pct_per_year": 8.0,
+    "max_structures": 3,
+    "min_anchor_span_quarters": 12,
+    "min_containment_ratio": 0.88,
+    "min_episode_separation_quarters": 4,
+    "min_rejection_pct": 15.0,
+    "min_slope_pct_per_year": -6.0,
+    "minimum_reaction_quarters": 2,
+    "new_reference_maturity_quarters": 4,
+    "plateau_tolerance_pct": 1.0,
+    "reaction_window_quarters": 8,
+    "rising_continuity_floor": 0.5,
+    "travelling_band_lower_pct": 14.0,
+    "travelling_band_upper_pct": 6.0,
+    "two_anchor_min_span_years": 10.0
+  },
+  "diagnostics": {
+    "confirmed_episode_count": 7,
+    "demoted_singleton_ids": [],
+    "notes": [
+      "Observed lifetime is limited to caller-provided history.",
+      "Corporate-action comparability is not inferred by this detector.",
+      "Market semantics still require human review in this experiment."
+    ],
+    "primary_structure_id": "line-top-2004-03-top-2020-09",
+    "tracking_episode_count": 0,
+    "tracking_new_reference_ids": [
+      "top-2025-12"
+    ]
+  },
+  "experimental": true,
+  "history": {
+    "adjustment_policy": "input_prices_as_provided",
+    "comparability": "calendar_contiguous",
+    "completed_quarter_count": 90,
+    "completed_through": "2026-06-01",
+    "completeness": "provider_max_unverified",
+    "end_date": "2026-08-01",
+    "lifetime_high": {
+      "date": "2025-10-01",
+      "price": 93.5,
+      "quarter_complete": true,
+      "quarter_date": "2025-12-01",
+      "top_status": "confirmed_rejection"
+    },
+    "missing_quarter_ordinals": [],
+    "provider": "caller_supplied",
+    "quarter_count": 91,
+    "scope": "observed_lifetime",
+    "start_date": "2004-03-01"
+  },
+  "interval": "3M",
+  "reference_ladder": [
+    {
+      "price_rank": 1,
+      "reason_codes": [
+        "not_mature_enough_for_pairing"
+      ],
+      "reference_price": 93.5,
+      "status": "tracking_new_high",
+      "top_id": "top-2025-12"
+    },
+    {
+      "price_rank": 2,
+      "reason_codes": [
+        "credible_price_time_family"
+      ],
+      "reference_price": 44.8,
+      "status": "active_supported",
+      "top_id": "top-2020-09"
+    },
+    {
+      "price_rank": 3,
+      "reason_codes": [
+        "confirmed_reaction_but_no_retained_family"
+      ],
+      "reference_price": 25.75,
+      "status": "unassigned_confirmed_top",
+      "top_id": "top-2023-06"
+    },
+    {
+      "price_rank": 4,
+      "reason_codes": [
+        "belongs_to_retained_structure"
+      ],
+      "reference_price": 25.5,
+      "status": "supporting_family_member",
+      "top_id": "top-2004-03"
+    },
+    {
+      "price_rank": 5,
+      "reason_codes": [
+        "confirmed_reaction_but_no_retained_family"
+      ],
+      "reference_price": 14.76,
+      "status": "unassigned_confirmed_top",
+      "top_id": "top-2017-12"
+    },
+    {
+      "price_rank": 6,
+      "reason_codes": [
+        "confirmed_reaction_but_no_retained_family"
+      ],
+      "reference_price": 10.9,
+      "status": "unassigned_confirmed_top",
+      "top_id": "top-2010-03"
+    },
+    {
+      "price_rank": 7,
+      "reason_codes": [
+        "confirmed_reaction_but_no_retained_family"
+      ],
+      "reference_price": 9.8,
+      "status": "unassigned_confirmed_top",
+      "top_id": "top-2015-06"
+    }
+  ],
+  "schema_version": 1,
+  "source": "timeseries",
+  "structures": [
+    {
+      "band": {
+        "lower_pct": 14.0,
+        "model": "asymmetric_travelling_band",
+        "upper_pct": 6.0,
+        "values_at_last": {
+          "lower": 44.5636,
+          "upper": 54.9273
+        }
+      },
+      "confidence": 0.755,
+      "construction_anchor_ids": [
+        "top-2004-03",
+        "top-2020-09"
+      ],
+      "excluded_top_ids": [],
+      "fit": {
+        "containment_ratio": 1.0,
+        "later_overshoot_count": 0,
+        "later_touch_count": 0,
+        "rms_error_pct": 0.0,
+        "score": 75.5,
+        "span_years": 16.5,
+        "touch_count": 2
+      },
+      "id": "line-top-2004-03-top-2020-09",
+      "kind": "line",
+      "line": {
+        "from": {
+          "date": "2004-03-01",
+          "price": 25.5,
+          "time_ordinal": 8016
+        },
+        "projected": {
+          "price": 51.8182,
+          "time_ordinal": 8106
+        },
+        "slope_pct_per_year": 3.474,
+        "slope_per_quarter": 0.292424,
+        "to": {
+          "date": "2020-07-01",
+          "price": 44.8,
+          "time_ordinal": 8082
+        }
+      },
+      "parent_id": null,
+      "reason_codes": [
+        "highest_supported_reference_family",
+        "calendar_quarter_geometry",
+        "later_tops_do_not_rotate_anchors"
+      ],
+      "relationship": "outer_reference",
+      "selection": "active",
+      "source": "timeseries",
+      "status": "established_low_confidence",
+      "supporting_touch_ids": []
+    }
+  ],
+  "top_episodes": [
+    {
+      "date": "2004-03-01",
+      "family_ids": [
+        "line-top-2004-03-top-2020-09"
+      ],
+      "id": "top-2004-03",
+      "price": 25.5,
+      "price_rank": 4,
+      "quarter_date": "2004-03-01",
+      "quarter_idx": 0,
+      "reaction": {
+        "close_drawdown_pct": 58.82,
+        "confirmed_at": "2004-06-01",
+        "trough": {
+          "date": "2005-12-01",
+          "price": 9.5
+        },
+        "wick_drawdown_pct": 62.75
+      },
+      "roles": [
+        "reference_top"
+      ],
+      "source": "timeseries",
+      "source_month_idx": 0,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8016
+    },
+    {
+      "date": "2010-03-01",
+      "family_ids": [],
+      "id": "top-2010-03",
+      "price": 10.9,
+      "price_rank": 6,
+      "quarter_date": "2010-03-01",
+      "quarter_idx": 24,
+      "reaction": {
+        "close_drawdown_pct": 65.6,
+        "confirmed_at": "2010-06-01",
+        "trough": {
+          "date": "2011-09-01",
+          "price": 3.35
+        },
+        "wick_drawdown_pct": 69.27
+      },
+      "roles": [],
+      "source": "timeseries",
+      "source_month_idx": 72,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8040
+    },
+    {
+      "date": "2015-04-01",
+      "family_ids": [],
+      "id": "top-2015-06",
+      "price": 9.8,
+      "price_rank": 7,
+      "quarter_date": "2015-06-01",
+      "quarter_idx": 45,
+      "reaction": {
+        "close_drawdown_pct": 36.73,
+        "confirmed_at": "2015-09-01",
+        "trough": {
+          "date": "2016-06-01",
+          "price": 5.8
+        },
+        "wick_drawdown_pct": 40.82
+      },
+      "roles": [],
+      "source": "timeseries",
+      "source_month_idx": 133,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8061
+    },
+    {
+      "date": "2017-11-01",
+      "family_ids": [],
+      "id": "top-2017-12",
+      "price": 14.76,
+      "price_rank": 5,
+      "quarter_date": "2017-12-01",
+      "quarter_idx": 55,
+      "reaction": {
+        "close_drawdown_pct": 53.59,
+        "confirmed_at": "2018-03-01",
+        "trough": {
+          "date": "2018-12-01",
+          "price": 5.88
+        },
+        "wick_drawdown_pct": 60.16
+      },
+      "roles": [],
+      "source": "timeseries",
+      "source_month_idx": 164,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8071
+    },
+    {
+      "date": "2020-07-01",
+      "family_ids": [
+        "line-top-2004-03-top-2020-09"
+      ],
+      "id": "top-2020-09",
+      "price": 44.8,
+      "price_rank": 2,
+      "quarter_date": "2020-09-01",
+      "quarter_idx": 66,
+      "reaction": {
+        "close_drawdown_pct": 64.29,
+        "confirmed_at": "2020-12-01",
+        "trough": {
+          "date": "2022-06-01",
+          "price": 14.64
+        },
+        "wick_drawdown_pct": 67.32
+      },
+      "roles": [
+        "reference_top"
+      ],
+      "source": "timeseries",
+      "source_month_idx": 196,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8082
+    },
+    {
+      "date": "2023-04-01",
+      "family_ids": [],
+      "id": "top-2023-06",
+      "price": 25.75,
+      "price_rank": 3,
+      "quarter_date": "2023-06-01",
+      "quarter_idx": 77,
+      "reaction": {
+        "close_drawdown_pct": 41.13,
+        "confirmed_at": "2023-09-01",
+        "trough": {
+          "date": "2024-03-01",
+          "price": 13.88
+        },
+        "wick_drawdown_pct": 46.1
+      },
+      "roles": [],
+      "source": "timeseries",
+      "source_month_idx": 229,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8093
+    },
+    {
+      "date": "2025-10-01",
+      "family_ids": [],
+      "id": "top-2025-12",
+      "price": 93.5,
+      "price_rank": 1,
+      "quarter_date": "2025-12-01",
+      "quarter_idx": 87,
+      "reaction": {
+        "close_drawdown_pct": 45.78,
+        "confirmed_at": "2026-03-01",
+        "trough": {
+          "date": "2026-03-01",
+          "price": 49.32
+        },
+        "wick_drawdown_pct": 47.25
+      },
+      "roles": [
+        "lifetime_high",
+        "tracking_new_high"
+      ],
+      "source": "timeseries",
+      "source_month_idx": 259,
+      "status": "confirmed_rejection",
+      "time_ordinal": 8103
+    }
+  ]
+}
