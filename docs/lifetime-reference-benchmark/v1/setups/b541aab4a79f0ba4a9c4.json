@@ -1,0 +1,368 @@
+{
+  "artifacts": {
+    "chart_path": "charts/shadow-disagreements/b541aab4a79f0ba4a9c4.png",
+    "setup_json_path": "setups/b541aab4a79f0ba4a9c4.json"
+  },
+  "comparisons": {
+    "current_vs_lifetime": {
+      "agreement_class": "both_different",
+      "anchor_matching": {
+        "fn": 2,
+        "fp": 2,
+        "pairs": [],
+        "tp": 0,
+        "unmatched_expected": [
+          "2007-10-01",
+          "2025-03-01"
+        ],
+        "unmatched_predicted": [
+          "2007-02-01",
+          "2016-07-01"
+        ]
+      },
+      "direction_match": false,
+      "projected_value_symmetric_error_pct": 1.486269,
+      "slope_abs_diff_pct_per_year": 0.903199
+    }
+  },
+  "identity": {
+    "bars_sha256": "73768ce97eccce6afcf56bff638535d4c8ad32cc945848d55c12d8a9479caf9c",
+    "issuer_cluster_id": "issuer:REG",
+    "observation_id": "b541aab4a79f0ba4a9c4",
+    "setup_id": "setup:REG",
+    "ticker": "REG"
+  },
+  "input": {
+    "bar_count": 394,
+    "completed_quarter_count": 131,
+    "corpus_id": "screen_2026-07-27_v2.2.0",
+    "cutoff_date": "2026-07-01",
+    "data_quality_status": "clear_by_defined_checks",
+    "decision_as_of": "2026-07-27",
+    "history_start_date": "1993-10-01",
+    "history_years": 32.75,
+    "independent_review_candidate": false,
+    "reviewable": true,
+    "snapshot_sha256": "1a02f9f4b378216d87874244d3368edb3de08653a671644f42f893b17c89eb51",
+    "source": "screen_2026-07-27_v2.2.0.csv",
+    "source_bars_hash": "62736e9cd8f97db55758afb6e6ba23fc729b0475ca703a447fb83d79097fdcbf",
+    "source_cohort_role": "control_reference",
+    "source_prior_review": true,
+    "source_tuning_anchor": true
+  },
+  "kind": "coilingview.lifetime-reference-shadow-observation",
+  "predictions": {
+    "current": {
+      "algorithm_version": "2.5.0",
+      "boundary_family": "same_price_zone",
+      "breakout": {
+        "confirmed": null,
+        "failed_breakouts": [
+          {
+            "escape": {
+              "band_pct": 5.0,
+              "close": 83.73,
+              "date": "2016-06-01",
+              "q_idx": 90
+            },
+            "failed": {
+              "close": 77.49,
+              "date": "2016-09-01",
+              "q_idx": 91
+            }
+          }
+        ],
+        "first_escape": null,
+        "provisional_escape": {
+          "close": 82.15,
+          "date": "2026-07-01",
+          "q_idx": 131
+        },
+        "retest": null,
+        "state": "sealed"
+      },
+      "compression": {
+        "last_depth_ratio": 0.253,
+        "passes_current_gate": true,
+        "present": true,
+        "pullback_depths_pct": [
+          36.14,
+          74.36,
+          33.87,
+          18.84
+        ],
+        "qualified_by_proximity_override": false,
+        "range_contraction_ratio": 0.7,
+        "score": 52.9,
+        "support_converging": true,
+        "volume_contraction_ratio": 1.231
+      },
+      "congestion": {
+        "cycle_count": 4,
+        "direction_change_count": 115,
+        "directional_efficiency": 0.011,
+        "present": true,
+        "score": 99.2,
+        "time_under_boundary_pct": 98.7
+      },
+      "error": null,
+      "grade": "A",
+      "lifecycle": "pre_breakout",
+      "line_present": true,
+      "major_high_count": 3,
+      "maturity": {
+        "minimum_observable_history_years": 10.0,
+        "observable_history_years": 32.83,
+        "passes": true
+      },
+      "normalized_structures": [
+        {
+          "anchor_dates": [
+            "2007-10-01",
+            "2025-03-01"
+          ],
+          "anchor_points": [
+            {
+              "date": "2007-10-01",
+              "price": 81.04
+            },
+            {
+              "date": "2025-03-01",
+              "price": 78.18
+            }
+          ],
+          "anchor_prices": [
+            81.04,
+            78.18
+          ],
+          "boundary_kind": "line",
+          "direction": "flat",
+          "geometry_end_ordinal": 8106,
+          "geometry_start_ordinal": 8031,
+          "id": "current-active-boundary",
+          "intercept": 413.919130435,
+          "normalization_source": "construction_anchor_ols",
+          "relationship": "standalone",
+          "role": "primary_lid",
+          "selection": "primary",
+          "slope_pct_per_year": -0.212748,
+          "slope_per_quarter": -0.041449275,
+          "touch_dates": [
+            "2007-10-01",
+            "2008-09-01",
+            "2022-01-01",
+            "2025-03-01"
+          ],
+          "value_at_cutoff": 77.931304
+        }
+      ],
+      "proximity_pct": 105.37,
+      "raw_output_sha256": "7be195729d66303f99b323aed39ddd684d387151381ac7e5abf4e2187638932c",
+      "run_status": "ok",
+      "status": "coiling",
+      "structure_count": 1
+    },
+    "hybrid": {
+      "reason": "no detector-only external-boundary downstream adapter exists",
+      "run_status": "not_available"
+    },
+    "lifetime": {
+      "algorithm_version": "lifetime-reference-exp-0.1",
+      "confirmed_top_count": 7,
+      "demoted_singleton_count": 0,
+      "error": null,
+      "history": {
+        "adjustment_policy": "input_prices_as_provided",
+        "comparability": "calendar_contiguous",
+        "completed_quarter_count": 131,
+        "completed_through": "2026-06-01",
+        "completeness": "provider_max_unverified",
+        "end_date": "2026-07-01",
+        "lifetime_high": {
+          "date": "2007-02-01",
+          "price": 93.49,
+          "quarter_complete": true,
+          "quarter_date": "2007-03-01",
+          "top_status": "confirmed_rejection"
+        },
+        "missing_quarter_ordinals": [],
+        "provider": "caller_supplied",
+        "quarter_count": 132,
+        "scope": "observed_lifetime",
+        "start_date": "1993-10-01"
+      },
+      "line_present": true,
+      "normalized_structures": [
+        {
+          "anchor_dates": [
+            "2007-02-01",
+            "2016-07-01"
+          ],
+          "anchor_points": [
+            {
+              "date": "2007-02-01",
+              "price": 93.49
+            },
+            {
+              "date": "2016-07-01",
+              "price": 85.35
+            }
+          ],
+          "anchor_prices": [
+            93.49,
+            85.35
+          ],
+          "band": {
+            "lower_pct": 14.0,
+            "model": "asymmetric_travelling_band",
+            "upper_pct": 6.0,
+            "values_at_last": {
+              "lower": 66.0322,
+              "upper": 81.3885
+            }
+          },
+          "boundary_kind": "line",
+          "detector_status": "confirmed",
+          "direction": "falling",
+          "fit_error_pct": 1.986,
+          "geometry_end_ordinal": 8106,
+          "geometry_start_ordinal": 8028,
+          "id": "line-top-2007-03-top-2016-09",
+          "intercept": 1813.172105263,
+          "normalization_source": "construction_anchor_ols",
+          "relationship": "outer_reference",
+          "role": "primary_lid",
+          "selection": "primary",
+          "slope_pct_per_year": -1.115947,
+          "slope_per_quarter": -0.214210526,
+          "touch_dates": [
+            "2021-11-01"
+          ],
+          "value_at_cutoff": 76.781579
+        },
+        {
+          "anchor_dates": [
+            "2013-05-01",
+            "2019-06-01"
+          ],
+          "anchor_points": [
+            {
+              "date": "2013-05-01",
+              "price": 59.35
+            },
+            {
+              "date": "2019-06-01",
+              "price": 70.26
+            }
+          ],
+          "anchor_prices": [
+            59.35,
+            70.26
+          ],
+          "band": {
+            "lower_pct": 20.0,
+            "model": "secondary_price_zone",
+            "upper_pct": 5.0,
+            "values_at_last": {
+              "lower": 51.844,
+              "upper": 68.0453
+            }
+          },
+          "boundary_kind": "resistance_band",
+          "detector_status": "established",
+          "direction": "flat",
+          "fit_error_pct": 8.418,
+          "geometry_end_ordinal": 8106,
+          "geometry_start_ordinal": 8053,
+          "id": "zone-top-2013-06-top-2019-06",
+          "intercept": 64.805,
+          "normalization_source": "detector_emitted_band_centerline",
+          "relationship": "nested_below_outer",
+          "role": "secondary_lid",
+          "selection": "alternate",
+          "slope_pct_per_year": 0.0,
+          "slope_per_quarter": 0.0,
+          "touch_dates": [],
+          "value_at_cutoff": 64.805
+        }
+      ],
+      "raw_output_sha256": "8d0cb6ea0a7f6eaf7a41afa43ce77f26ec52fbd2fcedda2a937c910d27dcecf5",
+      "reference_ladder": [
+        {
+          "price_rank": 1,
+          "reason_codes": [
+            "credible_price_time_family"
+          ],
+          "reference_price": 93.49,
+          "status": "active_supported",
+          "top_id": "top-2007-03"
+        },
+        {
+          "price_rank": 2,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 85.35,
+          "status": "supporting_family_member",
+          "top_id": "top-2016-09"
+        },
+        {
+          "price_rank": 3,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 78.07,
+          "status": "supporting_family_member",
+          "top_id": "top-2021-12"
+        },
+        {
+          "price_rank": 4,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 70.26,
+          "status": "supporting_family_member",
+          "top_id": "top-2019-06"
+        },
+        {
+          "price_rank": 5,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 59.35,
+          "status": "supporting_family_member",
+          "top_id": "top-2013-06"
+        },
+        {
+          "price_rank": 6,
+          "reason_codes": [
+            "confirmed_reaction_but_no_retained_family"
+          ],
+          "reference_price": 28.0,
+          "status": "unassigned_confirmed_top",
+          "top_id": "top-1997-03"
+        },
+        {
+          "price_rank": 7,
+          "reason_codes": [
+            "confirmed_reaction_but_no_retained_family"
+          ],
+          "reference_price": 19.375,
+          "status": "unassigned_confirmed_top",
+          "top_id": "top-1993-12"
+        }
+      ],
+      "run_status": "ok",
+      "semantic_status": "geometry_only",
+      "structure_count": 2,
+      "tracking_high_count": 0
+    }
+  },
+  "reference": {
+    "availability": "no_exact_geometry_joined",
+    "note": "No exact line geometry is joined. Source-screen review and tuning context is retained explicitly; shadow agreement is not accuracy.",
+    "outcome_visible": false
+  },
+  "replay": [],
+  "schema_version": 1
+}

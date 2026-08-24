@@ -1,0 +1,177 @@
+{
+  "artifacts": {
+    "chart_path": null,
+    "setup_json_path": "setups/ac39696ab899b3b70383.json"
+  },
+  "comparisons": {
+    "current_vs_lifetime": {
+      "agreement_class": "neither"
+    }
+  },
+  "identity": {
+    "bars_sha256": "bf16bd3e5af7ceeb0687d860024b862b42f5cad22ecc06ffc1eb2ede9d5136f8",
+    "issuer_cluster_id": "issuer:000660.KS",
+    "observation_id": "ac39696ab899b3b70383",
+    "setup_id": "setup:000660.KS",
+    "ticker": "000660.KS"
+  },
+  "input": {
+    "bar_count": 319,
+    "completed_quarter_count": 106,
+    "corpus_id": "screen_2026-07-27_v2.2.0",
+    "cutoff_date": "2026-07-01",
+    "data_quality_status": "clear_by_defined_checks",
+    "decision_as_of": "2026-07-27",
+    "history_start_date": "2000-01-01",
+    "history_years": 26.5,
+    "independent_review_candidate": true,
+    "reviewable": true,
+    "snapshot_sha256": "1d8de24f4bf6d4e311313f2bd8da60b30a1ff29f6d084caa95c6a2df0053f338",
+    "source": "screen_2026-07-27_v2.2.0.csv",
+    "source_bars_hash": "733fc0693a6a0d40db27e132202fddb30724f7f466270605664180f66ed630e9",
+    "source_cohort_role": "prospective_international",
+    "source_prior_review": false,
+    "source_tuning_anchor": false
+  },
+  "kind": "coilingview.lifetime-reference-shadow-observation",
+  "predictions": {
+    "current": {
+      "algorithm_version": "2.5.0",
+      "boundary_family": null,
+      "breakout": null,
+      "compression": null,
+      "congestion": null,
+      "error": null,
+      "grade": null,
+      "lifecycle": "no_structure",
+      "line_present": false,
+      "major_high_count": 0,
+      "maturity": {
+        "minimum_observable_history_years": 10.0,
+        "observable_history_years": 26.58,
+        "passes": true
+      },
+      "normalized_structures": [],
+      "proximity_pct": null,
+      "raw_output_sha256": "246801dca074ec74fb7d3ff31f5d2abbbab7ac12072769fd9dfdbb8ad9a6a07a",
+      "run_status": "ok",
+      "status": "no_structure",
+      "structure_count": 0
+    },
+    "hybrid": {
+      "reason": "no detector-only external-boundary downstream adapter exists",
+      "run_status": "not_available"
+    },
+    "lifetime": {
+      "algorithm_version": "lifetime-reference-exp-0.1",
+      "confirmed_top_count": 6,
+      "demoted_singleton_count": 6,
+      "error": null,
+      "history": {
+        "adjustment_policy": "input_prices_as_provided",
+        "comparability": "calendar_contiguous",
+        "completed_quarter_count": 106,
+        "completed_through": "2026-06-01",
+        "completeness": "provider_max_unverified",
+        "end_date": "2026-07-01",
+        "lifetime_high": {
+          "date": "2026-06-01",
+          "price": 2987000.0,
+          "quarter_complete": true,
+          "quarter_date": "2026-06-01",
+          "top_status": "tracking_only"
+        },
+        "missing_quarter_ordinals": [],
+        "provider": "caller_supplied",
+        "quarter_count": 107,
+        "scope": "observed_lifetime",
+        "start_date": "2000-01-01"
+      },
+      "line_present": false,
+      "normalized_structures": [],
+      "raw_output_sha256": "db8b9eb387676d8991873e0b0f9b7bef27a811de08376549d4413d3fb87229d6",
+      "reference_ladder": [
+        {
+          "price_rank": 1,
+          "reason_codes": [
+            "not_mature_enough_for_pairing"
+          ],
+          "reference_price": 2987000.0,
+          "status": "tracking_new_high",
+          "top_id": "top-2026-06-tracking"
+        },
+        {
+          "price_rank": 2,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 596400.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2000-03"
+        },
+        {
+          "price_rank": 3,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 150500.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2021-03"
+        },
+        {
+          "price_rank": 4,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 97700.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2018-06"
+        },
+        {
+          "price_rank": 5,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 52400.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2014-09"
+        },
+        {
+          "price_rank": 6,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 40300.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2006-09"
+        },
+        {
+          "price_rank": 7,
+          "reason_codes": [
+            "no_credible_family",
+            "lower_family_has_better_coverage"
+          ],
+          "reference_price": 37400.0,
+          "status": "demoted_singleton",
+          "top_id": "top-2011-06"
+        }
+      ],
+      "run_status": "ok",
+      "semantic_status": "geometry_only",
+      "structure_count": 0,
+      "tracking_high_count": 1
+    }
+  },
+  "reference": {
+    "availability": "no_exact_geometry_joined",
+    "note": "No exact line geometry is joined. Source-screen review and tuning context is retained explicitly; shadow agreement is not accuracy.",
+    "outcome_visible": false
+  },
+  "replay": [],
+  "schema_version": 1
+}

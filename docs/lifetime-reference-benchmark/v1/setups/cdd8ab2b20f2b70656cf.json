@@ -1,0 +1,210 @@
+{
+  "artifacts": {
+    "chart_path": "charts/shadow-disagreements/cdd8ab2b20f2b70656cf.png",
+    "setup_json_path": "setups/cdd8ab2b20f2b70656cf.json"
+  },
+  "comparisons": {
+    "current_vs_lifetime": {
+      "agreement_class": "lifetime_only"
+    }
+  },
+  "identity": {
+    "bars_sha256": "e4a0fadcaa49811cf03700589f0a63fd60f1d71b7ae910dea5cc3a75f42b8d9a",
+    "issuer_cluster_id": "issuer:CSL.AX",
+    "observation_id": "cdd8ab2b20f2b70656cf",
+    "setup_id": "setup:CSL.AX",
+    "ticker": "CSL.AX"
+  },
+  "input": {
+    "bar_count": 387,
+    "completed_quarter_count": 129,
+    "corpus_id": "screen_2026-07-27_v2.2.0",
+    "cutoff_date": "2026-07-01",
+    "data_quality_status": "clear_by_defined_checks",
+    "decision_as_of": "2026-07-27",
+    "history_start_date": "1994-05-01",
+    "history_years": 32.25,
+    "independent_review_candidate": true,
+    "reviewable": true,
+    "snapshot_sha256": "7f7edb0715bde5e32f5dd01a5524c1e0b0378ea0997f31fa97a8de7e1895641d",
+    "source": "screen_2026-07-27_v2.2.0.csv",
+    "source_bars_hash": "d68c48bda6bc113158cfd5d5691e29acdf9a5d808a366ccb0c08d4feb70e0223",
+    "source_cohort_role": "prospective_international",
+    "source_prior_review": false,
+    "source_tuning_anchor": false
+  },
+  "kind": "coilingview.lifetime-reference-shadow-observation",
+  "predictions": {
+    "current": {
+      "algorithm_version": "2.5.0",
+      "boundary_family": null,
+      "breakout": null,
+      "compression": null,
+      "congestion": null,
+      "error": null,
+      "grade": null,
+      "lifecycle": "no_structure",
+      "line_present": false,
+      "major_high_count": 0,
+      "maturity": {
+        "minimum_observable_history_years": 10.0,
+        "observable_history_years": 32.25,
+        "passes": true
+      },
+      "normalized_structures": [],
+      "proximity_pct": null,
+      "raw_output_sha256": "ea9552769fafb18f3e07b1bd7223c7ad1f67525a9b7a0f1794dd40baa40dd779",
+      "run_status": "ok",
+      "status": "no_structure",
+      "structure_count": 0
+    },
+    "hybrid": {
+      "reason": "no detector-only external-boundary downstream adapter exists",
+      "run_status": "not_available"
+    },
+    "lifetime": {
+      "algorithm_version": "lifetime-reference-exp-0.1",
+      "confirmed_top_count": 6,
+      "demoted_singleton_count": 0,
+      "error": null,
+      "history": {
+        "adjustment_policy": "input_prices_as_provided",
+        "comparability": "calendar_contiguous",
+        "completed_quarter_count": 129,
+        "completed_through": "2026-06-01",
+        "completeness": "provider_max_unverified",
+        "end_date": "2026-07-01",
+        "lifetime_high": {
+          "date": "2020-02-01",
+          "price": 342.75,
+          "quarter_complete": true,
+          "quarter_date": "2020-03-01",
+          "top_status": "confirmed_rejection"
+        },
+        "missing_quarter_ordinals": [],
+        "provider": "caller_supplied",
+        "quarter_count": 130,
+        "scope": "observed_lifetime",
+        "start_date": "1994-05-01"
+      },
+      "line_present": true,
+      "normalized_structures": [
+        {
+          "anchor_dates": [
+            "2020-02-01",
+            "2023-02-01"
+          ],
+          "anchor_points": [
+            {
+              "date": "2020-02-01",
+              "price": 342.75
+            },
+            {
+              "date": "2023-02-01",
+              "price": 314.28
+            }
+          ],
+          "anchor_prices": [
+            342.75,
+            314.28
+          ],
+          "band": {
+            "lower_pct": 14.0,
+            "model": "asymmetric_travelling_band",
+            "upper_pct": 6.0,
+            "values_at_last": {
+              "lower": 241.7159,
+              "upper": 297.9289
+            }
+          },
+          "boundary_kind": "line",
+          "detector_status": "confirmed",
+          "direction": "falling",
+          "fit_error_pct": 2.599,
+          "geometry_end_ordinal": 8106,
+          "geometry_start_ordinal": 8080,
+          "id": "line-top-2020-03-top-2023-03",
+          "intercept": 19512.55,
+          "normalization_source": "construction_anchor_ols",
+          "relationship": "outer_reference",
+          "role": "primary_lid",
+          "selection": "primary",
+          "slope_pct_per_year": -3.376443,
+          "slope_per_quarter": -2.3725,
+          "touch_dates": [
+            "2024-07-01"
+          ],
+          "value_at_cutoff": 281.065
+        }
+      ],
+      "raw_output_sha256": "41cf79f7cbc344951cccef6a906b7195c65e52ce2ed283a5d5040f7ab1d1e8f1",
+      "reference_ladder": [
+        {
+          "price_rank": 1,
+          "reason_codes": [
+            "credible_price_time_family"
+          ],
+          "reference_price": 342.75,
+          "status": "active_supported",
+          "top_id": "top-2020-03"
+        },
+        {
+          "price_rank": 2,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 314.28,
+          "status": "supporting_family_member",
+          "top_id": "top-2023-03"
+        },
+        {
+          "price_rank": 3,
+          "reason_codes": [
+            "belongs_to_retained_structure"
+          ],
+          "reference_price": 313.55,
+          "status": "supporting_family_member",
+          "top_id": "top-2024-09"
+        },
+        {
+          "price_rank": 4,
+          "reason_codes": [
+            "confirmed_reaction_but_no_retained_family"
+          ],
+          "reference_price": 43.19,
+          "status": "unassigned_confirmed_top",
+          "top_id": "top-2008-06"
+        },
+        {
+          "price_rank": 5,
+          "reason_codes": [
+            "confirmed_reaction_but_no_retained_family"
+          ],
+          "reference_price": 38.07,
+          "status": "unassigned_confirmed_top",
+          "top_id": "top-2011-03"
+        },
+        {
+          "price_rank": 6,
+          "reason_codes": [
+            "confirmed_reaction_but_no_retained_family"
+          ],
+          "reference_price": 17.2,
+          "status": "unassigned_confirmed_top",
+          "top_id": "top-2001-12"
+        }
+      ],
+      "run_status": "ok",
+      "semantic_status": "geometry_only",
+      "structure_count": 1,
+      "tracking_high_count": 0
+    }
+  },
+  "reference": {
+    "availability": "no_exact_geometry_joined",
+    "note": "No exact line geometry is joined. Source-screen review and tuning context is retained explicitly; shadow agreement is not accuracy.",
+    "outcome_visible": false
+  },
+  "replay": [],
+  "schema_version": 1
+}

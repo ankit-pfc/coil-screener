@@ -1,0 +1,327 @@
+{
+  "artifacts": {
+    "labelled_failure_charts": 24,
+    "setup_json_files": 76,
+    "shadow_disagreement_charts": 38
+  },
+  "counts": {
+    "blind_snapshots_executed": 0,
+    "exact_selected": 24,
+    "labelled_executed": 33,
+    "portfolio_selected": 9,
+    "replay_rows": 113,
+    "shadow_executed": 43,
+    "shadow_executed_safe": 43,
+    "shadow_quality_accepted": 67,
+    "shadow_withheld_blind_overlap": 24
+  },
+  "error_taxonomy": {
+    "different_geometry": 22,
+    "direction_mismatch": 7,
+    "false_line": 1,
+    "missed_line": 1,
+    "reference_anchor_rms_over_10pct": 10
+  },
+  "flow_availability": {
+    "current": "executed",
+    "gold_boundary_plus_existing_semantics": "not_run_comparison_only",
+    "hybrid_lifetime_plus_existing_semantics": "not_available_no_supported_adapter",
+    "lifetime_geometry": "executed"
+  },
+  "kind": "coilingview.lifetime-reference-benchmark-summary",
+  "labelled": {
+    "estimated_source": {
+      "current": {
+        "descriptive_primary_rms_within_10pct": {
+          "denominator": 9,
+          "numerator": 0,
+          "value": 0.0
+        },
+        "direction_match_when_emitted": {
+          "denominator": 9,
+          "numerator": 1,
+          "value": 0.111111
+        },
+        "false_line_on_no_line_reference": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "positive_line_detection": {
+          "denominator": 9,
+          "numerator": 9,
+          "value": 1.0
+        },
+        "projected_line_error_pct": {
+          "count": 9,
+          "max": 66.106372,
+          "mean": 26.353042,
+          "median": 23.839599,
+          "p90": 66.106372
+        },
+        "reference_anchor_rms_error_pct": {
+          "count": 9,
+          "max": 94.20168,
+          "mean": 38.970007,
+          "median": 31.410064,
+          "p90": 94.20168
+        },
+        "strict_primary_geometry_match": {
+          "denominator": 9,
+          "numerator": 0,
+          "value": 0.0
+        }
+      },
+      "lifetime": {
+        "descriptive_primary_rms_within_10pct": {
+          "denominator": 9,
+          "numerator": 9,
+          "value": 1.0
+        },
+        "direction_match_when_emitted": {
+          "denominator": 9,
+          "numerator": 9,
+          "value": 1.0
+        },
+        "false_line_on_no_line_reference": {
+          "denominator": 0,
+          "numerator": 0,
+          "value": null
+        },
+        "positive_line_detection": {
+          "denominator": 9,
+          "numerator": 9,
+          "value": 1.0
+        },
+        "projected_line_error_pct": {
+          "count": 9,
+          "max": 15.789804,
+          "mean": 4.774675,
+          "median": 2.915997,
+          "p90": 15.789804
+        },
+        "reference_anchor_rms_error_pct": {
+          "count": 9,
+          "max": 8.70759,
+          "mean": 3.192843,
+          "median": 1.772105,
+          "p90": 8.70759
+        },
+        "strict_primary_geometry_match": {
+          "denominator": 9,
+          "numerator": 6,
+          "value": 0.666667
+        }
+      },
+      "no_line_reference_count": 0,
+      "positive_line_reference_count": 9,
+      "setup_count": 9
+    },
+    "exact_clicks": {
+      "current": {
+        "descriptive_primary_rms_within_10pct": {
+          "denominator": 23,
+          "numerator": 4,
+          "value": 0.173913
+        },
+        "direction_match_when_emitted": {
+          "denominator": 22,
+          "numerator": 9,
+          "value": 0.409091
+        },
+        "false_line_on_no_line_reference": {
+          "denominator": 1,
+          "numerator": 1,
+          "value": 1.0
+        },
+        "positive_line_detection": {
+          "denominator": 23,
+          "numerator": 22,
+          "value": 0.956522
+        },
+        "projected_line_error_pct": {
+          "count": 22,
+          "max": 67.57244,
+          "mean": 23.879256,
+          "median": 18.300846,
+          "p90": 53.89247
+        },
+        "reference_anchor_rms_error_pct": {
+          "count": 22,
+          "max": 112.20368,
+          "mean": 28.696825,
+          "median": 17.770815,
+          "p90": 51.776224
+        },
+        "strict_primary_geometry_match": {
+          "denominator": 23,
+          "numerator": 0,
+          "value": 0.0
+        }
+      },
+      "lifetime": {
+        "descriptive_primary_rms_within_10pct": {
+          "denominator": 23,
+          "numerator": 8,
+          "value": 0.347826
+        },
+        "direction_match_when_emitted": {
+          "denominator": 22,
+          "numerator": 15,
+          "value": 0.681818
+        },
+        "false_line_on_no_line_reference": {
+          "denominator": 1,
+          "numerator": 1,
+          "value": 1.0
+        },
+        "positive_line_detection": {
+          "denominator": 23,
+          "numerator": 22,
+          "value": 0.956522
+        },
+        "projected_line_error_pct": {
+          "count": 22,
+          "max": 63.321945,
+          "mean": 19.495286,
+          "median": 9.81872,
+          "p90": 51.772587
+        },
+        "reference_anchor_rms_error_pct": {
+          "count": 22,
+          "max": 116.094962,
+          "mean": 18.938023,
+          "median": 6.313792,
+          "p90": 42.024747
+        },
+        "strict_primary_geometry_match": {
+          "denominator": 23,
+          "numerator": 3,
+          "value": 0.130435
+        }
+      },
+      "lifetime_top_coverage": {
+        "confirmed_episodes": {
+          "denominator": 51,
+          "numerator": 44,
+          "value": 0.862745
+        },
+        "including_tracking_observations": {
+          "denominator": 51,
+          "numerator": 45,
+          "value": 0.882353
+        },
+        "precision_not_reported": true
+      },
+      "no_line_reference_count": 1,
+      "positive_line_reference_count": 23,
+      "setup_count": 24
+    }
+  },
+  "limitations": [
+    "The 33 labelled cases are outcome-revealed development examples, not a blind population estimate.",
+    "The 43 shadow cases have no exact geometry joined; some carry prior-review or tuning context, and agreement/disagreement is not accuracy.",
+    "Reference top lists may be selective, so detector top precision is not reported.",
+    "The lifetime detector is geometry-only; lifecycle and actionability require a supported algorithmic boundary adapter.",
+    "The audited 24-chart blind queue and all duplicate ticker identities were withheld."
+  ],
+  "replay": {
+    "current": {
+      "anchor_churn_while_present_count": 33,
+      "false_early_line": {
+        "denominator": 33,
+        "numerator": 31,
+        "value": 0.939394
+      },
+      "line_present_at_first_recognizable": {
+        "denominator": 32,
+        "numerator": 30,
+        "value": 0.9375
+      },
+      "line_present_when_expected": {
+        "denominator": 80,
+        "numerator": 77,
+        "value": 0.9625
+      },
+      "presence_transition_count": 1,
+      "recognition_lag_quarters": {
+        "count": 31,
+        "max": 31.0,
+        "mean": 1.0,
+        "median": 0.0,
+        "p90": 0.0
+      },
+      "recognition_missed_setup_count": 1,
+      "strict_geometry_when_scored": {
+        "denominator": 77,
+        "numerator": 3,
+        "value": 0.038961
+      }
+    },
+    "lifetime": {
+      "anchor_churn_while_present_count": 13,
+      "false_early_line": {
+        "denominator": 33,
+        "numerator": 25,
+        "value": 0.757576
+      },
+      "line_present_at_first_recognizable": {
+        "denominator": 32,
+        "numerator": 24,
+        "value": 0.75
+      },
+      "line_present_when_expected": {
+        "denominator": 80,
+        "numerator": 70,
+        "value": 0.875
+      },
+      "presence_transition_count": 7,
+      "recognition_lag_quarters": {
+        "count": 31,
+        "max": 102.0,
+        "mean": 6.903226,
+        "median": 0.0,
+        "p90": 17.0
+      },
+      "recognition_missed_setup_count": 1,
+      "strict_geometry_when_scored": {
+        "denominator": 70,
+        "numerator": 19,
+        "value": 0.271429
+      }
+    },
+    "reference_geometry_evaluable_rows": 80,
+    "reference_line_expected_rows": 80,
+    "row_count": 113
+  },
+  "schema_version": 1,
+  "shadow": {
+    "agreement_class_counts": {
+      "both_aligned": 1,
+      "both_different": 29,
+      "current_only": 7,
+      "lifetime_only": 2,
+      "neither": 4
+    },
+    "disagreement_count": 38,
+    "source_context": {
+      "cohort_role_counts": {
+        "control_reference": 18,
+        "prospective_international": 25
+      },
+      "exact_geometry_joined": false,
+      "independent_review_candidate_count": 20,
+      "independent_review_definition": "prospective_international and not prior_review and not tuning_anchor",
+      "independent_review_disagreement_count": 19,
+      "prior_review_count": 22,
+      "tuning_anchor_count": 8
+    }
+  },
+  "summary_sha256": "f0e2b8f632eac3c2a1bc51a3f153c060d338784e9fdce1f8c70ac20c28ad9de5",
+  "trust": {
+    "authoritative": false,
+    "blind_queue_executed": false,
+    "outcome_revealed_development_references": true,
+    "shadow_is_accuracy": false
+  }
+}
