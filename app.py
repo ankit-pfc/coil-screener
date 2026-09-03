@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
+import review_snapshots
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from coil_analysis import ALGORITHM_VERSION, analyze_coil
 from history_cache import get_history_payload, read_cache
+from lifetime_structure import (
+    ALGORITHM_VERSION as LIFETIME_TOP_ALGORITHM_VERSION,
+    analyze_lifetime_references,
+)
 from review_capture import (
     BaseClassificationLockRequest,
     CaptureDraftRequest,
@@ -64,6 +69,37 @@ VISION_RUNS_DIR = PROJECT_ROOT / "vision_runs"
 # Pin the current versioned candidate cohort first; everything else remains
 # available as historical evidence below it.
 DEMO_DEFAULT_RUN = "screen_2026-08-05_v2.3.0.csv"
+PROTECTED_REFERENCE_RUNS = {
+    "amrut_portfolio_exemplars_2026-08-21.csv",
+    "amrut_reviewed_exemplars_2026-08-18.csv",
+}
+PROTECTED_BOOTSTRAP_FIELDS = {
+    "ticker",
+    "company_name",
+    "exchange",
+    "currency",
+    "review_mode",
+    "data_date",
+    "freshness",
+}
+PROTECTED_BOOTSTRAP_NULL_FIELDS = {
+    "age_years",
+    "last_close",
+    "score_total",
+    "score_long_coil",
+    "score_tight_resistance",
+    "score_ascending_compression",
+    "pos_in_10y_range",
+    "dist_to_10y_high_pct",
+    "range_ratio_24_120",
+    "range_ratio_24_60",
+    "low_36m_above_10y_low_pct",
+    "slope_high_60m",
+    "slope_low_60m",
+    "trend_r2_60m",
+    "peak_age_months",
+    "old_peak_similarity",
+}
 
 app = FastAPI(title="Coil Screening")
 
@@ -74,6 +110,12 @@ _CAPTURE_API_ROUTES = (
         "GET",
         re.compile(
             r"^/api/review-sessions/[0-9]+/items/[^/]+/context$"
+        ),
+    ),
+    (
+        "GET",
+        re.compile(
+            r"^/api/review-sessions/[0-9]+/items/[^/]+/major-tops$"
         ),
     ),
     (
@@ -501,6 +543,17 @@ def normalize_saved_results(records: list[dict[str, Any]]) -> list[dict[str, Any
     normalized = []
     for raw in records:
         row = dict(raw)
+        if row.get("review_mode") in {
+            "blinded_boundary_negative",
+            "detector_shape_audit",
+            "reference_exemplar",
+        }:
+            # This saved run is only a transport for a protected reviewer
+            # queue. Reference exemplars carry their frozen detector fields
+            # explicitly; do not fabricate missing lifecycle/status/grade
+            # values that could be mistaken for evidence.
+            normalized.append(row)
+            continue
         legacy_score = row.get("score_total")
         row.setdefault("lifecycle", "pre_breakout")
         row.setdefault("status", "coiling")
@@ -530,6 +583,83 @@ def normalize_saved_results(records: list[dict[str, Any]]) -> list[dict[str, Any
         row.setdefault("freshness", "saved")
         normalized.append(row)
     return normalized
+
+
+def saved_run_protected_metadata(filename: str) -> dict[str, Any]:
+    """Read protected-review bootstrap settings from the frozen manifest.
+
+    An explicit ``protected_bootstrap`` marker fails closed: the reviewer and
+    policy must travel with it instead of being guessed from a CSV filename.
+    Older reference corpora retain their existing protection until their
+    immutable manifests are superseded with the explicit metadata.
+    """
+    manifest_path = (
+        review_snapshots.REVIEW_SNAPSHOT_ROOT
+        / Path(filename).stem
+        / "manifest.json"
+    )
+    if not manifest_path.is_file():
+        return {
+            "protected_bootstrap": False,
+            "reviewer_name": None,
+            "protected_policy": None,
+        }
+
+    manifest = load_review_manifest(filename)
+    protected_bootstrap = manifest.get("protected_bootstrap")
+    if protected_bootstrap is None and filename in PROTECTED_REFERENCE_RUNS:
+        # Backward-compatible protection for immutable corpora created before
+        # manifest-driven bootstrap metadata existed.
+        protected_bootstrap = True
+        reviewer_name: Any = "Amrut"
+    else:
+        reviewer_name = manifest.get("reviewer_name")
+
+    if protected_bootstrap is None:
+        protected_bootstrap = False
+    if not isinstance(protected_bootstrap, bool):
+        raise ReviewSnapshotError(
+            "manifest protected_bootstrap must be a boolean"
+        )
+    if not protected_bootstrap:
+        return {
+            "protected_bootstrap": False,
+            "reviewer_name": None,
+            "protected_policy": None,
+        }
+
+    if not isinstance(reviewer_name, str) or not reviewer_name.strip():
+        raise ReviewSnapshotError(
+            "protected review manifest reviewer_name is required"
+        )
+    protected_policy = manifest.get("review_policy")
+    if not isinstance(protected_policy, dict) or not protected_policy:
+        raise ReviewSnapshotError(
+            "protected review manifest review_policy is required"
+        )
+    return {
+        "protected_bootstrap": True,
+        "reviewer_name": reviewer_name.strip(),
+        "protected_policy": dict(protected_policy),
+    }
+
+
+def redact_protected_saved_run_bootstrap(
+    records: list[dict[str, Any]], *, protected_bootstrap: bool
+) -> list[dict[str, Any]]:
+    """Expose only neutral ordering before a protected session exists."""
+    if not protected_bootstrap:
+        return records
+    redacted = []
+    for row in records:
+        neutral = {
+            key: value
+            for key, value in row.items()
+            if key in PROTECTED_BOOTSTRAP_FIELDS
+        }
+        neutral.update({key: None for key in PROTECTED_BOOTSTRAP_NULL_FIELDS})
+        redacted.append(neutral)
+    return redacted
 
 
 @app.get("/api/health")
@@ -581,10 +711,19 @@ def saved_run(filename: str) -> dict[str, Any]:
 
     df = pd.read_csv(file_path)
     records = normalize_saved_results(serialize_frame(df))
+    try:
+        protected_metadata = saved_run_protected_metadata(filename)
+    except ReviewSnapshotError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    records = redact_protected_saved_run_bootstrap(
+        records,
+        protected_bootstrap=protected_metadata["protected_bootstrap"],
+    )
     return {
         "name": filename,
         "count": len(records),
         "results": records,
+        **protected_metadata,
     }
 
 
@@ -1298,6 +1437,96 @@ def review_session_item_context(
         "base_classification_locked_at"
     )
     return {"context": context}
+
+
+@app.get("/api/review-sessions/{session_id}/items/{ticker}/major-tops")
+def review_session_item_major_tops(
+    session_id: int,
+    ticker: str,
+    security: dict[str, Any] = Depends(require_review_session_access),
+) -> dict[str, Any]:
+    """Plot-only lifetime tops over the complete history API payload.
+
+    This deliberately returns neither the coil analyzer nor any shape, grade,
+    lifecycle, score, fitted line, or forecasting output.  The displayed
+    points are the lifetime detector's conservative local-high episodes after
+    a completed-quarter rejection has confirmed them.  The protected snapshot
+    establishes ticker/session identity only; it must never truncate the chart.
+    Full provider history is refreshed and merged by the same path used by
+    ``/api/history/{ticker}``.
+    """
+    if not security["require_fresh_review"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Frozen major-top plots require a protected session.",
+        )
+    item = get_review_store().get_session_item(
+        session_id, ticker, algorithm_version=ALGORITHM_VERSION
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Review session item not found.")
+    if item.get("snapshot", {}).get("review_mode") != "detector_shape_audit":
+        raise HTTPException(
+            status_code=404,
+            detail="This session is not configured for historical major-top plots.",
+        )
+    try:
+        context = load_blind_review_context(security["source"], ticker)
+        if item.get("sample_id") != context["sample_id"]:
+            raise ReviewSnapshotError(
+                "Frozen context no longer matches the session sample."
+            )
+        history_payload = get_history_payload(
+            context["ticker"],
+            fetch_monthly_history,
+            compute_features,
+        )
+        if history_payload is None:
+            raise ReviewSnapshotError(
+                "Complete lifetime history is unavailable for this ticker."
+            )
+        full_history = history_payload["bars"]
+        analysis = analyze_lifetime_references(full_history)
+    except ReviewSnapshotError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    major_tops = [
+        {
+            "id": episode["id"],
+            # Markers belong to the quarterly candle even when the exact high
+            # occurred in another month inside that quarter.
+            "date": episode["quarter_date"],
+            "source_date": episode["date"],
+            "price": episode["price"],
+            "confirmed_at": episode["reaction"]["confirmed_at"],
+        }
+        for episode in analysis["top_episodes"]
+        if episode.get("status") == "confirmed_rejection"
+    ]
+    history = analysis["history"]
+    return {
+        "analysis": {
+            "schema_version": 1,
+            "kind": "coilingview.historical-major-top-plot",
+            "ticker": context["ticker"],
+            "interval": "3M",
+            "history_scope": "full_available_lifetime",
+            "history_start": history["start_date"],
+            "history_end": history["end_date"],
+            "completed_through": history["completed_through"],
+            "completed_quarter_count": history["completed_quarter_count"],
+            "monthly_bars": full_history,
+            "major_tops": major_tops,
+            "algorithm_version": LIFETIME_TOP_ALGORITHM_VERSION,
+            "sample_id": context["sample_id"],
+            "bars_hash": hashlib.sha256(
+                canonical_json(full_history).encode("utf-8")
+            ).hexdigest(),
+            "data_freshness": history_payload.get("freshness"),
+        }
+    }
 
 
 @app.put("/api/review-sessions/{session_id}/items/{ticker}/draft")
