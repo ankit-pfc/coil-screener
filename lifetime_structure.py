@@ -683,7 +683,7 @@ def analyze_lifetime_references(
     if not monthly:
         raise ValueError("at least one valid price bar is required")
     full_quarters = _aggregate_quarterly_display_bars(monthly)
-    completed = _completed_quarters(full_quarters, as_of=as_of)
+    completed = _completed_quarters(full_quarters)
     if len(completed) < config.local_high_window_quarters + 2:
         raise ValueError("insufficient completed quarterly history")
 
