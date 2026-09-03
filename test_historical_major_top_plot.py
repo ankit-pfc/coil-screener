@@ -11,6 +11,7 @@ import app as app_module
 import review_snapshots
 import reviews as reviews_module
 from reviews import ReviewStore
+from test_coil_analysis import make_coil_bars
 from test_fresh_review_sessions import TOKEN, _create, _headers, _make_corpus
 
 
@@ -51,10 +52,25 @@ def _make_top_plot_corpus(root: Path, source: str) -> None:
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def test_major_top_plot_returns_only_lifetime_top_transport(top_plot_client):
+def test_major_top_plot_returns_only_complete_lifetime_transport(
+    top_plot_client, monkeypatch
+):
     client, root = top_plot_client
     source = "historical_top_plot.csv"
     _make_top_plot_corpus(root, source)
+    full_bars = make_coil_bars(n=200)
+    monkeypatch.setattr(
+        app_module,
+        "get_history_payload",
+        lambda *_args, **_kwargs: {
+            "bars": full_bars,
+            "features": None,
+            "freshness": {
+                "status": "fresh",
+                "last_bar_date": full_bars[-1]["date"],
+            },
+        },
+    )
     session = _create(client, source, ["AAA"])["session"]
 
     response = client.get(
@@ -65,10 +81,11 @@ def test_major_top_plot_returns_only_lifetime_top_transport(top_plot_client):
     assert response.status_code == 200, response.text
     analysis = response.json()["analysis"]
     assert analysis["kind"] == "coilingview.historical-major-top-plot"
-    assert analysis["history_scope"] == "observed_lifetime"
-    assert analysis["cutoff_date"] == "2019-12-31"
-    assert analysis["history_end"] <= analysis["cutoff_date"]
-    assert analysis["completed_through"] <= analysis["cutoff_date"]
+    assert analysis["history_scope"] == "full_available_lifetime"
+    assert analysis["history_end"] == "2026-08-01"
+    assert analysis["completed_through"] == "2026-06-01"
+    assert analysis["monthly_bars"] == full_bars
+    assert analysis["data_freshness"]["status"] == "fresh"
     assert analysis["major_tops"]
     assert set(analysis) == {
         "schema_version",
@@ -78,13 +95,14 @@ def test_major_top_plot_returns_only_lifetime_top_transport(top_plot_client):
         "history_scope",
         "history_start",
         "history_end",
-        "cutoff_date",
         "completed_through",
         "completed_quarter_count",
+        "monthly_bars",
         "major_tops",
         "algorithm_version",
         "sample_id",
         "bars_hash",
+        "data_freshness",
     }
     forbidden = {
         "coil",
@@ -94,6 +112,7 @@ def test_major_top_plot_returns_only_lifetime_top_transport(top_plot_client):
         "lifecycle",
         "forecast",
         "sampling_stratum",
+        "cutoff_date",
     }
     assert forbidden.isdisjoint(analysis)
 

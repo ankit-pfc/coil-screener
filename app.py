@@ -1445,13 +1445,15 @@ def review_session_item_major_tops(
     ticker: str,
     security: dict[str, Any] = Depends(require_review_session_access),
 ) -> dict[str, Any]:
-    """Plot-only lifetime tops for the historical cutoff experiment.
+    """Plot-only lifetime tops over the complete history API payload.
 
     This deliberately returns neither the coil analyzer nor any shape, grade,
     lifecycle, score, fitted line, or forecasting output.  The displayed
     points are the lifetime detector's conservative local-high episodes after
-    a completed-quarter rejection has confirmed them.  The frozen snapshot is
-    already physically truncated, so the detector cannot observe future bars.
+    a completed-quarter rejection has confirmed them.  The protected snapshot
+    establishes ticker/session identity only; it must never truncate the chart.
+    Full provider history is refreshed and merged by the same path used by
+    ``/api/history/{ticker}``.
     """
     if not security["require_fresh_review"]:
         raise HTTPException(
@@ -1474,31 +1476,17 @@ def review_session_item_major_tops(
             raise ReviewSnapshotError(
                 "Frozen context no longer matches the session sample."
             )
-        manifest = load_review_manifest(security["source"])
-        manifest_item = next(
-            (
-                entry
-                for entry in manifest["items"]
-                if isinstance(entry, dict)
-                and str(entry.get("ticker", "")).strip().upper()
-                == context["ticker"]
-            ),
-            None,
+        history_payload = get_history_payload(
+            context["ticker"],
+            fetch_monthly_history,
+            compute_features,
         )
-        cutoff = (
-            manifest_item.get("cutoff_date")
-            if isinstance(manifest_item, dict)
-            else None
-        )
-        if not isinstance(cutoff, str) or not re.fullmatch(
-            r"[0-9]{4}-[0-9]{2}-[0-9]{2}", cutoff
-        ):
+        if history_payload is None:
             raise ReviewSnapshotError(
-                "Historical major-top plot is missing its frozen cutoff."
+                "Complete lifetime history is unavailable for this ticker."
             )
-        analysis = analyze_lifetime_references(
-            context["monthly_bars"], as_of=cutoff
-        )
+        full_history = history_payload["bars"]
+        analysis = analyze_lifetime_references(full_history)
     except ReviewSnapshotError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -1524,16 +1512,19 @@ def review_session_item_major_tops(
             "kind": "coilingview.historical-major-top-plot",
             "ticker": context["ticker"],
             "interval": "3M",
-            "history_scope": "observed_lifetime",
+            "history_scope": "full_available_lifetime",
             "history_start": history["start_date"],
             "history_end": history["end_date"],
-            "cutoff_date": cutoff,
             "completed_through": history["completed_through"],
             "completed_quarter_count": history["completed_quarter_count"],
+            "monthly_bars": full_history,
             "major_tops": major_tops,
             "algorithm_version": LIFETIME_TOP_ALGORITHM_VERSION,
             "sample_id": context["sample_id"],
-            "bars_hash": context["bars_hash"],
+            "bars_hash": hashlib.sha256(
+                canonical_json(full_history).encode("utf-8")
+            ).hexdigest(),
+            "data_freshness": history_payload.get("freshness"),
         }
     }
 
