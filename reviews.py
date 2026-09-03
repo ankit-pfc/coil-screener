@@ -135,8 +135,17 @@ def _redacted_prelock_snapshot(
     snapshot: dict[str, Any], *, position: int
 ) -> dict[str, Any]:
     frozen = snapshot.get("frozen") if isinstance(snapshot.get("frozen"), dict) else {}
+    screen_snapshot = (
+        snapshot.get("screen_snapshot")
+        if isinstance(snapshot.get("screen_snapshot"), dict)
+        else {}
+    )
     return {
         "cohort_position": position + 1,
+        # Neutral transport metadata is safe before a protected review lock.
+        # It lets the client choose the intentionally narrow experiment UI
+        # without exposing a detector verdict, score, grade, or stratum.
+        "review_mode": screen_snapshot.get("review_mode"),
         "reviewable": bool(snapshot.get("reviewable", True)),
         "data_quality": snapshot.get("data_quality"),
         "data_quality_validation": snapshot.get("data_quality_validation"),
